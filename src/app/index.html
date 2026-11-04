@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- ================================================================
+         CUSTOM CODE SLOT (head)
+         GA4 + Microsoft Clarity are loaded by the app ONLY after cookie
+         consent. IDs live in src/app/wellness/analytics/config.ts:
+           GA4_MEASUREMENT_ID: 'G-XXXXXXXXXX'
+           CLARITY_PROJECT_ID: 'CLARITY_PROJECT_ID'
+         Do NOT paste the raw GA4/Clarity snippets here: they would load
+         before consent. Paste only other verification/meta tags below.
+         ================================================================ -->
+    <!-- ▼ paste extra head code here ▼ -->
+
+    <!-- ▲ end custom head code ▲ -->
+    
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#F4F1EB" />
+    
+    <!-- Primary Meta Tags -->
+    <title>Wellness Bestie by ORIRI · Your Dubai wellness ritual, curated</title>
+    <meta name="title" content="Wellness Bestie by ORIRI" />
+    <meta name="description" content="Wellness Bestie is a digital wellness hub for women in Dubai. Move, Meal and Meet up, curated for your day in four taps. Join the founding pilot." />
+    <meta name="keywords" content="tea for two podcast, oriri, renee and amanda, uae podcast, personal growth, wellness, self-improvement, life in uae, women empowerment, friendship podcast" />
+    <meta name="author" content="Renee & Amanda" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.oriri.me/" />
+    <meta property="og:title" content="Wellness Bestie by ORIRI" />
+    <meta property="og:description" content="Wellness Bestie is a digital wellness hub for women in Dubai. Move, Meal and Meet up, curated for your day in four taps. Join the founding pilot." />
+    <meta property="og:image" content="https://www.oriri.me/favicon-images/og-image.png" />
+    <meta property="og:site_name" content="Oriri" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://www.oriri.me/" />
+    <meta property="twitter:title" content="Wellness Bestie by ORIRI" />
+    <meta property="twitter:description" content="Wellness Bestie is a digital wellness hub for women in Dubai. Move, Meal and Meet up, curated for your day in four taps. Join the founding pilot." />
+    <meta property="twitter:image" content="https://www.oriri.me/favicon-images/og-image.png" />
+    
+    <!-- PWA Meta -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Oriri" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    
+    <!-- Favicon - Multiple sizes for better compatibility -->
+    <link rel="icon" type="image/x-icon" href="https://wardah.tasjeel.ae:2083/cpsess9526347646/viewer/home%2foririme%2fpublic_htm/1-679b1fc9.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="https://wardah.tasjeel.ae:2083/cpsess9526347646/viewer/home%2foririme%2fpublic_htm/oriri-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://wardah.tasjeel.ae:2083/cpsess9526347646/viewer/home%2foririme%2fpublic_htm/oriri-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://wardah.tasjeel.ae:2083/cpsess9526347646/viewer/home%2foririme%2fpublic_htm/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
+    
+    <!-- Preconnect to improve performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Inter font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://www.oriri.me/" />
+    
+    <style>
+      body {
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #F4F1EB;
+        color: #4E3B40;
+        overflow-x: hidden;
+      }
+      
+      #root {
+        min-height: 100vh;
+        width: 100%;
+      }
+      
+      /* Loading screen styles */
+      .loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #F4F1EB;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      
+      .loading-logo {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #5A4E46;
+        margin-bottom: 2rem;
+        text-align: center;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #EDE4DA;
+        border-top: 3px solid #D4A19C;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .loading-text {
+        margin-top: 1rem;
+        color: #A39589;
+        font-size: 0.875rem;
+      }
+      
+      /* Hide loading screen once React loads */
+      .app-loaded .loading-screen {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Loading screen shown until React app loads -->
+      <div class="loading-screen">
+        <div class="loading-logo" style="letter-spacing:.32em;font-weight:400">ORIRI</div>
+        <div class="loading-spinner"></div>
+        <div class="loading-text"></div>
+      </div>
+    </div>
+    
+    <script type="module" src="/main.tsx"></script>
+    
+    <!-- Hide loading screen once DOM is ready -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Add a small delay to ensure smooth transition
+        setTimeout(() => {
+          document.body.classList.add('app-loaded');
+        }, 100);
+      });
+    </script>
+  </body>
+</html>

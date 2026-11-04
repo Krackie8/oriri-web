@@ -1,0 +1,1 @@
+// This file has been removed - transcript functionality temporarily disabled

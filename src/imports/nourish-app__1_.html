@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nourish by Oriri &mdash; Eat with Intention</title>
+<meta name="description" content="Choose your wellness goal and instantly get a smart grocery list plus simple meals. Free tool by Oriri.">
+<meta property="og:title" content="Nourish by Oriri &mdash; Wellness Meal Planner">
+<meta property="og:description" content="Get a smart grocery list and simple meals for your wellness goal in seconds. Free.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* ── TOKENS ── */
+:root{
+  --cream:#FAF7F2;--warm-white:#FFFEF9;
+  --sage:#7A8C6E;--sage-light:#B5C4A8;--sage-dark:#4A5C3E;
+  --charcoal:#2C2C28;--warm-gray:#8A8680;
+  --border:rgba(44,44,40,.1);--border-s:rgba(44,44,40,.2);
+  --fd:'Cormorant Garamond',Georgia,serif;
+  --fb:'DM Sans',system-ui,sans-serif;
+  --rad:16px;--shad:0 4px 32px rgba(44,44,40,.08);
+}
+
+/* ── BASE ── */
+html{scroll-behavior:smooth}
+body{font-family:var(--fb);background:var(--cream);color:var(--charcoal);min-height:100vh;overflow-x:hidden}
+
+/* ── ANIMATION ──
+   NOTE: screens use inline style only — NO CSS display rules on screens */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fadein{animation:fadeUp .45s ease both}
+
+/* ── HEADER ── */
+header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:20px 40px;border-bottom:1px solid var(--border);
+  background:var(--cream);position:sticky;top:0;z-index:100
+}
+.logo{font-family:var(--fd);font-size:22px;font-weight:400;letter-spacing:.08em;color:var(--charcoal);text-decoration:none}
+.logo span{color:var(--sage)}
+.logo-tag{font-size:10px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--warm-gray)}
+
+/* ── HERO ── */
+.hero{max-width:620px;margin:0 auto;padding:68px 24px 36px;text-align:center}
+.eyebrow{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--sage);margin-bottom:16px}
+.hero h1{font-family:var(--fd);font-size:clamp(34px,6.5vw,56px);font-weight:300;line-height:1.1;margin-bottom:16px}
+.hero h1 em{font-style:italic;color:var(--sage-dark)}
+.hero p{font-size:15px;font-weight:300;line-height:1.75;color:var(--warm-gray);max-width:400px;margin:0 auto 32px}
+
+/* ── GOAL CARDS ── */
+.goal-section{max-width:680px;margin:0 auto;padding:0 20px 80px}
+.goal-lbl{font-size:11px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--warm-gray);text-align:center;margin-bottom:20px}
+.goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:11px}
+.gc{
+  background:var(--warm-white);border:1.5px solid var(--border);border-radius:var(--rad);
+  padding:24px 20px;cursor:pointer;transition:all .2s ease;text-align:left;
+  position:relative;overflow:hidden
+}
+.gc::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
+  background:var(--sage-light);transform:scaleX(0);transition:transform .25s ease;transform-origin:left
+}
+.gc:hover{border-color:var(--sage-light);transform:translateY(-2px);box-shadow:var(--shad)}
+.gc:hover::after,.gc.sel::after{transform:scaleX(1)}
+.gc.sel{border-color:var(--sage);background:#F3F7EF;box-shadow:var(--shad)}
+.gc.sel::after{background:var(--sage)}
+.gc-icon{font-size:24px;margin-bottom:10px;display:block}
+.gc-name{font-family:var(--fd);font-size:18px;font-weight:400;margin-bottom:4px}
+.gc-desc{font-size:11.5px;color:var(--warm-gray);line-height:1.5;font-weight:300}
+
+/* ── BUTTONS ── */
+.bw{text-align:center;margin:28px 0 12px}
+.bp{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--sage-dark);color:#fff;font-family:var(--fb);
+  font-size:13px;font-weight:500;letter-spacing:.04em;
+  padding:13px 28px;border-radius:40px;border:none;cursor:pointer;transition:all .2s ease
+}
+.bp:hover{background:var(--charcoal);transform:translateY(-1px);box-shadow:0 6px 20px rgba(44,44,40,.2)}
+.bp:disabled{opacity:.3;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.bs{
+  display:inline-flex;align-items:center;gap:6px;background:transparent;
+  color:var(--warm-gray);font-family:var(--fb);font-size:12px;font-weight:400;
+  padding:10px 18px;border-radius:40px;border:1px solid var(--border-s);cursor:pointer;transition:all .2s ease
+}
+.bs:hover{color:var(--charcoal);border-color:var(--charcoal);background:var(--warm-white)}
+
+/* ── LOADING (no display rule here — JS only) ── */
+.load-inner{
+  min-height:70vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;padding:40px 24px
+}
+.spinner{
+  width:42px;height:42px;border:2px solid var(--border);
+  border-top-color:var(--sage);border-radius:50%;
+  animation:spin .8s linear infinite;margin-bottom:22px
+}
+.lt{font-family:var(--fd);font-size:26px;font-weight:300;margin-bottom:6px}
+.ls{font-size:13px;color:var(--warm-gray);font-weight:300}
+.lsteps{list-style:none;margin-top:20px}
+.lsteps li{font-size:12px;color:var(--warm-gray);padding:4px 0;opacity:0;transition:opacity .4s ease}
+.lsteps li.show{opacity:1}
+
+/* ── RESULTS ── */
+.rw{max-width:720px;margin:0 auto;padding:48px 24px 80px}
+.rh{text-align:center;margin-bottom:40px}
+.rtag{
+  display:inline-block;font-size:11px;font-weight:500;
+  letter-spacing:.12em;text-transform:uppercase;padding:4px 13px;border-radius:20px;margin-bottom:12px
+}
+.rh h2{font-family:var(--fd);font-size:clamp(24px,4.5vw,38px);font-weight:300;line-height:1.15;margin-bottom:8px}
+.rh p{font-size:13px;color:var(--warm-gray);font-weight:300}
+.sh{font-family:var(--fd);font-size:23px;font-weight:400;margin-bottom:3px}
+.ss{font-size:12px;color:var(--warm-gray);margin-bottom:18px}
+
+/* ── GROCERY ── */
+.gg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:13px;margin-bottom:40px}
+.gcat{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--rad);padding:20px}
+.gcl{
+  font-size:10px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--sage);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)
+}
+.gi{margin-bottom:11px;padding-bottom:11px;border-bottom:1px solid var(--border)}
+.gi:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.gn{font-size:13px;font-weight:500;margin-bottom:2px}
+.gb{font-size:11px;color:var(--warm-gray);line-height:1.45;font-weight:300}
+
+/* ── MEALS ── */
+.ml{display:flex;flex-direction:column;gap:12px;margin-bottom:40px}
+.mc{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--rad);overflow:hidden;transition:box-shadow .2s}
+.mc:hover{box-shadow:var(--shad)}
+.mch{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:17px 20px;cursor:pointer;user-select:none;-webkit-user-select:none
+}
+.mcl{display:flex;align-items:center;gap:11px}
+.mce{font-size:19px;line-height:1}
+.mcn{font-family:var(--fd);font-size:17px;font-weight:400}
+.mcm{font-size:11px;color:var(--warm-gray);margin-top:1px;font-weight:300}
+.mct{
+  font-size:16px;color:var(--warm-gray);transition:transform .25s ease;
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;background:var(--cream);border:1px solid var(--border);
+  flex-shrink:0;pointer-events:none
+}
+.mc.open .mct{transform:rotate(45deg)}
+.mcb{max-height:0;overflow:hidden;transition:max-height .38s ease}
+.mc.open .mcb{max-height:900px}
+.mci{padding:14px 20px 20px;border-top:1px solid var(--border)}
+.ir{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.it{font-size:11px;background:var(--cream);color:var(--charcoal);padding:3px 9px;border-radius:20px;border:1px solid var(--border-s)}
+.steps{list-style:none;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:11px;font-size:13px;font-weight:300;line-height:1.6;margin-bottom:7px;color:var(--charcoal)}
+.steps li::before{content:counter(s);font-family:var(--fd);font-size:14px;color:var(--sage);min-width:16px;padding-top:1px;flex-shrink:0}
+.rr{display:flex;justify-content:center;gap:11px;flex-wrap:wrap;padding-top:8px}
+.div{height:1px;background:var(--border);margin:36px 0}
+
+/* ── FOOTER ── */
+footer{
+  text-align:center;padding:20px;font-size:11px;
+  color:var(--warm-gray);border-top:1px solid var(--border);font-weight:300;line-height:1.8
+}
+footer a{color:var(--sage);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* ── RESPONSIVE ── */
+@media(max-width:600px){
+  header{padding:15px 18px}
+  .hero{padding:40px 16px 28px}
+  .goal-section{padding:0 12px 56px}
+  .goal-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .gc{padding:16px 13px}
+  .rw{padding:24px 14px 60px}
+  .gg{grid-template-columns:1fr}
+}
+@media(max-width:360px){.goal-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="https://oriri.me">nourish<span>.</span></a>
+  <span class="logo-tag">by oriri</span>
+</header>
+
+<!-- ═══ HOME SCREEN (visible by default via inline style) ═══ -->
+<div id="s-home" style="display:block" class="fadein">
+  <div class="hero">
+    <div class="eyebrow">Your weekly wellness ritual</div>
+    <h1>Groceries that <em>work&nbsp;for&nbsp;you</em>,<br>not the other way around</h1>
+    <p>Choose your goal. Get a smart grocery list and simple meals in seconds. No planning, no overthinking.</p>
+  </div>
+  <div class="goal-section">
+    <div class="goal-lbl">What do you want to focus on this week?</div>
+    <div class="goal-grid">
+      <div class="gc" data-goal="gut_health" onclick="pick(this)">
+        <span class="gc-icon">&#127807;</span>
+        <div class="gc-name">Gut Health</div>
+        <div class="gc-desc">Reduce bloating, support your microbiome, feel lighter</div>
+      </div>
+      <div class="gc" data-goal="glowing_skin" onclick="pick(this)">
+        <span class="gc-icon">&#10024;</span>
+        <div class="gc-name">Glowing Skin</div>
+        <div class="gc-desc">Nourish from within for clear, radiant skin all week</div>
+      </div>
+      <div class="gc" data-goal="hormone_balance" onclick="pick(this)">
+        <span class="gc-icon">&#127800;</span>
+        <div class="gc-name">Hormone Balance</div>
+        <div class="gc-desc">Stabilise mood, energy, and your cycle with food</div>
+      </div>
+      <div class="gc" data-goal="energy_boost" onclick="pick(this)">
+        <span class="gc-icon">&#9889;</span>
+        <div class="gc-name">Energy Boost</div>
+        <div class="gc-desc">Ditch the 3pm crash and feel steady all day</div>
+      </div>
+      <div class="gc" data-goal="weight_balance" onclick="pick(this)">
+        <span class="gc-icon">&#127807;</span>
+        <div class="gc-name">Weight Balance</div>
+        <div class="gc-desc">Eat satisfyingly while supporting a healthy metabolism</div>
+      </div>
+    </div>
+    <div class="bw">
+      <button class="bp" id="go-btn" disabled onclick="generate()">Generate my plan &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOADING SCREEN (hidden by default via inline style) ═══ -->
+<div id="s-loading" style="display:none">
+  <div class="load-inner">
+    <div class="spinner"></div>
+    <div class="lt">Curating your plan&#8230;</div>
+    <div class="ls">Personalising for your goal</div>
+    <ul class="lsteps" id="lsteps">
+      <li>Selecting the right ingredients</li>
+      <li>Matching foods to your goal</li>
+      <li>Building your simple meals</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ RESULTS SCREEN (hidden by default via inline style) ═══ -->
+<div id="s-results" style="display:none">
+  <div class="rw">
+    <div class="rh">
+      <div class="rtag" id="rtag"></div>
+      <h2 id="rhead"></h2>
+      <p id="rsub"></p>
+    </div>
+    <div class="sh">This week&#39;s groceries</div>
+    <div class="ss">Curated for your goal &mdash; add to basket and you&#39;re done.</div>
+    <div class="gg" id="rgrocery"></div>
+    <div class="sh">Simple meals to make this week</div>
+    <div class="ss">All under 20 minutes. All from your grocery list above.</div>
+    <div class="ml" id="rmeals"></div>
+    <div class="div"></div>
+    <div class="rr">
+      <button class="bp" onclick="generate()">&#8635; New plan</button>
+      <button class="bs" onclick="goHome()">&#8592; Change goal</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Made with care by <a href="https://oriri.me" target="_blank" rel="noopener">Oriri</a>
+  &nbsp;&middot;&nbsp; Not medical advice &nbsp;&middot;&nbsp; Always consult a healthcare professional
+</footer>
+
+<script>
+/* ── DATA ── */
+var PLANS={gut_health:{headline:"Nourish your gut, feel lighter all week",subtitle:"12 ingredients · 4 meals · under 20 min each",grocery:{proteins:[{name:"Greek Yoghurt (full-fat, plain)",benefit:"Live cultures rebuild gut flora and ease bloating"},{name:"Tempeh",benefit:"Fermented soy feeds beneficial bacteria naturally"},{name:"Eggs",benefit:"Gentle complete protein, easy on the digestive system"}],vegetables:[{name:"Spinach",benefit:"Magnesium supports smooth digestion and gut motility"},{name:"Courgette",benefit:"Soft fibre that soothes without irritating the gut"},{name:"Fresh Ginger",benefit:"Calms nausea and reduces gut inflammation fast"},{name:"Garlic",benefit:"Prebiotic that feeds the good bacteria in your gut"}],pantry:[{name:"Rolled Oats",benefit:"Beta-glucan fibre feeds microbiome and regulates digestion"},{name:"Brown Rice",benefit:"Gentle whole grain, easy to digest and very filling"},{name:"Apple Cider Vinegar",benefit:"Supports healthy stomach acid and gut pH balance"}],snacks:[{name:"Kefir (plain)",benefit:"One of the most potent probiotic foods available"},{name:"Flaxseeds",benefit:"Soluble fibre keeps things moving without irritation"}]},meals:[{name:"Probiotic Oat Bowl",emoji:"&#x1F963;",time:"10 min",type:"Breakfast",ingredients:["Rolled oats","Greek yoghurt","Flaxseeds","Fresh ginger"],steps:["Cook oats with water for 5 minutes, stirring throughout.","Grate a small piece of fresh ginger directly into the bowl.","Top generously with Greek yoghurt and a sprinkle of flaxseeds.","Drizzle with a little apple cider vinegar for gut support."]},{name:"Tempeh & Courgette Stir-fry",emoji:"&#x1F958;",time:"15 min",type:"Lunch",ingredients:["Tempeh","Courgette","Garlic","Spinach","Brown rice"],steps:["Start brown rice cooking per packet while you prep.","Slice tempeh and courgette, sauté with garlic for 8 minutes.","Add spinach in the last 2 minutes, toss until wilted.","Serve over brown rice and season with salt and lemon."]},{name:"Ginger Egg Scramble",emoji:"&#x1F373;",time:"10 min",type:"Dinner",ingredients:["Eggs","Spinach","Fresh ginger","Garlic","Courgette"],steps:["Sauté sliced courgette and garlic in a pan for 3 minutes.","Add grated ginger and spinach, stir for 1 minute.","Whisk 2 eggs and pour over the vegetables.","Scramble gently on low heat until just set. Season and serve."]},{name:"Kefir Smoothie",emoji:"&#x1F95B;",time:"3 min",type:"Snack",ingredients:["Kefir","Flaxseeds","Rolled oats","Fresh ginger"],steps:["Add kefir, a small handful of oats and flaxseeds to a blender.","Add a small piece of fresh ginger for flavour and gut support.","Blend for 30 seconds until completely smooth.","Drink immediately for maximum probiotic benefit."]}]},glowing_skin:{headline:"Feed your skin from the inside out",subtitle:"12 ingredients · 4 meals · under 20 min each",grocery:{proteins:[{name:"Wild Salmon",benefit:"Omega-3s reduce inflammation and keep skin dewy"},{name:"Eggs",benefit:"Biotin and collagen-building amino acids in every bite"},{name:"Chickpeas",benefit:"Zinc helps heal skin and reduce breakouts naturally"}],vegetables:[{name:"Sweet Potato",benefit:"Beta-carotene converts to vitamin A for cell renewal"},{name:"Cucumber",benefit:"Silica-rich hydration that plumps skin from within"},{name:"Kale",benefit:"Vitamin C boosts collagen production naturally"},{name:"Avocado",benefit:"Healthy fats lock moisture deep into skin cells"}],pantry:[{name:"Pumpkin Seeds",benefit:"Zinc and vitamin E for clear, even-toned skin"},{name:"Green Tea",benefit:"EGCG antioxidants protect skin from daily damage"},{name:"Extra Virgin Olive Oil",benefit:"Polyphenols fight the free radicals that age skin"}],snacks:[{name:"Walnuts",benefit:"Highest plant source of skin-loving omega-3 fatty acids"},{name:"Blueberries",benefit:"Anthocyanins protect your collagen from breaking down"}]},meals:[{name:"Glow Egg & Avocado Toast",emoji:"&#x1F951;",time:"10 min",type:"Breakfast",ingredients:["Eggs","Avocado","Kale","Pumpkin seeds","Olive oil"],steps:["Lightly sauté kale in olive oil for 2 minutes until bright.","Poach or fry eggs to your liking meanwhile.","Smash avocado onto wholegrain toast and layer with kale and eggs.","Finish with a scattering of pumpkin seeds for zinc."]},{name:"Sweet Potato & Chickpea Bowl",emoji:"&#x1F360;",time:"18 min",type:"Lunch",ingredients:["Sweet potato","Chickpeas","Kale","Olive oil","Pumpkin seeds"],steps:["Cube sweet potato and roast in olive oil at 200C for 15 minutes.","Massage kale with a tiny drop of olive oil until it softens.","Combine roasted sweet potato and chickpeas over the kale.","Top with pumpkin seeds and a squeeze of fresh lemon."]},{name:"Seared Salmon & Cucumber Salad",emoji:"&#x1F41F;",time:"15 min",type:"Dinner",ingredients:["Wild salmon","Cucumber","Avocado","Olive oil","Kale"],steps:["Season salmon with salt, sear in olive oil 4 minutes each side.","Slice cucumber and avocado into thin elegant pieces.","Arrange kale, cucumber, and avocado on a wide plate.","Place salmon on top and finish with a drizzle of olive oil."]},{name:"Blueberry & Walnut Bowl",emoji:"&#x1FAD0;",time:"2 min",type:"Snack",ingredients:["Blueberries","Walnuts","Pumpkin seeds"],steps:["Add a generous handful of blueberries to a small bowl.","Top with walnuts and pumpkin seeds.","Pair with a cup of green tea for a full antioxidant hit."]}]},hormone_balance:{headline:"Eat to feel balanced, clear, and calm",subtitle:"12 ingredients · 4 meals · under 20 min each",grocery:{proteins:[{name:"Lentils",benefit:"Plant protein stabilises blood sugar and supports progesterone"},{name:"Chicken Breast",benefit:"Lean protein reduces cortisol spikes between meals"},{name:"Pumpkin Seeds",benefit:"Zinc supports healthy oestrogen metabolism in the body"}],vegetables:[{name:"Broccoli",benefit:"DIM compound helps your body clear excess oestrogen"},{name:"Spinach",benefit:"Iron and magnesium support cycle regularity and mood"},{name:"Beetroot",benefit:"Supports liver detox pathways for clean hormone clearance"},{name:"Sweet Potato",benefit:"Complex carbs boost serotonin and lower cortisol naturally"}],pantry:[{name:"Ground Flaxseed",benefit:"Lignans gently bind excess oestrogen to restore balance"},{name:"Quinoa",benefit:"Complete protein with B6 to support hormone production"},{name:"Extra Virgin Olive Oil",benefit:"Monounsaturated fats are the building blocks of hormones"}],snacks:[{name:"Dark Chocolate (85%+)",benefit:"Magnesium eases PMS symptoms and calms stress hormones"},{name:"Brazil Nuts",benefit:"Just two a day gives your thyroid all the selenium it needs"}]},meals:[{name:"Flax & Sweet Potato Scramble",emoji:"&#x1F360;",time:"12 min",type:"Breakfast",ingredients:["Sweet potato","Ground flaxseed","Spinach","Eggs","Olive oil"],steps:["Dice sweet potato small and pan-fry in olive oil for 8 minutes.","Add spinach and cook until just wilted.","Create a small well, crack in 2 eggs and scramble gently.","Plate and finish with a sprinkle of ground flaxseed."]},{name:"Lentil & Broccoli Quinoa Bowl",emoji:"&#x1F957;",time:"18 min",type:"Lunch",ingredients:["Lentils","Broccoli","Quinoa","Olive oil","Spinach"],steps:["Cook quinoa per packet instructions (around 12 minutes).","Steam broccoli or sauté in olive oil for 5 minutes.","Warm lentils in a pan with a pinch of cumin and salt.","Layer quinoa, broccoli, lentils and a handful of fresh spinach."]},{name:"Roasted Chicken & Beetroot",emoji:"&#x1F357;",time:"20 min",type:"Dinner",ingredients:["Chicken breast","Beetroot","Spinach","Olive oil","Quinoa"],steps:["Season chicken and pan-cook in olive oil, 7 minutes each side.","Thinly slice beetroot and sauté in the same pan for 3 minutes.","Rest chicken for 2 minutes before slicing.","Serve over quinoa with beetroot and a bed of fresh spinach."]},{name:"Dark Chocolate & Nut Plate",emoji:"&#x1F36B;",time:"1 min",type:"Snack",ingredients:["Dark chocolate (85%+)","Brazil nuts","Pumpkin seeds"],steps:["Break off one or two squares of dark chocolate.","Add 2 brazil nuts and a small spoon of pumpkin seeds.","Eat slowly — this is quality nourishment, not just a snack."]}]},energy_boost:{headline:"Steady energy from morning to night",subtitle:"12 ingredients · 4 meals · under 20 min each",grocery:{proteins:[{name:"Eggs",benefit:"Complete protein sustains energy for hours without spiking blood sugar"},{name:"Canned Tuna",benefit:"B12 and lean protein for sharp, sustained mental focus"},{name:"Edamame",benefit:"Plant protein paired with slow-release complex carbohydrates"}],vegetables:[{name:"Kale",benefit:"Iron and B vitamins help your body convert food to energy"},{name:"Asparagus",benefit:"Folate and B vitamins support energy production at cell level"},{name:"Spinach",benefit:"Low iron is the number one cause of fatigue in women"},{name:"Red Bell Pepper",benefit:"Vitamin C doubles the iron you absorb from plant foods"}],pantry:[{name:"Rolled Oats",benefit:"Beta-glucan releases glucose slowly for hours of steady energy"},{name:"Brown Rice",benefit:"Complex carbs fuel your brain without the mid-afternoon crash"},{name:"Chia Seeds",benefit:"Omega-3s support brain energy and clear away mental fog"}],snacks:[{name:"Banana",benefit:"Natural sugars plus potassium for fast, clean energy release"},{name:"Almonds",benefit:"Magnesium and healthy fats prevent the dreaded afternoon slump"}]},meals:[{name:"Overnight Oats & Banana",emoji:"&#x1F319;",time:"5 min",type:"Breakfast",ingredients:["Rolled oats","Chia seeds","Banana","Almonds"],steps:["Combine oats, chia seeds and your choice of milk in a jar the night before.","Stir well, cover and refrigerate overnight.","In the morning, top with sliced banana and crushed almonds.","No cooking, no waiting — just grab and go."]},{name:"Tuna & Pepper Rice Bowl",emoji:"&#x1F41F;",time:"12 min",type:"Lunch",ingredients:["Canned tuna","Red bell pepper","Spinach","Brown rice","Edamame"],steps:["Cook brown rice or use a pre-cooked pouch to save time.","Slice bell pepper and combine with drained tuna and edamame.","Layer over rice with a large handful of fresh spinach.","Season with lemon juice and a drizzle of olive oil."]},{name:"Asparagus & Egg Stir-fry",emoji:"&#x1F373;",time:"15 min",type:"Dinner",ingredients:["Eggs","Asparagus","Kale","Red bell pepper","Brown rice"],steps:["Trim asparagus, sauté with sliced bell pepper for 4 minutes.","Add kale and toss until just wilted, about 2 minutes more.","Push vegetables aside, scramble 2 eggs in the same pan.","Combine everything and serve over brown rice."]},{name:"Banana & Almond Boost",emoji:"&#x1F34C;",time:"2 min",type:"Snack",ingredients:["Banana","Almonds","Chia seeds"],steps:["Slice a banana into a small bowl.","Top with a handful of almonds and a pinch of chia seeds.","Eat about 30 minutes before you need your peak energy or focus."]}]},weight_balance:{headline:"Eat well, feel full, find your balance",subtitle:"12 ingredients · 4 meals · under 20 min each",grocery:{proteins:[{name:"Chicken Breast",benefit:"High-satiety protein that keeps hunger away for hours"},{name:"Greek Yoghurt (plain)",benefit:"Protein and probiotics together support healthy metabolism"},{name:"Black Beans",benefit:"Fibre and protein combination keeps you genuinely satisfied"}],vegetables:[{name:"Broccoli",benefit:"High volume, low calorie — fills your plate and your stomach"},{name:"Spinach",benefit:"Thylakoids slow fat digestion and naturally reduce cravings"},{name:"Cucumber",benefit:"High water content adds bulk to meals with almost no calories"},{name:"Courgette",benefit:"Bulks out every meal without adding significant calories"}],pantry:[{name:"Quinoa",benefit:"Complete protein grain that satisfies more deeply than white rice"},{name:"Rolled Oats",benefit:"Beta-glucan fibre keeps hunger hormones balanced all morning"},{name:"Apple Cider Vinegar",benefit:"Helps regulate blood sugar and reduce fat storage signals"}],snacks:[{name:"Green Apple",benefit:"Pectin fibre slows digestion and extends your feeling of fullness"},{name:"Almonds",benefit:"The perfect portion of fat and protein for real, lasting satiety"}]},meals:[{name:"Yoghurt Oat Parfait",emoji:"&#x1F963;",time:"5 min",type:"Breakfast",ingredients:["Rolled oats","Greek yoghurt","Green apple","Almonds"],steps:["Layer rolled oats and Greek yoghurt in a glass or wide bowl.","Dice the green apple finely and scatter over the top.","Finish with a small handful of almonds for crunch and protein.","Add a drizzle of honey or cinnamon if you like a little sweetness."]},{name:"Black Bean & Courgette Quinoa",emoji:"&#x1F957;",time:"18 min",type:"Lunch",ingredients:["Black beans","Courgette","Quinoa","Spinach","Cucumber"],steps:["Cook quinoa per packet instructions (about 12 minutes).","Sauté diced courgette in olive oil with cumin for 5 minutes.","Warm black beans in a small pan with salt and paprika.","Serve over quinoa with fresh spinach and sliced cucumber."]},{name:"Grilled Chicken & Broccoli Bowl",emoji:"&#x1F357;",time:"18 min",type:"Dinner",ingredients:["Chicken breast","Broccoli","Spinach","Courgette","Quinoa"],steps:["Grill or pan-cook seasoned chicken for 7 minutes each side.","Steam broccoli and sauté courgette in the same pan.","Rest the chicken for 2 minutes, then slice on the diagonal.","Serve over quinoa with broccoli, courgette and fresh spinach."]},{name:"Apple & Almond Snack",emoji:"&#x1F34F;",time:"1 min",type:"Snack",ingredients:["Green apple","Almonds","Greek yoghurt"],steps:["Slice a crisp green apple into wedges.","Serve alongside exactly 12 almonds — the satiety sweet spot.","Add a small spoonful of Greek yoghurt for extra protein."]}]}};
+
+var GM={
+  gut_health:     {label:"Gut Health",     emoji:"&#127807;", color:"#7A8C6E"},
+  glowing_skin:   {label:"Glowing Skin",   emoji:"&#10024;",  color:"#C4714A"},
+  hormone_balance:{label:"Hormone Balance",emoji:"&#127800;", color:"#A07CB0"},
+  energy_boost:   {label:"Energy Boost",   emoji:"&#9889;",   color:"#C4914A"},
+  weight_balance: {label:"Weight Balance", emoji:"&#127807;", color:"#4A8C7A"}
+};
+var CL={proteins:"Proteins",vegetables:"Vegetables & Greens",pantry:"Pantry & Grains",snacks:"Snacks & Extras"};
+
+/* ── STATE ── */
+var sel=null, timers=[];
+
+/* ── NAVIGATION
+   CRITICAL: All three screens have inline style="display:X" set in HTML.
+   We ONLY ever change .style.display in JS — never rely on CSS classes for visibility. ── */
+function show(id){
+  timers.forEach(function(t){clearTimeout(t)}); timers=[];
+  document.getElementById("s-home").style.display    = (id==="s-home")    ? "block" : "none";
+  document.getElementById("s-loading").style.display = (id==="s-loading") ? "block" : "none";
+  document.getElementById("s-results").style.display = (id==="s-results") ? "block" : "none";
+  window.scrollTo(0,0);
+}
+
+function goHome(){ show("s-home"); }
+
+/* ── PICK GOAL ── */
+function pick(card){
+  document.querySelectorAll(".gc").forEach(function(c){ c.classList.remove("sel"); });
+  card.classList.add("sel");
+  sel = card.getAttribute("data-goal");
+  document.getElementById("go-btn").disabled = false;
+}
+
+/* ── GENERATE ── */
+function generate(){
+  if(!sel) return;
+  show("s-loading");
+  /* Animate loading steps */
+  var items = document.querySelectorAll("#lsteps li");
+  items.forEach(function(li){ li.classList.remove("show"); });
+  items.forEach(function(li, i){
+    timers.push(setTimeout(function(){ li.classList.add("show"); }, 600 + i*750));
+  });
+  /* Render after delay */
+  timers.push(setTimeout(function(){ render(PLANS[sel]); }, 2500));
+}
+
+/* ── RENDER RESULTS ── */
+function render(plan){
+  var m = GM[sel];
+
+  /* Header */
+  var tag = document.getElementById("rtag");
+  tag.innerHTML = m.emoji + " " + m.label;
+  tag.style.background = m.color + "20";
+  tag.style.color = m.color;
+  document.getElementById("rhead").textContent = plan.headline;
+  document.getElementById("rsub").textContent  = plan.subtitle;
+
+  /* Grocery grid */
+  var gEl = document.getElementById("rgrocery");
+  gEl.innerHTML = "";
+  Object.keys(plan.grocery).forEach(function(cat){
+    var col = document.createElement("div");
+    col.className = "gcat";
+    col.innerHTML = "<div class=\"gcl\">" + CL[cat] + "</div>" +
+      plan.grocery[cat].map(function(it){
+        return "<div class=\"gi\"><div class=\"gn\">" + esc(it.name) +
+               "</div><div class=\"gb\">" + esc(it.benefit) + "</div></div>";
+      }).join("");
+    gEl.appendChild(col);
+  });
+
+  /* Meal cards */
+  var mEl = document.getElementById("rmeals");
+  mEl.innerHTML = "";
+  plan.meals.forEach(function(meal, i){
+    var d = document.createElement("div");
+    d.className = "mc" + (i===0 ? " open" : "");
+    d.innerHTML =
+      "<div class=\"mch\" onclick=\"this.parentNode.classList.toggle('open')\">" +
+        "<div class=\"mcl\">" +
+          "<span class=\"mce\">" + meal.emoji + "</span>" +
+          "<div>" +
+            "<div class=\"mcn\">" + esc(meal.name) + "</div>" +
+            "<div class=\"mcm\">" + esc(meal.type) + " &middot; " + esc(meal.time) + "</div>" +
+          "</div>" +
+        "</div>" +
+        "<div class=\"mct\">+</div>" +
+      "</div>" +
+      "<div class=\"mcb\">" +
+        "<div class=\"mci\">" +
+          "<div class=\"ir\">" +
+            meal.ingredients.map(function(ig){ return "<span class=\"it\">" + esc(ig) + "</span>"; }).join("") +
+          "</div>" +
+          "<ol class=\"steps\">" +
+            meal.steps.map(function(s){ return "<li>" + esc(s) + "</li>"; }).join("") +
+          "</ol>" +
+        "</div>" +
+      "</div>";
+    mEl.appendChild(d);
+  });
+
+  show("s-results");
+}
+
+/* ── UTILS ── */
+function esc(s){
+  return String(s||"")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>

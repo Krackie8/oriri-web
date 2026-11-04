@@ -1,0 +1,18 @@
+{
+  "title": "Oriri Podcast",
+  "description": "Through real, unfiltered conversations, we share our experiences in personal growth, wellness, and self-improvement - all while embracing the highs and lows of change.",
+  "language": "en",
+  "icons": {
+    "icon": "/.figma/make/favicon.png"
+  },
+  "openGraph": {
+    "image": "/.figma/make/social-image.png"
+  },
+  "customScripts": {
+    "headStart": "<!-- Google tag (gtag.js) -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-78GWK70520\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'G-78GWK70520');\n</script>"
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

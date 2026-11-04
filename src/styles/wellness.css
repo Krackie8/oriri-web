@@ -1,0 +1,91 @@
+/*
+ * Wellness Bestie by ORIRI: quiet-luxury editorial.
+ * Ivory ground, plum primary, gold accent. Bodoni Moda Regular headings, Figtree body.
+ * No italics anywhere. Minimum text size 14px.
+ * Token names are historical (sage-deep = plum); values below are the source of truth.
+ */
+@theme inline {
+  --color-wb-paper: #F7F3EE;
+  --color-wb-shell: #FFFDFA;
+  --color-wb-stone: #EFE8E0;
+  --color-wb-sand: #E4DAD0;
+  --color-wb-taupe: #76636D;
+  --color-wb-soft: #5A4752;
+  --color-wb-ink: #2A1B24;
+  --color-wb-sage: #C9A46A;
+  --color-wb-sage-mist: #EFE6EA;
+  --color-wb-sage-deep: #4A2C3D;
+  --color-wb-plum: #4A2C3D;
+  --color-wb-gold: #C9A46A;
+  --color-wb-gold-soft: #F3EADB;
+  --font-wb-serif: 'Bodoni Moda', 'Didot', Georgia, serif;
+  --font-wb-sans: 'Figtree', system-ui, -apple-system, sans-serif;
+}
+
+html.wb-site {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+html.wb-site body {
+  background-color: #F7F3EE;
+  color: #2A1B24;
+}
+
+.wb-root {
+  font-family: var(--font-wb-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* Brand rule: no italic anywhere on the site */
+.wb-root em,
+.wb-root i,
+.wb-root cite {
+  font-style: normal;
+}
+.wb-root ::selection {
+  background: #F3EADB;
+  color: #2A1B24;
+}
+.wb-root h1,
+.wb-root h2,
+.wb-root h3 {
+  font-family: var(--font-wb-serif);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+/* Paper grain — very faint so photos stay the hero */
+.wb-grain {
+  position: relative;
+  isolation: isolate;
+}
+.wb-grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .4 0 0 0 0 .35 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.wb-scroll-x {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.wb-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes wb-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+.wb-rise {
+  animation: wb-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-rise { animation: none; }
+  html.wb-site { scroll-behavior: auto; }
+}

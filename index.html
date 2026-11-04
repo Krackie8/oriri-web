@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="<!-- figma:lang -->">
+  <head>
+    <!-- figma:head-start -->
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><!-- figma:title --></title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      #root {
+        height: 100%;
+      }
+    </style>
+    <!--
+      ===== CUSTOM CODE SLOT (head) =====
+      Google Analytics 4 and Microsoft Clarity are already added for every page.
+      They load from src/app/wellness/analytics/config.ts ONLY after a visitor
+      accepts the cookie banner, so do not paste their snippets here as well.
+      Put any other third-party head code below this comment.
+      ===== END CUSTOM CODE SLOT =====
+    -->
+    <!-- figma:head-end -->
+  </head>
+  <body>
+    <!-- figma:body-start -->
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- figma:body-end -->
+  </body>
+</html>
