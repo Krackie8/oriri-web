@@ -49,7 +49,7 @@ export default function WellnessSite() {
     html.classList.remove('dark');
     const meta = document.querySelector('meta[name="theme-color"]');
     const prevTheme = meta?.getAttribute('content');
-    meta?.setAttribute('content', '#F7F3EE');
+    meta?.setAttribute('content', '#FAF8F5');
     return () => {
       html.classList.remove('wb-site');
       if (meta && prevTheme) meta.setAttribute('content', prevTheme);

@@ -30,7 +30,7 @@ export const PILLARS: Pillar[] = [
     key: 'move',
     name: 'Move',
     covers: 'Studios & recovery',
-    image: '1747239685045-fcbcf98985db',
+    image: '1717500252297-b09508db7ceb',
     picks: [
       { title: 'Reformer Pilates', meta: 'Studio · a favourite of Ren', image: '1747239069226-55382c570116', url: links.maps('reformer pilates studio') },
       { title: 'Sauna & cold plunge', meta: 'Recovery', image: '1717356495389-6ab1e5ff9d84', url: links.maps('sauna cold plunge recovery') },

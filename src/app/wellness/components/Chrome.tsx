@@ -6,30 +6,32 @@ import { withUtm } from '../analytics/utm';
 import { getConsent, onConsentChange, setConsent } from '../analytics/consent';
 import { SITE_CONFIG } from '../analytics/config';
 import { whatsappClick } from '../analytics/track';
+import { useAuth } from '../../hooks/useAuth';
 
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <Link to={withUtm('/')} aria-label="Wellness Bestie by ORIRI, home" className={cx('flex items-baseline gap-2', className)}>
-      <span className="font-wb-serif text-[20px] text-wb-plum">Wellness Bestie</span>
-      <span className="text-[14px] text-wb-taupe">by ORIRI</span>
+    <Link to={withUtm('/')} aria-label="Wellness Bestie by ORIRI, home" className={cx('inline-flex flex-col items-center leading-none', className)}>
+      <span className="text-[21px] tracking-[0.01em] text-wb-plum" style={{ fontFamily: 'var(--font-wb-logo)' }}>Wellness Bestie</span>
+      <span aria-hidden className="mt-1 block h-px w-full bg-wb-sand" />
+      <span className="mt-1 text-[11px] font-medium uppercase tracking-[0.32em] text-wb-taupe">by ORIRI</span>
     </Link>
   );
 }
 
-/** Slim app header in the 390px column. */
+/** White app header: centred wordmark, Log in / Profile pill on the right. */
 export function SiteHeader() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 12);
-    on();
-    window.addEventListener('scroll', on, { passive: true });
-    return () => window.removeEventListener('scroll', on);
-  }, []);
-
+  const { isLoggedIn } = useAuth();
   return (
-    <header className={cx('fixed inset-x-0 top-0 z-40 transition-all duration-500', scrolled ? 'bg-wb-paper/90 backdrop-blur-xl shadow-[0_1px_0_rgba(74,44,61,0.08)]' : 'bg-transparent')}>
-      <div className="mx-auto flex h-16 max-w-[430px] items-center justify-between px-5">
+    <header className="fixed inset-x-0 top-0 z-40 border-b border-wb-sand/60 bg-wb-shell/95 backdrop-blur-xl">
+      <div className="mx-auto grid h-16 max-w-[430px] grid-cols-[1fr_auto_1fr] items-center px-5">
+        <span />
         <Wordmark />
+        <Link
+          to="/profile"
+          className="justify-self-end rounded-full border border-wb-plum/50 px-4 py-1.5 text-[14px] font-medium uppercase tracking-[0.1em] text-wb-plum transition-colors hover:bg-wb-plum hover:text-white"
+        >
+          {isLoggedIn ? 'Profile' : 'Log in'}
+        </Link>
       </div>
     </header>
   );
@@ -41,8 +43,8 @@ export function SiteFooter({ onCookieSettings }: { onCookieSettings: () => void 
   return (
     <footer className="border-t border-wb-sand px-5 pb-12 pt-12">
       <div className="mx-auto max-w-[430px]">
-        <Wordmark />
-        <p className="mt-3 text-[15px] leading-relaxed text-wb-soft">Your wellness, already planned.</p>
+        <Wordmark className="!items-start" />
+        <p className="mt-4 text-[15px] leading-relaxed text-wb-soft">Your wellness, already planned.</p>
         <div className="mt-8 grid grid-cols-2 gap-x-6">
           <ul>
             <li><Link to={withUtm('/plan')} className={link}>Plan my day</Link></li>

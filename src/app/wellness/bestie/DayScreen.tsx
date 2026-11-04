@@ -116,13 +116,13 @@ function Ring({ pct, size, stroke = 4, children, label }: { pct: number; size: n
   return (
     <div className="relative" style={{ width: size, height: size }} role="img" aria-label={label}>
       <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#EFE8E0" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1EEEA" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="#4A2C3D"
+          stroke="#7D6D61"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={c}
@@ -221,7 +221,7 @@ function TodayEvent({ event }: { event: StepsistersMoment }) {
 function ActionLink({ link, onClick, solid }: { link: PlanLink; onClick?: () => void; solid?: boolean }) {
   const cls = cx(
     'inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-[15px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
-    solid ? 'bg-wb-plum text-wb-paper hover:bg-[#3A2230]' : 'border border-wb-plum/25 text-wb-plum hover:border-wb-plum/60',
+    solid ? 'bg-wb-plum text-wb-paper hover:bg-[#6B5C51]' : 'border border-wb-plum/25 text-wb-plum hover:border-wb-plum/60',
   );
   return link.url.startsWith('/') ? (
     <Link to={withUtm(link.url)} onClick={onClick} className={cls}>
@@ -308,7 +308,7 @@ function LockedRow({ item }: { item: PlanItem }) {
         </div>
       </div>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="inline-flex items-center gap-2 rounded-full bg-wb-shell px-4 py-2 text-[14px] text-wb-plum shadow-[0_8px_24px_-12px_rgba(74,44,61,0.35)]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-wb-shell px-4 py-2 text-[14px] text-wb-plum shadow-[0_8px_24px_-12px_rgba(125,109,97,0.35)]">
           <Lock className="h-4 w-4" strokeWidth={1.6} /> One more pick unlocks with email
         </span>
       </div>
