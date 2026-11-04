@@ -37,6 +37,12 @@ export interface WellnessGuide {
   note?: string;
   image?: string;
   link?: string;
+  /** Directory fields */
+  area?: string;
+  price?: string;
+  instagram?: string;
+  maps?: string;
+  hidden?: boolean;
   pinned?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -57,12 +63,15 @@ export interface StepsistersMoment {
 }
 
 export const EVENT_CATEGORIES = ['Movement', 'Mind', 'Food', 'Beauty', 'Workshop', 'Pop-up', 'Community'];
-export const GUIDE_CATEGORIES = ['Move', 'Meal', 'Mindset'];
+export const GUIDE_CATEGORIES = ['Move', 'Meal', 'Recovery', 'Mindset', 'Beauty'];
 export const GUIDE_AREAS: Record<string, { blurb: string; placeholder: string }> = {
-  Move: { blurb: 'Workout studios we love', placeholder: 'e.g. Reformer Pilates at Studio X, JLT' },
-  Meal: { blurb: 'Cafés & restaurants worth the trip', placeholder: 'e.g. Brunch at Café Y, Al Quoz' },
-  Mindset: { blurb: 'Podcasts & coaches that shift things', placeholder: 'e.g. Coach Z: breathwork sessions' },
+  Move: { blurb: 'Studios & classes', placeholder: 'e.g. Studio X' },
+  Meal: { blurb: 'Cafés & restaurants', placeholder: 'e.g. Café Y' },
+  Recovery: { blurb: 'Sauna, spa, massage', placeholder: 'e.g. Recovery Lab' },
+  Mindset: { blurb: 'Coaches, books, podcasts', placeholder: 'e.g. Coach Z, breathwork' },
+  Beauty: { blurb: 'Skin, hair, nails', placeholder: 'e.g. Clinic W' },
 };
+export const PRICE_LEVELS = ['Free', 'AED', 'AED AED', 'AED AED AED'];
 
 async function request<T>(
   path: string,
@@ -187,3 +196,15 @@ export const getPlanSignups = (token?: string) => request<PlanSignup[]>('/plan/s
 // Wellness Bestie founding pilot applications (admin)
 export type PilotApplication = Record<string, string>;
 export const getPilotApplications = (token?: string) => request<PilotApplication[]>('/pilot/applications', token);
+
+// ── Site traffic (admin) ────────────────────────────────────────────────────
+export interface DayStats {
+  date: string;
+  views: number;
+  sessions: number;
+  clicks: number;
+  pages: Record<string, number>;
+  sources: Record<string, number>;
+  places: Record<string, number>;
+}
+export const getStats = (token: string | undefined, days = 30) => request<DayStats[]>(`/wellness/stats?days=${days}`, token);

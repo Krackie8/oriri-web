@@ -14,6 +14,7 @@ import ShopPage from './pages/ShopPage';
 import PodcastPage from './pages/PodcastPage';
 import GuestProfilePage from './pages/GuestProfilePage';
 import { captureAttribution } from './analytics/utm';
+import { countPageView } from './analytics/firstParty';
 import { flushPendingFreeDay } from './api';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
@@ -75,6 +76,7 @@ export default function WellnessSite() {
     document.title = TITLES[path] || TITLES['/'];
     if (!location.hash) window.scrollTo(0, 0);
     trackPageView(document.title);
+    countPageView(path); // cookieless first-party count for the admin Traffic tab
   }, [location.pathname, location.hash]);
 
   // scroll_depth 25/50/75/100 on every page
