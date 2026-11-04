@@ -13,6 +13,8 @@ interface LoginScreenProps {
   onClose: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
   onGuestMode: () => void;
+  /** Open on the sign-up form instead of log in. */
+  initialSignUp?: boolean;
 }
 
 function friendlySignupError(message: string | undefined): string {
@@ -35,9 +37,9 @@ function friendlySignupError(message: string | undefined): string {
   return message;
 }
 
-export default function LoginScreen({ onClose, onLogin, onGuestMode }: LoginScreenProps) {
+export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSignUp = false }: LoginScreenProps) {
   const { signUp } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(initialSignUp);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

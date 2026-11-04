@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Mic, ShoppingBag, CircleUserRound } from 'lucide-react';
+import { Home, Mic, ShoppingBag, Sparkles } from 'lucide-react';
 
 /**
  * One bottom bar for the whole app: Home (Wellness Bestie), Podcast (Tea for Two),
- * Shop (coming soon) and Profile (members). The free planner is reached from Home.
+ * Shop (coming soon) and Bestie (your profile + the community). The free planner is reached from Home.
  * Quiet-luxury: ivory ground, plum active state, thin line icons.
  */
-type Tab = 'home' | 'podcast' | 'shop' | 'profile';
+type Tab = 'home' | 'podcast' | 'shop' | 'bestie';
 
 interface BottomTabBarProps {
   onShowLogin?: () => void;
@@ -18,7 +18,7 @@ const TABS: { id: Tab; icon: typeof Home; label: string; path: string }[] = [
   { id: 'podcast', icon: Mic, label: 'Podcast', path: '/podcast' },
   // Coming soon page for now; later ORIRI merch and affiliate picks
   { id: 'shop', icon: ShoppingBag, label: 'Shop', path: '/shop' },
-  { id: 'profile', icon: CircleUserRound, label: 'Profile', path: '/profile' },
+  { id: 'bestie', icon: Sparkles, label: 'Bestie', path: '/bestie' },
 ];
 
 export default function BottomTabBar(_props: BottomTabBarProps) {
@@ -30,8 +30,8 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
     ? 'podcast'
     : pathname.startsWith('/shop') || pathname.startsWith('/store')
       ? 'shop'
-      : pathname.startsWith('/profile')
-        ? 'profile'
+      : pathname.startsWith('/bestie') || pathname.startsWith('/profile') || pathname.startsWith('/membership')
+        ? 'bestie'
         : 'home';
 
   return (
