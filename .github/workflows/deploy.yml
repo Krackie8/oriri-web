@@ -1,0 +1,46 @@
+name: Deploy
+# Staging (new.oriri.me) deploys on every push to main.
+# Production (www.oriri.me) deploys only when run by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to deploy"
+        type: choice
+        options: [staging, production]
+        default: staging
+concurrency:
+  group: deploy-${{ github.event.inputs.target || 'staging' }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.target || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Upload to cPanel over FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./dist/
+          # Set per environment: e.g. /new.oriri.me/ for staging, /public_html/ for production
+          server-dir: ${{ vars.FTP_SERVER_DIR }}
+          # Keep the server's own files (e.g. .well-known for SSL) untouched
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .well-known/**
