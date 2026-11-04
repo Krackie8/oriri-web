@@ -7934,7 +7934,8 @@ const WELLNESS_KINDS: Record<string, { prefix: string; fields: string[] }> = {
   },
   guides: {
     prefix: 'wellness:guide:',
-    fields: ['title', 'category', 'note', 'image', 'link'],
+    // Directory of places Ren recommends
+    fields: ['title', 'category', 'note', 'image', 'link', 'area', 'price', 'instagram', 'maps'],
   },
   // Stepsisters community activities: upcoming meetups + photo recaps
   moments: {
@@ -7949,6 +7950,7 @@ function wellnessPick(body: any, fields: string[]) {
     if (typeof body?.[f] === 'string') out[f] = body[f].trim();
   }
   if (typeof body?.pinned === 'boolean') out.pinned = body.pinned;
+  if (typeof body?.hidden === 'boolean') out.hidden = body.hidden;
   if (Array.isArray(body?.photos)) out.photos = body.photos.filter((u: any) => typeof u === 'string' && u).slice(0, 12);
   return out;
 }
@@ -8052,6 +8054,65 @@ for (const [kind, { prefix, fields }] of Object.entries(WELLNESS_KINDS)) {
     }
   });
 }
+
+// ============================================================================
+// SITE TRAFFIC: cookieless, first-party counts for the admin Traffic tab
+// ============================================================================
+// One small KV row per hit (stats:hit:<YYYY-MM-DD>:<id>) so concurrent writes
+// never overwrite each other. Finished days are rolled up into stats:day:<date>.
+const STAT_TYPES = new Set(['view', 'session', 'click']);
+const statStr = (v: any, max = 120) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const dubaiDate = (d = new Date()) => new Date(d.getTime() + 4 * 3600 * 1000).toISOString().slice(0, 10);
+
+app.post('/make-server-a278ea32/wellness/track', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const t = statStr(body?.t, 10);
+    if (!STAT_TYPES.has(t)) return c.json({ success: false, error: 'Bad event' }, 400);
+    const hit = { t, p: statStr(body?.p), s: statStr(body?.s, 40).toLowerCase(), k: statStr(body?.k) };
+    await kv.set(`stats:hit:${dubaiDate()}:${Date.now().toString(36)}${crypto.randomUUID().slice(0, 6)}`, hit);
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[Stats] track failed:', error?.message);
+    return c.json({ success: false }, 500);
+  }
+});
+
+type DayStats = { date: string; views: number; sessions: number; clicks: number; pages: Record<string, number>; sources: Record<string, number>; places: Record<string, number> };
+const bump = (o: Record<string, number>, k: string) => { if (k) o[k] = (o[k] || 0) + 1; };
+
+async function statsForDay(date: string, today: string): Promise<DayStats> {
+  if (date < today) {
+    const rolled = await kv.get(`stats:day:${date}`);
+    if (rolled) return rolled as DayStats;
+  }
+  const hits = ((await kv.getByPrefix(`stats:hit:${date}:`)) || []).filter(Boolean);
+  const day: DayStats = { date, views: 0, sessions: 0, clicks: 0, pages: {}, sources: {}, places: {} };
+  for (const h of hits as any[]) {
+    if (h.t === 'view') { day.views++; bump(day.pages, h.p); }
+    else if (h.t === 'session') { day.sessions++; bump(day.sources, h.s || 'direct'); }
+    else if (h.t === 'click') { day.clicks++; bump(day.places, h.k); }
+  }
+  if (date < today) await kv.set(`stats:day:${date}`, day);
+  return day;
+}
+
+// Admin: daily traffic for the last N days (Dubai time)
+app.get('/make-server-a278ea32/wellness/stats', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const days = Math.min(Math.max(Number(c.req.query('days')) || 30, 1), 90);
+    const today = dubaiDate();
+    const dates: string[] = [];
+    for (let i = days - 1; i >= 0; i--) dates.push(dubaiDate(new Date(Date.now() - i * 86400000)));
+    const data = await Promise.all(dates.map((d) => statsForDay(d, today)));
+    return c.json({ success: true, data });
+  } catch (error: any) {
+    console.error('[Stats] read failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to load traffic' }, 500);
+  }
+});
 
 // Signed-in users: join the Wellness Bestie waitlist
 app.post('/make-server-a278ea32/waitlist/bestie', async (c) => {

@@ -58,6 +58,7 @@ import StoreManagement from './admin/StoreManagement';
 import SocialLinksManagement from './admin/SocialLinksManagement';
 import WellnessCalendarManagement from './admin/WellnessCalendarManagement';
 import WellnessGuideManagement from './admin/WellnessGuideManagement';
+import TrafficDashboard from './admin/TrafficDashboard';
 import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
 import PilotApplicationsManagement from './admin/PilotApplicationsManagement';
@@ -413,7 +414,8 @@ export default function AdminDashboard() {
         <TabsList className="flex w-full justify-start overflow-x-auto scrollbar-none">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
-          <TabsTrigger value="guide">Guide</TabsTrigger>
+          <TabsTrigger value="guide">Directory</TabsTrigger>
+          <TabsTrigger value="traffic">Traffic</TabsTrigger>
           <TabsTrigger value="stepsisters">Stepsisters</TabsTrigger>
           <TabsTrigger value="plan">Sign-ups</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
@@ -992,6 +994,10 @@ export default function AdminDashboard() {
 
         <TabsContent value="guide" className="space-y-6">
           <WellnessGuideManagement />
+        </TabsContent>
+
+        <TabsContent value="traffic" className="space-y-6">
+          <TrafficDashboard />
         </TabsContent>
 
         <TabsContent value="stepsisters" className="space-y-6">
