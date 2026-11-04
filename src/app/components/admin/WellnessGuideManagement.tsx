@@ -127,7 +127,7 @@ export default function WellnessGuideManagement() {
             <BookHeart className="h-5 w-5" /> {editingId ? 'Edit place' : 'Add a place to the Directory'}
           </CardTitle>
           <CardDescription>
-            Places you personally recommend. They show on the homepage under "Places I love", newest first, top picks first.
+            Places you personally recommend. They show on the homepage in their pillar (Move, Meal, Mindset, Meet up) as a list of names; visitors tap a name to see the details. Tea for Two and Stepsisters are always listed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -141,7 +141,7 @@ export default function WellnessGuideManagement() {
               <Select value={form.category} onValueChange={set('category')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {wellnessApi.GUIDE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c} · {wellnessApi.GUIDE_AREAS[c].blurb}</SelectItem>)}
+                  {wellnessApi.GUIDE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c} · {wellnessApi.GUIDE_AREAS[c]?.blurb}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -150,8 +150,8 @@ export default function WellnessGuideManagement() {
               <Label>Top pick (pin to top)</Label>
             </div>
             <div>
-              <Label>Area</Label>
-              <Input value={form.area} onChange={(e) => set('area')(e.target.value)} placeholder="e.g. Al Quoz, JLT, Jumeirah" />
+              <Label>Area or type</Label>
+              <Input value={form.area} onChange={(e) => set('area')(e.target.value)} placeholder="e.g. Al Quoz · or Book · or Run club" />
             </div>
             <div>
               <Label>Price</Label>
