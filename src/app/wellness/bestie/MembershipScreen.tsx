@@ -29,7 +29,7 @@ const TODAY: { pillar: PillarKey; time: string; title: string }[] = [
 ];
 
 /** Sample profiles for the preview. Real members replace these at launch. */
-const PROFILES = [
+export const PROFILES = [
   { name: 'Layla', age: 31, area: 'Jumeirah Lake Towers (JLT)', interests: ['Reformer', 'Brunch', 'Tea for Two'], photo: '1544005313-94ddf0286df2', handle: 'layla', likesYou: true },
   { name: 'Sofia', age: 28, area: 'Al Barsha', interests: ['Run club', 'Journaling'], photo: '1674932668403-33398b81c92f', handle: 'sofia', likesYou: false },
   { name: 'Maya', age: 35, area: 'Jumeirah', interests: ['Yoga', 'Sunset walks', 'Books'], photo: '1552699611-e2c208d5d9cf', handle: 'maya', likesYou: true },

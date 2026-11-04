@@ -27,7 +27,7 @@ export function SiteHeader() {
         <span />
         <Wordmark />
         <Link
-          to="/profile"
+          to="/bestie"
           className="justify-self-end rounded-full border border-wb-plum/50 px-4 py-1.5 text-[14px] font-medium uppercase tracking-[0.1em] text-wb-plum transition-colors hover:bg-wb-plum hover:text-white"
         >
           {isLoggedIn ? 'Profile' : 'Log in'}

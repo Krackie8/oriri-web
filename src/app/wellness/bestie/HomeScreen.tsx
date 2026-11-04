@@ -11,6 +11,7 @@ import { countPlaceClick } from '../analytics/firstParty';
 import { withUtm } from '../analytics/utm';
 import { unsplash } from '../components/ui';
 import teaForTwo from '../../../assets/tea-for-two.jpg';
+import PhoneShowcase from './PhoneShowcase';
 
 export default function HomeScreen() {
   return (
@@ -18,6 +19,7 @@ export default function HomeScreen() {
       <Hero />
       <Directory />
       <BestieIntro />
+      <PhoneShowcase />
       <HowItWorks />
       <PlumBand />
       <PodcastTeaser />
@@ -35,9 +37,9 @@ function Hero() {
       <Screen className="relative flex min-h-[74svh] flex-col justify-end pb-12 pt-32">
         <div className="wb-rise">
           <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Wellness Bestie by ORIRI</p>
-          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">The Dubai wellness guide</h1>
+          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">Your wellness, already planned</h1>
           <p className="mt-5 text-[17px] leading-relaxed text-white/90">
-            The studios, cafés and recovery spots I actually go to, all in one list. Free, always.
+            Move, Meal, Mindset and Meet up in Dubai: the places I love, and a planner that fits them around your day.
           </p>
           <a
             href="#guide"
@@ -257,7 +259,7 @@ const NUMBER_WORDS = ['One', 'Two', 'Three'];
 
 function HowItWorks() {
   return (
-    <Screen className="pt-8">
+    <Screen className="pt-10">
       <ol className="space-y-3">
         {STEPS.map((st, n) => (
           <li key={st.title} className="rounded-[14px] bg-wb-stone px-6 py-7 text-center">

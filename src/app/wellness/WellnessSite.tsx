@@ -12,6 +12,7 @@ import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ShopPage from './pages/ShopPage';
 import PodcastPage from './pages/PodcastPage';
+import BestiePage from './pages/BestiePage';
 import GuestProfilePage from './pages/GuestProfilePage';
 import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
@@ -34,6 +35,7 @@ const TITLES: Record<string, string> = {
   '/privacy': 'Privacy · ORIRI',
   '/shop': 'Shop · ORIRI',
   '/podcast': 'Tea for Two podcast · ORIRI',
+  '/bestie': 'Bestie community · ORIRI',
   '/profile': 'Your profile · ORIRI',
 };
 
@@ -99,7 +101,7 @@ export default function WellnessSite() {
           <Route path="/plan/inputs" element={<InputScreen />} />
           <Route path="/plan/day" element={<DayScreen />} />
           <Route path="/membership" element={<MembershipScreen />} />
-          <Route path="/bestie" element={<Navigate to="/" replace />} />
+          <Route path="/bestie" element={<BestiePage />} />
           <Route path="/pilot" element={<PilotPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
