@@ -52,7 +52,7 @@ export const PILLARS: Pillar[] = [
     covers: 'Podcasts by category, books, articles',
     image: '1742867114414-4594a9cf240c',
     picks: [
-      { title: 'Tea for Two', meta: 'Podcast · Renee & Amanda', image: teaForTwo, url: '/episodes' },
+      { title: 'Tea for Two', meta: 'Podcast · Renee & Amanda', image: teaForTwo, url: '/podcast' },
       { title: 'Atomic Habits, chapter one', meta: 'Book', image: '1707142979946-a745d1d0092c', url: links.book('Atomic Habits James Clear') },
     ],
   },
