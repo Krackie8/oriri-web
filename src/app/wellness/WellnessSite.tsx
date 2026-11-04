@@ -10,13 +10,14 @@ import MembershipScreen from './bestie/MembershipScreen';
 import PilotPage from './pages/PilotPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
+import ShopPage from './pages/ShopPage';
 import { captureAttribution } from './analytics/utm';
 import { flushPendingFreeDay } from './api';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
 /** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
-export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy'];
+export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop'];
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
 const TITLES: Record<string, string> = {
@@ -28,6 +29,7 @@ const TITLES: Record<string, string> = {
   '/pilot': 'Join the waitlist · Wellness Bestie by ORIRI',
   '/about': 'About ORIRI',
   '/privacy': 'Privacy · ORIRI',
+  '/shop': 'Shop · ORIRI',
 };
 
 // Capture UTMs as early as possible, before any route change can drop them.
@@ -94,6 +96,7 @@ export default function WellnessSite() {
           <Route path="/bestie" element={<Navigate to="/" replace />} />
           <Route path="/pilot" element={<PilotPage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/shop" element={<ShopPage />} />
           <Route path="/privacy" element={<PrivacyPage onCookieSettings={() => setCookieSettingsOpen(true)} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
