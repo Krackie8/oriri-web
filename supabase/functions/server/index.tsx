@@ -13,6 +13,7 @@ app.use('*', logger(console.log))
 const ALLOWED_ORIGINS = [
   'https://oriri.me',
   'https://www.oriri.me',
+  'https://new.oriri.me', // staging
 ];
 
 app.use('*', cors({
