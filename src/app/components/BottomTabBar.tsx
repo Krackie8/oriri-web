@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Headphones, ShoppingBag, CircleUserRound } from 'lucide-react';
+import { Home, Mic, ShoppingBag, CircleUserRound } from 'lucide-react';
 
 /**
- * One bottom bar for the whole app: Home (Wellness Bestie), Episodes (Tea for Two),
+ * One bottom bar for the whole app: Home (Wellness Bestie), Podcast (Tea for Two),
  * Shop (coming soon) and Profile (members). The free planner is reached from Home.
  * Quiet-luxury: ivory ground, plum active state, thin line icons.
  */
-type Tab = 'home' | 'episodes' | 'shop' | 'profile';
+type Tab = 'home' | 'podcast' | 'shop' | 'profile';
 
 interface BottomTabBarProps {
   onShowLogin?: () => void;
@@ -15,7 +15,7 @@ interface BottomTabBarProps {
 
 const TABS: { id: Tab; icon: typeof Home; label: string; path: string }[] = [
   { id: 'home', icon: Home, label: 'Home', path: '/' },
-  { id: 'episodes', icon: Headphones, label: 'Episodes', path: '/episodes' },
+  { id: 'podcast', icon: Mic, label: 'Podcast', path: '/podcast' },
   // Coming soon page for now; later ORIRI merch and affiliate picks
   { id: 'shop', icon: ShoppingBag, label: 'Shop', path: '/shop' },
   { id: 'profile', icon: CircleUserRound, label: 'Profile', path: '/profile' },
@@ -26,8 +26,8 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
   const { pathname } = useLocation();
 
   // The free plan (/plan/...) is reached from the homepage, so it counts as Home
-  const current: Tab = pathname.startsWith('/episode')
-    ? 'episodes'
+  const current: Tab = pathname.startsWith('/episode') || pathname.startsWith('/podcast')
+    ? 'podcast'
     : pathname.startsWith('/shop') || pathname.startsWith('/store')
       ? 'shop'
       : pathname.startsWith('/profile')

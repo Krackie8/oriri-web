@@ -119,7 +119,7 @@ const OPTIONS: Option[] = [
 
   // Mindset
   { key: 'teafortwo', pillar: 'mindset', title: 'Tea for Two: pick an episode', venue: () => 'Podcast · Renee & Amanda', min: 25, max: 45, needs: 60, energy: ['Low', 'Steady', 'High'], goals: ['Connect', 'Unwind'],
-    links: () => [{ label: 'Listen to episodes', url: '/episodes' }] },
+    links: () => [{ label: 'Listen to episodes', url: '/podcast' }] },
   { key: 'podcast', pillar: 'mindset', title: 'The Mel Robbins Podcast', venue: () => 'Podcast · self-development', min: 15, max: 30, needs: 30, energy: ['Steady', 'High'], goals: ['Focus'],
     links: () => [{ label: 'Listen on Spotify', url: links.spotify('The Mel Robbins Podcast') }] },
   { key: 'book', pillar: 'mindset', title: 'Atomic Habits, one chapter', venue: () => 'Book · any format', min: 15, max: 30, needs: 30, energy: ['Steady', 'High'], goals: ['Focus', 'Glow'],

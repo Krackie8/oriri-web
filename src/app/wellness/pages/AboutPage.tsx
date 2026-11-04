@@ -68,7 +68,7 @@ export default function AboutPage() {
         </div>
         <p className="mt-10 text-[15px] text-wb-taupe">
           Still love the conversations?{' '}
-          <Link to="/episodes" className="text-wb-ink underline underline-offset-4">
+          <Link to="/podcast" className="text-wb-ink underline underline-offset-4">
             Listen to Tea for Two
           </Link>
         </p>
