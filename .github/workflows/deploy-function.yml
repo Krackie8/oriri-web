@@ -22,5 +22,12 @@ jobs:
         run: |
           mkdir -p supabase/functions/$FUNCTION
           cp -r supabase/functions/server/. supabase/functions/$FUNCTION/
+          # Make's entrypoint is index.tsx, not the CLI default index.ts
+          cat > supabase/config.toml <<EOF
+          project_id = "$PROJECT_REF"
+          [functions.$FUNCTION]
+          entrypoint = "./functions/$FUNCTION/index.tsx"
+          verify_jwt = true
+          EOF
       - name: Deploy
         run: supabase functions deploy $FUNCTION --project-ref $PROJECT_REF --use-api --yes
