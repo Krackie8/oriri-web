@@ -11,6 +11,7 @@ import PilotPage from './pages/PilotPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ShopPage from './pages/ShopPage';
+import GuestProfilePage from './pages/GuestProfilePage';
 import { captureAttribution } from './analytics/utm';
 import { flushPendingFreeDay } from './api';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
@@ -30,6 +31,7 @@ const TITLES: Record<string, string> = {
   '/about': 'About ORIRI',
   '/privacy': 'Privacy · ORIRI',
   '/shop': 'Shop · ORIRI',
+  '/profile': 'Your profile · ORIRI',
 };
 
 // Capture UTMs as early as possible, before any route change can drop them.
@@ -97,6 +99,8 @@ export default function WellnessSite() {
           <Route path="/pilot" element={<PilotPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
+          {/* Only reached by guests: App.tsx sends signed-in users to the full profile */}
+          <Route path="/profile" element={<GuestProfilePage />} />
           <Route path="/privacy" element={<PrivacyPage onCookieSettings={() => setCookieSettingsOpen(true)} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -19,6 +19,7 @@ import DebugUtils from './utils/debugUtils';
 import './utils/vipTestConsole';
 
 import { useAuthHandlers } from './hooks/useAuthHandlers';
+import { useAuth } from './hooks/useAuth';
 
 console.log('[App] Starting App component...');
 
@@ -29,6 +30,8 @@ function AppContent() {
   const [isReady, setIsReady] = useState(true); // Start as ready immediately
   const { handleLogin, handleGuestMode, handleLogout } = useAuthHandlers();
   const location = useLocation();
+  const { isLoggedIn, loading: authLoading } = useAuth();
+  const isProfilePath = (location.pathname.replace(/\/+$/, '') || '/') === '/profile';
 
   useEffect(() => {
     const initializeApp = () => {
@@ -80,7 +83,15 @@ function AppContent() {
 
   // Wellness Bestie marketing site (/, /pilot, /about, /privacy): standalone,
   // no splash, onboarding or podcast chrome — visitors arrive from Instagram.
-  if (isWellnessPath(location.pathname)) {
+  // Guests on /profile get the Bestie sign-in / membership screen instead of a redirect home.
+  if (isProfilePath && authLoading) {
+    return (
+      <div className="min-h-screen bg-[#F7F3EE] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#4A2C3D] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (isWellnessPath(location.pathname) || (isProfilePath && !isLoggedIn)) {
     return (
       <ErrorBoundary onError={handleGlobalError}>
         <WellnessSite />
