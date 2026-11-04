@@ -1,24 +1,26 @@
 /*
- * Wellness Bestie by ORIRI: quiet-luxury editorial.
- * Ivory ground, plum primary, gold accent. Bodoni Moda Regular headings, Figtree body.
+ * Wellness Bestie by ORIRI: soft mocha neutrals (inspired by inchargeapp.com).
+ * Warm white ground, mocha primary, greige cards. Red Hat Display uppercase headings,
+ * Figtree body, Bodoni Moda only for the wordmark.
  * No italics anywhere. Minimum text size 14px.
  * Token names are historical (sage-deep = plum); values below are the source of truth.
  */
 @theme inline {
-  --color-wb-paper: #F7F3EE;
-  --color-wb-shell: #FFFDFA;
-  --color-wb-stone: #EFE8E0;
-  --color-wb-sand: #E4DAD0;
-  --color-wb-taupe: #76636D;
-  --color-wb-soft: #5A4752;
-  --color-wb-ink: #2A1B24;
-  --color-wb-sage: #C9A46A;
-  --color-wb-sage-mist: #EFE6EA;
-  --color-wb-sage-deep: #4A2C3D;
-  --color-wb-plum: #4A2C3D;
-  --color-wb-gold: #C9A46A;
-  --color-wb-gold-soft: #F3EADB;
-  --font-wb-serif: 'Bodoni Moda', 'Didot', Georgia, serif;
+  --color-wb-paper: #FAF8F5;
+  --color-wb-shell: #FFFFFF;
+  --color-wb-stone: #F1EEEA;
+  --color-wb-sand: #DDD4CD;
+  --color-wb-taupe: #7D6D61;
+  --color-wb-soft: #5E524A;
+  --color-wb-ink: #2B2522;
+  --color-wb-sage: #B8A291;
+  --color-wb-sage-mist: #F1EEEA;
+  --color-wb-sage-deep: #7D6D61;
+  --color-wb-plum: #7D6D61;
+  --color-wb-gold: #B8A291;
+  --color-wb-gold-soft: #EFE9E3;
+  --font-wb-serif: 'Red Hat Display', 'Figtree', system-ui, sans-serif;
+  --font-wb-logo: 'Bodoni Moda', 'Didot', Georgia, serif;
   --font-wb-sans: 'Figtree', system-ui, -apple-system, sans-serif;
 }
 
@@ -27,8 +29,8 @@ html.wb-site {
   scroll-behavior: smooth;
 }
 html.wb-site body {
-  background-color: #F7F3EE;
-  color: #2A1B24;
+  background-color: #FAF8F5;
+  color: #2B2522;
 }
 
 .wb-root {
@@ -43,16 +45,17 @@ html.wb-site body {
   font-style: normal;
 }
 .wb-root ::selection {
-  background: #F3EADB;
-  color: #2A1B24;
+  background: #EFE9E3;
+  color: #2B2522;
 }
 .wb-root h1,
 .wb-root h2,
 .wb-root h3 {
   font-family: var(--font-wb-serif);
-  font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 /* Paper grain — very faint so photos stay the hero */
@@ -66,7 +69,7 @@ html.wb-site body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.35;
+  opacity: 0;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .4 0 0 0 0 .35 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 

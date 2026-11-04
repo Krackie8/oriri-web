@@ -28,11 +28,12 @@ type BtnTone = 'plum' | 'ivory' | 'outline' | 'gold';
 const btn = (tone: BtnTone, size: 'md' | 'lg') =>
   cx(
     'group inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold focus-visible:ring-offset-2 focus-visible:ring-offset-wb-paper active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
-    size === 'lg' ? 'h-14 px-7 text-[16px]' : 'h-11 px-5 text-[15px]',
-    tone === 'plum' && 'bg-wb-plum text-wb-paper hover:bg-[#3A2230]',
+    'uppercase tracking-[0.12em]',
+    size === 'lg' ? 'h-[52px] px-7 text-[14px]' : 'h-11 px-5 text-[14px]',
+    tone === 'plum' && 'bg-wb-plum text-wb-paper hover:bg-[#6B5C51]',
     tone === 'ivory' && 'bg-wb-paper text-wb-plum hover:bg-white',
     tone === 'outline' && 'border border-wb-plum/25 text-wb-plum hover:border-wb-plum/60',
-    tone === 'gold' && 'bg-wb-gold text-wb-ink hover:bg-[#BD9658]',
+    tone === 'gold' && 'bg-wb-gold text-wb-ink hover:bg-[#A38D7B]',
   );
 
 interface BtnProps {
@@ -44,7 +45,7 @@ interface BtnProps {
   onClick?: () => void;
 }
 
-export function PillLink({ to, children, tone = 'plum', size = 'lg', className, arrow = true, onClick }: BtnProps & { to: string }) {
+export function PillLink({ to, children, tone = 'plum', size = 'lg', className, arrow = false, onClick }: BtnProps & { to: string }) {
   return (
     <Link to={withUtm(to)} onClick={onClick} className={cx(btn(tone, size), className)}>
       {children}
@@ -102,7 +103,7 @@ export function Chip({
 }
 
 export function Card({ children, className, as: As = 'div' }: { children: React.ReactNode; className?: string; as?: 'div' | 'section' | 'li' }) {
-  return <As className={cx('rounded-[20px] border border-wb-sand/80 bg-wb-shell', className)}>{children}</As>;
+  return <As className={cx('rounded-[14px] border border-wb-sand/60 bg-wb-shell', className)}>{children}</As>;
 }
 
 /** Real photo (Unsplash ID, URL or imported file) on a stone ground. */

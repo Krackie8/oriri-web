@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Lock, MapPin } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
-import { Card, Eyebrow, GoldRule, Photo, PillarIcon, PillLink, Screen, cx } from './kit';
+import { Card, Eyebrow, Photo, PillarIcon, PillLink, Screen, cx } from './kit';
 import { PILLARS, type Pick, type Pillar } from './picks';
 import { cardClick, ctaClick } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
+import { unsplash } from '../components/ui';
 
 const BOX = { move: 'move', meal: 'meal', mindset: 'mindset', meetup: 'meetups' } as const;
 
@@ -15,10 +16,10 @@ export default function HomeScreen() {
     <>
       <Hero />
       <HowItWorks />
-      <Screen className="pt-14">
-        <Eyebrow>The directory</Eyebrow>
-        <h2 className="mt-2 text-[30px]">Ren's picks</h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-wb-soft">Places, recipes and listens I love, across the four pillars.</p>
+      <Screen className="pt-16">
+        <Eyebrow className="text-center">The directory</Eyebrow>
+        <h2 className="mt-2 text-center text-[32px] text-wb-plum">Ren's picks</h2>
+        <p className="mt-3 text-center text-[15px] leading-relaxed text-wb-soft">Places, recipes and listens I love, across the four pillars.</p>
         <div className="mt-6 space-y-4">
           {PILLARS.map((p) => (
             <PillarCard key={p.key} pillar={p} />
@@ -30,20 +31,25 @@ export default function HomeScreen() {
   );
 }
 
+const HERO_PHOTO = unsplash('1747239685045-fcbcf98985db', 1200, 1500);
+
 function Hero() {
   return (
-    <Screen className="pt-24">
-      <div className="wb-rise">
-        <Eyebrow>Wellness Bestie by ORIRI</Eyebrow>
-        <h1 className="mt-4 text-[42px] leading-[1.05] text-wb-ink">Your wellness plan, curated for you.</h1>
-        <GoldRule className="mt-6" />
-        <p className="mt-5 text-[16px] leading-relaxed text-wb-soft">Move, Meal and Mindset, planned around your energy, time and budget.</p>
-        <PillLink to="/plan" className="mt-7 w-full" onClick={() => ctaClick('Check in — it\'s free', 'hero')}>
-          Check in — it's free
-        </PillLink>
-        <p className="mt-3 text-center text-[14px] text-wb-taupe">Two minutes. No account needed.</p>
-      </div>
-    </Screen>
+    <section className="relative mt-16 overflow-hidden bg-wb-ink">
+      <img src={HERO_PHOTO} alt="" fetchPriority="high" className="absolute inset-0 h-full w-full object-cover object-center" />
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/10" />
+      <Screen className="relative flex min-h-[78svh] flex-col justify-end pb-12 pt-32">
+        <div className="wb-rise">
+          <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Wellness Bestie by ORIRI</p>
+          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">Your wellness plan, curated for you</h1>
+          <p className="mt-5 text-[17px] leading-relaxed text-white/90">Move, Meal and Mindset, planned around your energy, time and budget.</p>
+          <PillLink to="/plan" className="mt-8 w-full !bg-wb-plum hover:!bg-[#6B5C51]" onClick={() => ctaClick('Check in — it\'s free', 'hero')}>
+            Check in · it's free
+          </PillLink>
+          <p className="mt-3 text-center text-[14px] text-white/75">Two minutes. No account needed.</p>
+        </div>
+      </Screen>
+    </section>
   );
 }
 
@@ -53,18 +59,18 @@ const STEPS = [
   { title: 'Tap & track', body: 'Tick things off and watch your progress build. Behind the scenes, Bestie remembers what works for you.' },
 ];
 
+const NUMBER_WORDS = ['One', 'Two', 'Three'];
+
 function HowItWorks() {
   return (
-    <Screen className="pt-12">
-      <Eyebrow>How it works</Eyebrow>
-      <ol className="mt-5 space-y-5">
+    <Screen className="pt-14">
+      <Eyebrow className="text-center">How it works</Eyebrow>
+      <ol className="mt-6 space-y-3">
         {STEPS.map((st, n) => (
-          <li key={st.title} className="flex gap-4">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-wb-gold font-wb-serif text-[17px] text-wb-plum">{n + 1}</span>
-            <span>
-              <span className="block font-wb-serif text-[20px] leading-snug text-wb-ink">{st.title}</span>
-              <span className="mt-0.5 block text-[15px] leading-relaxed text-wb-soft">{st.body}</span>
-            </span>
+          <li key={st.title} className="rounded-[14px] bg-wb-stone px-6 py-7 text-center">
+            <span className="block text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">{NUMBER_WORDS[n]}</span>
+            <span className="mt-2 block font-wb-serif text-[24px] font-medium uppercase tracking-[0.02em] text-wb-ink">{st.title}</span>
+            <span className="mx-auto mt-3 block max-w-[300px] text-[15px] leading-relaxed text-wb-soft">{st.body}</span>
           </li>
         ))}
       </ol>
@@ -140,11 +146,10 @@ function PlumBand() {
   return (
     <section className="mt-14 bg-wb-plum py-14 text-wb-paper">
       <Screen>
-        <GoldRule />
-        <h2 className="mt-5 text-[32px] leading-[1.1] text-wb-paper">Or let Bestie curate your whole day</h2>
-        <p className="mt-3 text-[16px] leading-relaxed text-wb-paper/80">Tell us your energy, time and budget. We plan the rest as one tickable list, with links to book, cook or listen.</p>
-        <PillLink to="/plan" tone="ivory" className="mt-7 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
-          Check in — it's free
+        <h2 className="text-center text-[30px] leading-[1.1] text-white">Or let Bestie curate your whole day</h2>
+        <p className="mt-4 text-center text-[16px] leading-relaxed text-white/90">Tell us your energy, time and budget. We plan the rest as one tickable list, with links to book, cook or listen.</p>
+        <PillLink to="/plan" tone="ivory" className="mt-8 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
+          Check in · it's free
         </PillLink>
       </Screen>
     </section>

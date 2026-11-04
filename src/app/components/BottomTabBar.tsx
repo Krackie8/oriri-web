@@ -37,7 +37,7 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E4DAD0] bg-[#F7F3EE]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#DDD4CD] bg-[#FAF8F5]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
     >
       <div className="mx-auto grid h-16 max-w-[430px] grid-cols-4">
         {TABS.map((t) => {
@@ -49,11 +49,11 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
               type="button"
               onClick={() => navigate(t.path)}
               aria-current={on ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C9A46A] ${
-                on ? 'text-[#4A2C3D]' : 'text-[#76636D] hover:text-[#2A1B24]'
+              className={`relative flex flex-col items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#B8A291] ${
+                on ? 'text-[#7D6D61]' : 'text-[#7D6D61] hover:text-[#2B2522]'
               }`}
             >
-              {on && <span aria-hidden className="absolute top-0 h-[2px] w-8 rounded-full bg-[#C9A46A]" />}
+              {on && <span aria-hidden className="absolute top-0 h-[2px] w-8 rounded-full bg-[#B8A291]" />}
               <Icon className="h-[22px] w-[22px]" strokeWidth={on ? 1.6 : 1.3} />
               <span className="text-[14px] leading-none" style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
                 {t.label}

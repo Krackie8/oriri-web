@@ -243,7 +243,7 @@ function BestieSwipe() {
             }}
           >
             <Photo src={p.photo} alt={`${p.name}, sample profile`} className="pointer-events-none aspect-[4/5]" w={700} h={875} />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#2A1B24]/85 via-[#2A1B24]/40 to-transparent p-5 pt-20 text-wb-paper">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#2B2522]/85 via-[#2B2522]/40 to-transparent p-5 pt-20 text-wb-paper">
               <p className="font-wb-serif text-[28px] leading-none">
                 {p.name}, {p.age}
               </p>
