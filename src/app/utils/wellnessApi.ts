@@ -63,13 +63,12 @@ export interface StepsistersMoment {
 }
 
 export const EVENT_CATEGORIES = ['Movement', 'Mind', 'Food', 'Beauty', 'Workshop', 'Pop-up', 'Community'];
-export const GUIDE_CATEGORIES = ['Move', 'Meal', 'Recovery', 'Mindset', 'Beauty'];
+export const GUIDE_CATEGORIES = ['Move', 'Meal', 'Mindset', 'Meetup'];
 export const GUIDE_AREAS: Record<string, { blurb: string; placeholder: string }> = {
-  Move: { blurb: 'Studios & classes', placeholder: 'e.g. Studio X' },
+  Move: { blurb: 'Studios & classes', placeholder: 'e.g. Paus' },
   Meal: { blurb: 'Cafés & restaurants', placeholder: 'e.g. Café Y' },
-  Recovery: { blurb: 'Sauna, spa, massage', placeholder: 'e.g. Recovery Lab' },
-  Mindset: { blurb: 'Coaches, books, podcasts', placeholder: 'e.g. Coach Z, breathwork' },
-  Beauty: { blurb: 'Skin, hair, nails', placeholder: 'e.g. Clinic W' },
+  Mindset: { blurb: 'Podcast or book', placeholder: 'e.g. Atomic Habits (book)' },
+  Meetup: { blurb: 'Activities & organisers', placeholder: 'e.g. Sunrise run club by X' },
 };
 export const PRICE_LEVELS = ['Free', 'AED', 'AED AED', 'AED AED AED'];
 
