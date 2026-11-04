@@ -90,6 +90,12 @@ const OPTIONS: Option[] = [
     links: (a) => [{ label: 'Find & book a class', url: links.maps('reformer pilates studio', a) }] },
   { key: 'strength', pillar: 'move', title: 'Strength class', venue: (a) => `Boutique gym ${near(a)}`, range: [100, 150], min: 45, max: 50, needs: 90, energy: ['High'], goals: ['Focus'],
     links: (a) => [{ label: 'Find & book a class', url: links.maps('boutique gym strength class', a) }] },
+  { key: 'swim', pillar: 'move', title: 'Lap swim', venue: (a) => `Public pool or beach club ${near(a)}`, range: [30, 60], min: 30, max: 45, needs: 30, energy: ['Steady', 'High'], goals: ['Recharge', 'Focus', 'Unwind'],
+    links: (a) => [{ label: 'Find a pool', url: links.maps('public swimming pool day pass', a) }] },
+  { key: 'dropinyoga', pillar: 'move', title: 'Community yoga drop-in', venue: (a) => `Yoga studio or park class ${near(a)}`, range: [50, 80], min: 45, max: 60, needs: 60, energy: ['Low', 'Steady'], goals: ['Unwind', 'Recharge', 'Connect', 'Glow'],
+    links: (a) => [{ label: 'Find a class', url: links.maps('community yoga drop in class', a) }] },
+  { key: 'stretchclass', pillar: 'move', title: 'Assisted stretch session', venue: (a) => `Stretch studio ${near(a)}`, range: [60, 90], min: 30, max: 45, needs: 30, energy: ['Low', 'Steady'], goals: ['Recharge', 'Unwind', 'Glow'],
+    links: (a) => [{ label: 'Find & book a session', url: links.maps('assisted stretch studio', a) }] },
   { key: 'sauna', pillar: 'move', title: 'Sauna & cold plunge', venue: (a) => `Recovery studio ${near(a)}`, range: [100, 160], min: 45, max: 60, needs: 90, energy: ['Low', 'Steady'], goals: ['Recharge', 'Unwind', 'Glow'],
     links: (a) => [{ label: 'Find & book a session', url: links.maps('sauna cold plunge recovery', a) }] },
 
@@ -100,6 +106,10 @@ const OPTIONS: Option[] = [
     links: () => [{ label: 'Open the recipe', url: links.recipe('protein overnight oats') }] },
   { key: 'glowbowl', pillar: 'meal', title: 'Glow bowl: salmon, greens, avocado', venue: () => 'Recipe · free to follow', min: 15, max: 25, needs: 0, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Recharge'],
     links: () => [{ label: 'Open the recipe', url: links.recipe('salmon avocado bowl') }] },
+  { key: 'juice', pillar: 'meal', title: 'Fresh juice or iced matcha', venue: (a) => `Café ${near(a)}`, range: [20, 35], min: 10, max: 20, needs: 30, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Focus', 'Recharge'],
+    links: (a) => [{ label: 'Find a café', url: links.maps('fresh juice matcha cafe', a) }] },
+  { key: 'bowl', pillar: 'meal', title: 'Healthy grain or poke bowl', venue: (a) => `Healthy café ${near(a)}`, range: [40, 60], min: 20, max: 40, needs: 30, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Focus', 'Recharge'],
+    links: (a) => [{ label: 'Find a café', url: links.maps('healthy poke bowl cafe', a) }] },
   { key: 'smoothie', pillar: 'meal', title: 'Smoothie & salad bar', venue: (a) => `Healthy café ${near(a)}`, range: [45, 70], min: 30, max: 45, needs: 60, energy: ['Steady', 'High'], goals: ['Glow', 'Focus'],
     links: (a) => [{ label: 'Find a café', url: links.maps('healthy cafe salad smoothie', a) }] },
   { key: 'brunch', pillar: 'meal', title: 'Slow brunch', venue: (a) => `Wellness café ${near(a)}`, range: [70, 120], min: 60, max: 90, needs: 120, energy: ['Low', 'Steady'], goals: ['Connect', 'Unwind'],
@@ -116,6 +126,10 @@ const OPTIONS: Option[] = [
     links: () => [{ label: 'See the book', url: links.book('Atomic Habits James Clear') }] },
   { key: 'sleep', pillar: 'mindset', title: 'Read: how to sleep deeper', venue: () => 'Article · on your phone', min: 5, max: 10, needs: 0, energy: ['Low', 'Steady'], goals: ['Recharge'],
     links: () => [{ label: 'Read the article', url: 'https://www.sleepfoundation.org/sleep-hygiene' }] },
+  { key: 'bookshop', pillar: 'mindset', title: 'Browse a bookshop, bring one home', venue: (a) => `Bookshop ${near(a)}`, range: [40, 70], min: 30, max: 45, needs: 60, energy: ['Low', 'Steady'], goals: ['Focus', 'Unwind', 'Glow'],
+    links: (a) => [{ label: 'Find a bookshop', url: links.maps('bookshop', a) }] },
+  { key: 'soundbath', pillar: 'mindset', title: 'Sound bath or guided meditation', venue: (a) => `Wellness studio ${near(a)}`, range: [80, 150], min: 45, max: 60, needs: 60, energy: ['Low', 'Steady'], goals: ['Unwind', 'Recharge'],
+    links: (a) => [{ label: 'Find & book a session', url: links.maps('sound bath meditation', a) }] },
   { key: 'journal', pillar: 'mindset', title: 'Five-minute journal', venue: () => 'Notebook or notes app', min: 5, max: 10, needs: 0, energy: ['Low', 'Steady', 'High'], goals: ['Unwind', 'Glow'],
     links: () => [], steps: ["Three things I'm grateful for", "What would make today feel good?", "One kind thing I'll do for myself"] },
 ];
@@ -133,7 +147,10 @@ function score(o: Option, i: PlanInputs, budgetLeft: number) {
   let s = 0;
   if (o.energy.includes(i.energy)) s += 3;
   for (const g of i.goals) if (o.goals.includes(g)) s += 2;
-  s += o.needs / 120 + (o.range ? 0.5 : 0); // richer experience when time & budget allow
+  s += o.needs / 120; // richer experience when time allows
+  // She told us her budget: use it. A paid pick that fits beats a free one,
+  // and picks closer to what's left rank higher (the cap above is never crossed).
+  if (o.range && i.budget > 0 && o.energy.includes(i.energy)) s += 4 + 2 * (maxOf(o) / Math.max(budgetLeft, 1));
   return s;
 }
 
@@ -145,9 +162,10 @@ function best(pool: Option[], i: PlanInputs, budgetLeft: number, maxMin: number)
 function reasonFor(o: Option, i: PlanInputs): string {
   const goal = i.goals.find((g) => o.goals.includes(g));
   const energyLine = i.energy === 'Low' ? 'Gentle, for low energy' : i.energy === 'High' ? 'Uses your high energy' : 'Steady pace for a steady day';
-  if (goal && o.pillar === 'meal') return o.range ? `Good for ${goal.toLowerCase()}, within your budget.` : `Good for ${goal.toLowerCase()}, and free to make.`;
-  if (goal) return `${energyLine}, and it helps you ${goal.toLowerCase()}.`;
-  return o.range ? `${energyLine}, within your budget.` : `${energyLine}, and it's free.`;
+  const fits = `fits your ${money(i.budget)} budget`;
+  if (goal && o.pillar === 'meal') return o.range ? `Good for ${goal.toLowerCase()}, and ${fits}.` : `Good for ${goal.toLowerCase()}, and free to make.`;
+  if (goal) return o.range ? `${energyLine}, helps you ${goal.toLowerCase()}, and ${fits}.` : `${energyLine}, and it helps you ${goal.toLowerCase()}.`;
+  return o.range ? `${energyLine}, and ${fits}.` : `${energyLine}, and it's free.`;
 }
 
 export function buildPlan(i: PlanInputs): { items: PlanItem[]; total: number; totalLabel: string; minutes: number } {
