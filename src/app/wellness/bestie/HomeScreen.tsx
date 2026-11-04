@@ -35,7 +35,7 @@ function Hero() {
       <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/10" />
       <Screen className="relative flex min-h-[74svh] flex-col justify-end pb-12 pt-32">
         <div className="wb-rise">
-          <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Approved by Ren</p>
+          <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Wellness Bestie by ORIRI</p>
           <h1 className="mt-4 text-[40px] leading-[1.05] text-white">The Dubai wellness guide</h1>
           <p className="mt-5 text-[17px] leading-relaxed text-white/90">
             The studios, cafés and recovery spots I actually go to, all in one list. Free, always.
@@ -120,7 +120,7 @@ function PlaceCard({ place }: { place: Place }) {
           <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">{meta}</p>
           {place.pinned && !place.fallback && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-wb-stone px-2.5 py-1 text-[14px] text-wb-plum">
-              <Pin className="h-3.5 w-3.5" strokeWidth={1.6} /> Ren's top pick
+              <Pin className="h-3.5 w-3.5" strokeWidth={1.6} /> Top pick
             </span>
           )}
         </div>
@@ -141,29 +141,29 @@ function PlaceCard({ place }: { place: Place }) {
 
 function Directory() {
   const places = usePlaces();
-  const [cat, setCat] = useState('All');
+  // No category selected = everything; tap a selected chip again to clear it.
+  const [cat, setCat] = useState<string | null>(null);
   const cats = useMemo(() => {
     const present = new Set((places || []).map((p) => p.category).filter(Boolean) as string[]);
-    return ['All', ...wellnessApi.GUIDE_CATEGORIES.filter((c) => present.has(c)), ...[...present].filter((c) => !wellnessApi.GUIDE_CATEGORIES.includes(c))];
+    return [...wellnessApi.GUIDE_CATEGORIES.filter((c) => present.has(c)), ...[...present].filter((c) => !wellnessApi.GUIDE_CATEGORIES.includes(c))];
   }, [places]);
-  const shown = (places || []).filter((p) => cat === 'All' || p.category === cat);
+  const shown = (places || []).filter((p) => !cat || p.category === cat);
 
   return (
     <section id="guide" className="scroll-mt-20">
       <Screen className="pt-16">
         <Eyebrow className="text-center">The directory</Eyebrow>
-        <h2 className="mt-2 text-center text-[32px] text-wb-plum">Approved by Ren</h2>
-        <p className="mt-3 text-center text-[15px] leading-relaxed text-wb-soft">Every place here is somewhere I go and love. No ads, no paid spots.</p>
+        <h2 className="mt-2 text-center text-[32px] text-wb-plum">Places I love</h2>
+        <p className="mt-3 text-center text-[15px] leading-relaxed text-wb-soft">The studios, cafés and spots I keep going back to, shared with you. No ads, no paid spots.</p>
 
-        {cats.length > 2 && (
-          <div className="wb-scroll-x -mx-5 mt-6 flex gap-2 overflow-x-auto px-5" role="tablist" aria-label="Filter the guide">
+        {cats.length > 1 && (
+          <div className="wb-scroll-x -mx-5 mt-6 flex gap-2 overflow-x-auto px-5" role="group" aria-label="Filter the guide">
             {cats.map((c) => (
               <button
                 key={c}
                 type="button"
-                role="tab"
-                aria-selected={cat === c}
-                onClick={() => setCat(c)}
+                aria-pressed={cat === c}
+                onClick={() => setCat(cat === c ? null : c)}
                 className={cx(
                   'h-10 shrink-0 rounded-full border px-4 text-[14px] uppercase tracking-[0.1em] transition-colors',
                   cat === c ? 'border-wb-plum bg-wb-plum text-white' : 'border-wb-sand bg-wb-shell text-wb-soft hover:border-wb-plum/50',

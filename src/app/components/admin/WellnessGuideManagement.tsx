@@ -127,7 +127,7 @@ export default function WellnessGuideManagement() {
             <BookHeart className="h-5 w-5" /> {editingId ? 'Edit place' : 'Add a place to the Directory'}
           </CardTitle>
           <CardDescription>
-            Places you personally recommend. They show on the homepage under "Approved by Ren", newest first, pinned on top.
+            Places you personally recommend. They show on the homepage under "Places I love", newest first, top picks first.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -147,7 +147,7 @@ export default function WellnessGuideManagement() {
             </div>
             <div className="flex items-end gap-3 pb-2">
               <Switch checked={!!form.pinned} onCheckedChange={(v) => setForm((f) => ({ ...f, pinned: v }))} />
-              <Label>Ren's top pick (pin to top)</Label>
+              <Label>Top pick (pin to top)</Label>
             </div>
             <div>
               <Label>Area</Label>
