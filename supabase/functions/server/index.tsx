@@ -7929,7 +7929,7 @@ const WELLNESS_KINDS: Record<string, { prefix: string; fields: string[] }> = {
   guides: {
     prefix: 'wellness:guide:',
     // Directory of places Ren recommends
-    fields: ['title', 'category', 'note', 'image', 'link', 'area', 'price', 'instagram', 'maps'],
+    fields: ['title', 'category', 'note', 'image', 'link', 'area', 'price', 'instagram', 'maps', 'city'],
   },
   // Stepsisters community activities: upcoming meetups + photo recaps
   moments: {
@@ -8218,6 +8218,80 @@ ${plan.length ? `<table style="width:100%;border-collapse:collapse;font-family:A
     return c.json({ success: false, error: 'We saved your details but could not send the email. Please try again shortly.' }, 500);
   }
 });
+
+// ── Wellness Bestie: free trial day. The visitor sees the plan on the site straight away;
+// we keep the lead (one free day per email) and notify the team. No email to the visitor.
+const FREEDAY_COLUMNS = [
+  'submitted_at', 'email', 'energy', 'goals', 'minutes', 'budget', 'area', 'plan', 'wb_source',
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'landing_page', 'referrer', 'page_url',
+];
+
+app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
+    const email = clip(body.email, 160).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
+
+    const key = `bestie:freeday:${email}`;
+    if (await kv.get(key)) return c.json({ success: false, used: true, error: 'This email has already had its free day.' }, 409);
+
+    const inputs = body.inputs || {};
+    const plan = (Array.isArray(body.plan) ? body.plan : []).slice(0, 6).map((r: any) => ({
+      time: clip(r.time, 12), label: clip(r.label, 20), title: clip(r.title, 120),
+    }));
+    const record: Record<string, string> = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      received_at: new Date().toISOString(),
+      submitted_at: clip(body.submitted_at, 40) || new Date().toISOString(),
+      email,
+      energy: clip(inputs.energy, 10),
+      goals: (Array.isArray(inputs.goals) ? inputs.goals : []).slice(0, 5).map((g: unknown) => clip(g, 12)).join(', '),
+      minutes: clip(inputs.minutes, 6),
+      budget: clip(inputs.budget, 8),
+      area: clip(inputs.area, 60),
+      plan: plan.map((r: any) => `${r.time} ${r.label}: ${r.title}`).join(' | '),
+      consent: 'yes',
+      wb_source: clip(body.wb_source, 30) || 'direct',
+    };
+    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) record[k] = clip(body[k], 100);
+    for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
+    await kv.set(key, record);
+
+    const sheetUrl = Deno.env.get('PILOT_SHEET_WEBHOOK_URL');
+    if (sheetUrl) {
+      fetch(sheetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheet: 'Free days', columns: FREEDAY_COLUMNS, row: FREEDAY_COLUMNS.map((k) => record[k] ?? ''), record }),
+      }).catch((e) => console.log('Free day sheet forward failed:', e?.message));
+    }
+    sendMail(SMTP.notify, `New free day: ${email} (${record.wb_source})`,
+      FREEDAY_COLUMNS.map((k) => `${k}: ${record[k] ?? ''}`).join('\n'),
+      `<table style="font-family:Arial,sans-serif;font-size:14px">${FREEDAY_COLUMNS.map((k) => `<tr><td style="color:#76636D;padding:3px 12px 3px 0">${k}</td><td>${esc(record[k])}</td></tr>`).join('')}</table>`,
+    ).catch((e) => console.log('Free day notify failed:', e?.message));
+
+    return c.json({ success: true, data: { id: record.id } });
+  } catch (error: any) {
+    console.log('Free day error:', error?.message);
+    return c.json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
+  }
+});
+
+// Admin: free trial leads, newest first
+app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('bestie:freeday:')) || []).filter(Boolean) as any[];
+    rows.sort((a, b) => String(b.received_at || '').localeCompare(String(a.received_at || '')));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load free trial leads' }, 500);
+  }
+});
+
 
 // Admin: list Plan my day sign-ups
 app.get('/make-server-a278ea32/plan/signups', async (c) => {
