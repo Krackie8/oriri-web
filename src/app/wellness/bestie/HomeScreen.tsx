@@ -1,7 +1,7 @@
 /** 1 · Homepage: Ren's four pillars (small, free), then Bestie the app. */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Award, Brain, ChevronDown, Globe, HeartHandshake, Instagram, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
+import { ArrowUpRight, Award, Brain, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { WellnessGuide } from '../../utils/wellnessApi';
 import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
@@ -78,15 +78,9 @@ function HandLink() {
   );
 }
 
-/** Entries from the admin Directory, grouped by city and pillar. */
+/** Entries from the admin Directory, grouped by pillar. */
 type Place = WellnessGuide & { builtIn?: boolean; internal?: string };
 type PillarName = 'Move' | 'Meal' | 'Mindset' | 'Meetup';
-type City = 'Dubai' | 'Kuala Lumpur';
-const CITIES: { key: City; label: string }[] = [
-  { key: 'Dubai', label: 'Dubai' },
-  { key: 'Kuala Lumpur', label: 'KL' },
-];
-
 const PILLAR_INFO: Record<PillarName, { key: PillarKey; title: string; covers: string }> = {
   Move: { key: 'move', title: 'Move', covers: 'Studios & classes I go to' },
   Meal: { key: 'meal', title: 'Meal', covers: 'Cafés & restaurants worth the trip' },
@@ -95,10 +89,27 @@ const PILLAR_INFO: Record<PillarName, { key: PillarKey; title: string; covers: s
 };
 const PILLAR_ORDER: PillarName[] = ['Move', 'Meal', 'Mindset', 'Meetup'];
 
-/** Always listed: Ren's own podcast (every city) and community (Dubai). */
-const BUILT_IN: Partial<Record<PillarName, (Place & { cities: City[] })[]>> = {
-  Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', internal: '/podcast', builtIn: true, cities: ['Dubai', 'Kuala Lumpur'] }],
-  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true, cities: ['Dubai'] }],
+/** Always listed: Ren's own podcast and community. */
+const BUILT_IN: Partial<Record<PillarName, Place[]>> = {
+  Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', internal: '/podcast', builtIn: true }],
+  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true }],
+};
+
+/** Sample places, shown only with ?demo=1 so Ren can preview the layout before adding real ones. */
+const DEMO: Place[] = [
+  { id: 'demo-1', title: 'Sample Reformer Studio', category: 'Move', area: 'Al Quoz', price: 'From AED 120', link: 'https://example.com', pinned: true },
+  { id: 'demo-2', title: 'Sample Run Club', category: 'Move', area: 'Kite Beach', price: 'Free', instagram: '@example' },
+  { id: 'demo-3', title: 'Sample Matcha Café', category: 'Meal', area: 'Jumeirah', price: 'AED 40–80', link: 'https://example.com' },
+  { id: 'demo-4', title: 'Sample Salad Bar', category: 'Meal', area: 'DIFC', price: 'AED 50–90' },
+  { id: 'demo-5', title: 'Sample Book: Atomic Habits', category: 'Mindset', area: 'Book', link: 'https://example.com' },
+  { id: 'demo-6', title: 'Sample Sunrise Yoga Meetup', category: 'Meetup', area: 'Organiser · monthly', instagram: '@example' },
+];
+const showDemo = () => {
+  try {
+    return new URLSearchParams(window.location.search).has('demo');
+  } catch {
+    return false;
+  }
 };
 
 function usePlaces(): Place[] | null {
@@ -107,7 +118,8 @@ function usePlaces(): Place[] | null {
     let live = true;
     wellnessApi.getGuides().then((res) => {
       if (!live) return;
-      setPlaces(res.ok && res.data ? wellnessApi.sortGuides(res.data).filter((g) => !g.hidden) : []);
+      const real = res.ok && res.data ? wellnessApi.sortGuides(res.data).filter((g) => !g.hidden) : [];
+      setPlaces(showDemo() ? [...DEMO, ...real] : real);
     });
     return () => {
       live = false;
@@ -116,115 +128,78 @@ function usePlaces(): Place[] | null {
   return places;
 }
 
-const cityOf = (p: Place): City => (p.city === 'Kuala Lumpur' ? 'Kuala Lumpur' : 'Dubai');
 const withHttp = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 const igUrl = (v: string) => (/instagram\.com/i.test(v) ? withHttp(v) : `https://www.instagram.com/${v.replace(/^@/, '')}/`);
 const mapUrl = (place: Place) =>
-  place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} ${cityOf(place)}`)}`;
+  place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} Dubai`)}`;
 const BOX: Record<PillarKey, 'move' | 'meal' | 'mindset' | 'meetups'> = { move: 'move', meal: 'meal', mindset: 'mindset', meetup: 'meetups' };
 
-function PlaceAction({ href, label, icon: Icon, place, pillar }: { href: string; label: string; icon: typeof Globe; place: Place; pillar: PillarKey }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => {
-        countPlaceClick(place.title);
-        cardClick(BOX[pillar], place.title);
-      }}
-      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-wb-sand bg-wb-shell px-3.5 text-[14px] text-wb-soft transition-colors hover:border-wb-plum hover:text-wb-ink"
-    >
-      <Icon className="h-4 w-4" strokeWidth={1.5} /> {label}
-    </a>
-  );
-}
+/** Where a name goes when tapped: website first, then Instagram, then the map. */
+const placeHref = (place: Place, pillar: PillarKey) =>
+  place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : pillar === 'move' || pillar === 'meal' || place.maps ? mapUrl(place) : '';
 
-/** One name in a pillar list; tap to open the details. */
-function PlaceRow({ place, pillar, open, onToggle }: { place: Place; pillar: PillarKey; open: boolean; onToggle: () => void }) {
+/** One name in a pillar list; tap goes straight to the place's website (or Instagram / map). */
+function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
   const meta = [place.area, place.price].filter(Boolean).join(' · ');
-  const panelId = `place-${place.id}`;
+  const inner = (
+    <>
+      {place.pinned && <Pin aria-label="Top pick" className="h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.8} />}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[16px] font-medium text-wb-ink">{place.title}</span>
+        {meta && <span className="block truncate text-[14px] text-wb-taupe">{meta}</span>}
+      </span>
+      <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+    </>
+  );
+  const cls = 'flex w-full items-center gap-3 py-3 text-left';
+  if (place.internal) {
+    return (
+      <li>
+        <Link to={withUtm(place.internal)} onClick={() => cardClick(BOX[pillar], place.title)} className={cls}>
+          {inner}
+        </Link>
+      </li>
+    );
+  }
+  const href = placeHref(place, pillar);
+  if (!href) return <li className={cls}>{inner}</li>;
   return (
     <li>
-      <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className="flex w-full items-center gap-3 py-3 text-left">
-        {place.pinned && <Pin aria-label="Top pick" className="h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.8} />}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[16px] font-medium text-wb-ink">{place.title}</span>
-          {meta && <span className="block truncate text-[14px] text-wb-taupe">{meta}</span>}
-        </span>
-        <ChevronDown className={cx('h-5 w-5 shrink-0 text-wb-taupe transition-transform duration-300', open && 'rotate-180')} strokeWidth={1.5} />
-      </button>
-      {open && (
-        <div id={panelId} className="wb-rise pb-4">
-          {place.note && <p className="text-[15px] leading-relaxed text-wb-soft">{place.note}</p>}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {place.internal ? (
-              <Link
-                to={withUtm(place.internal)}
-                onClick={() => cardClick(BOX[pillar], place.title)}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-wb-plum px-4 text-[14px] font-medium uppercase tracking-[0.1em] text-white hover:bg-[#6B5C51]"
-              >
-                {pillar === 'mindset' ? 'Listen' : 'Join'} <ArrowUpRight className="h-4 w-4" strokeWidth={1.6} />
-              </Link>
-            ) : (
-              <>
-                {place.instagram && <PlaceAction href={igUrl(place.instagram)} label="Instagram" icon={Instagram} place={place} pillar={pillar} />}
-                {place.link && <PlaceAction href={withHttp(place.link)} label="Website" icon={Globe} place={place} pillar={pillar} />}
-                {(pillar === 'move' || pillar === 'meal' || place.maps) && <PlaceAction href={mapUrl(place)} label="Map" icon={MapPin} place={place} pillar={pillar} />}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => {
+          countPlaceClick(place.title);
+          cardClick(BOX[pillar], place.title);
+        }}
+        className={cls}
+      >
+        {inner}
+      </a>
     </li>
   );
 }
 
 /**
- * Compact directory: city tabs, four pillar icons on one seamless band, and the
+ * Compact directory: four pillar icons on one seamless band, and the
  * names for the chosen pillar. Free, and short, so Bestie is a quick scroll away.
  */
 function Directory() {
   const places = usePlaces();
-  const [city, setCity] = useState<City>('Dubai');
   const [pillar, setPillar] = useState<PillarName>('Move');
-  const [openId, setOpenId] = useState<string | null>(null);
   const info = PILLAR_INFO[pillar];
-  const cityName = city === 'Kuala Lumpur' ? 'KL' : 'Dubai';
 
   const list: Place[] = [
-    ...(places || []).filter((p) => cityOf(p) === city && (p.category === pillar || (pillar === 'Meetup' && p.category === 'Meet up'))),
-    ...(BUILT_IN[pillar] || []).filter((p) => p.cities.includes(city)),
+    ...(places || []).filter((p) => (p.category === pillar || (pillar === 'Meetup' && p.category === 'Meet up'))),
+    ...(BUILT_IN[pillar] || []),
   ];
-  const pick = (n: PillarName) => {
-    setPillar(n);
-    setOpenId(null);
-  };
+  const pick = (n: PillarName) => setPillar(n);
 
   return (
     <section id="guide" className="scroll-mt-20 bg-wb-stone py-10">
       <Screen>
-        <div role="tablist" aria-label="City" className="mx-auto flex w-fit rounded-full bg-wb-shell p-1">
-          {CITIES.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              role="tab"
-              aria-selected={city === c.key}
-              onClick={() => {
-                setCity(c.key);
-                setOpenId(null);
-              }}
-              className={cx(
-                'h-10 min-w-[96px] rounded-full px-5 text-[14px] font-medium uppercase tracking-[0.1em] transition-colors',
-                city === c.key ? 'bg-wb-plum text-white' : 'text-wb-taupe hover:text-wb-ink',
-              )}
-            >
-              {c.key === 'Dubai' ? 'Dubai' : 'Kuala Lumpur'}
-            </button>
-          ))}
-        </div>
-        <p className="mt-5 text-center text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">My favourites · free to explore</p>
+        <p className="text-center text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">My favourites · free to explore</p>
 
         <div role="tablist" aria-label="Pillar" className="mt-4 grid grid-cols-4 gap-2">
           {PILLAR_ORDER.map((n) => {
@@ -247,7 +222,7 @@ function Directory() {
 
         <div className="mt-6 rounded-[14px] bg-wb-shell px-5 pt-4" role="tabpanel">
           <p className="text-[14px] text-wb-taupe">
-            {info.covers} · {cityName}
+            {info.covers}
           </p>
           {places === null ? (
             <div className="space-y-2 py-3" aria-hidden>
@@ -258,13 +233,13 @@ function Directory() {
           ) : list.length ? (
             <ul className="divide-y divide-wb-sand/70">
               {list.map((p) => (
-                <PlaceRow key={p.id} place={p} pillar={info.key} open={openId === p.id} onToggle={() => setOpenId(openId === p.id ? null : p.id)} />
+                <PlaceRow key={p.id} place={p} pillar={info.key} />
               ))}
             </ul>
           ) : (
-            <p className="py-4 text-[15px] text-wb-soft">My {cityName} favourites are coming soon.</p>
+            <p className="py-4 text-[15px] text-wb-soft">My favourites are coming soon.</p>
           )}
-          {pillar === 'Meetup' && city === 'Dubai' ? <MeetupEvents /> : <div className="pb-2" />}
+          {pillar === 'Meetup' ? <MeetupEvents /> : <div className="pb-2" />}
         </div>
       </Screen>
     </section>
@@ -290,7 +265,7 @@ function MeetupEvents() {
 function BestieIntro() {
   return (
     <Screen className="pt-16 text-center">
-      <Eyebrow>The app</Eyebrow>
+      <Eyebrow>Experience full features</Eyebrow>
       <h2 className="mt-2 text-[32px] text-wb-plum">Meet Bestie</h2>
       <p className="mt-3 text-[16px] leading-relaxed text-wb-soft">
         A smart wellness planner you log into. Tell it your energy, time and budget, and it curates your day: where to move, what to eat, what to listen to and who to meet.
@@ -347,7 +322,7 @@ const FEATURES: { icon: typeof Sun; title: string; text: string; tag?: string }[
 function AppFeatures() {
   return (
     <Screen className="pt-14">
-      <Eyebrow className="text-center">Inside the app</Eyebrow>
+      <Eyebrow className="text-center">Full features</Eyebrow>
       <h2 className="mt-2 text-center text-[28px] leading-[1.1] text-wb-ink">Everything you need to show up for you</h2>
       <ul className="mt-6 divide-y divide-wb-sand/70 rounded-[14px] border border-wb-sand/60 bg-wb-shell px-5">
         {FEATURES.map(({ icon: Icon, title, text, tag }) => (

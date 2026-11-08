@@ -129,7 +129,7 @@ export default function WellnessGuideManagement() {
             <BookHeart className="h-5 w-5" /> {editingId ? 'Edit place' : 'Add a place to the Directory'}
           </CardTitle>
           <CardDescription>
-            Places you personally recommend. They show on the homepage under their city tab (Dubai or Kuala Lumpur) and pillar (Move, Meal, Mindset, Meet up) as a list of names; visitors tap a name to see the details. Tea for Two and Stepsisters are always listed.
+            Places you personally recommend. They show on the homepage under their pillar (Move, Meal, Mindset, Meet up) as a list of names. Tapping a name opens its website, or Instagram if there's no website, or the map. Preview the layout with sample places at new.oriri.me/?demo=1. Tea for Two and Stepsisters are always listed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -144,15 +144,6 @@ export default function WellnessGuideManagement() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {wellnessApi.GUIDE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c} · {wellnessApi.GUIDE_AREAS[c]?.blurb}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>City</Label>
-              <Select value={form.city || 'Dubai'} onValueChange={set('city')}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {wellnessApi.GUIDE_CITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -225,7 +216,7 @@ export default function WellnessGuideManagement() {
                 {guide.pinned && <Pin className="h-4 w-4 shrink-0 text-primary" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{guide.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{[guide.city || 'Dubai', guide.area, guide.price].filter(Boolean).join(' · ')}</p>
+                  <p className="truncate text-xs text-muted-foreground">{[guide.area, guide.price].filter(Boolean).join(' · ')}</p>
                 </div>
                 {guide.hidden && <Badge variant="outline">Hidden</Badge>}
                 {guide.category && <Badge variant="secondary">{guide.category}</Badge>}
