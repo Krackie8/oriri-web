@@ -38,6 +38,8 @@ export interface WellnessGuide {
   image?: string;
   link?: string;
   /** Directory fields */
+  /** 'Dubai' (default when empty) or 'Kuala Lumpur' */
+  city?: string;
   area?: string;
   price?: string;
   instagram?: string;
@@ -64,6 +66,7 @@ export interface StepsistersMoment {
 
 export const EVENT_CATEGORIES = ['Movement', 'Mind', 'Food', 'Beauty', 'Workshop', 'Pop-up', 'Community'];
 export const GUIDE_CATEGORIES = ['Move', 'Meal', 'Mindset', 'Meetup'];
+export const GUIDE_CITIES = ['Dubai', 'Kuala Lumpur'];
 export const GUIDE_AREAS: Record<string, { blurb: string; placeholder: string }> = {
   Move: { blurb: 'Studios & classes', placeholder: 'e.g. Paus' },
   Meal: { blurb: 'Cafés & restaurants', placeholder: 'e.g. Café Y' },
@@ -191,6 +194,10 @@ export const submitPlanSignup = (data: PlanSignup & { consent: boolean }) =>
   request<{ saved?: boolean; duplicate?: boolean }>('/plan/signup', undefined, { method: 'POST', body: JSON.stringify(data) });
 
 export const getPlanSignups = (token?: string) => request<PlanSignup[]>('/plan/signups', token);
+
+/** Free trial leads from /plan/day (email asked before the plan shows). */
+export type FreeDayLead = Record<string, string>;
+export const getFreeDayLeads = (token?: string) => request<FreeDayLead[]>('/bestie/free-days', token);
 
 // Wellness Bestie founding pilot applications (admin)
 export type PilotApplication = Record<string, string>;

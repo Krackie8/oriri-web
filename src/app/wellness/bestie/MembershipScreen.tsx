@@ -1,6 +1,6 @@
 /** 5 · Membership preview: greeting, week strip, "Bestie noticed", Meetup swipe, waitlist CTA. */
 import React, { useMemo, useRef, useState } from 'react';
-import { Check, Heart, Instagram, MapPin, Sparkles, X } from 'lucide-react';
+import { Check, Heart, HeartHandshake, MapPin, Sparkles, X } from 'lucide-react';
 import { Card, Chip, Eyebrow, GoldRule, Photo, PillButton, PillLink, PillarIcon, Screen, cx } from './kit';
 import type { PillarKey } from './picks';
 import { ctaClick, track } from '../analytics/track';
@@ -183,7 +183,7 @@ function BestieSwipe() {
     if (!p) return;
     track('bestie_swipe', { action: hi ? 'say_hi' : 'pass' });
     if (hi) setSaid((s) => [...s, p.name]);
-    // Both said hi: connect on Instagram first, before meeting in real life
+    // Both said hi: it's a match
     if (hi && p.likesYou) {
       setMatch(p);
       track('bestie_match');
@@ -199,7 +199,7 @@ function BestieSwipe() {
     <section className="mt-8" aria-labelledby="swipe-title">
       <Eyebrow>Meetup</Eyebrow>
       <h2 id="swipe-title" className="mt-2 text-[28px]">Swipe for a bestie</h2>
-      <p className="mt-1 text-[15px] text-wb-soft">Women near you with the same rituals. When you both say hi, you connect on Instagram first, then meet when it feels right.</p>
+      <p className="mt-1 text-[15px] text-wb-soft">Women near you with similar plans, like the same class or café this week. Everyone can see profiles; swiping is for members.</p>
 
       {match && (
         <Card as="section" className="mt-5 border-wb-gold/60 bg-wb-gold-soft/60 p-5" aria-live="polite">
@@ -207,14 +207,14 @@ function BestieSwipe() {
             <Sparkles className="h-4 w-4 text-wb-gold" strokeWidth={1.5} /> It's mutual
           </p>
           <p className="mt-2 font-wb-serif text-[22px] leading-snug text-wb-ink">You and {match.name} both said hi.</p>
-          <p className="mt-1 text-[15px] leading-relaxed text-wb-soft">Say hello on Instagram and get to know each other before you meet.</p>
+          <p className="mt-1 text-[15px] leading-relaxed text-wb-soft">Say hello and plan your first class or coffee together.</p>
           <span
             aria-disabled
             className="mt-4 flex h-12 w-full cursor-default items-center justify-center gap-2 rounded-full bg-wb-plum text-[15px] font-medium text-wb-paper/90"
           >
-            <Instagram className="h-4 w-4" strokeWidth={1.7} /> Say hi on Instagram
+            <HeartHandshake className="h-4 w-4" strokeWidth={1.7} /> Say hello
           </span>
-          <p className="mt-2 text-center text-[14px] text-wb-taupe">Preview: for members this opens her verified Instagram. Handles stay hidden until you both say hi.</p>
+          <p className="mt-2 text-center text-[14px] text-wb-taupe">Preview: messaging opens for members.</p>
           <button type="button" onClick={() => setMatch(null)} className="mt-2 flex h-11 w-full items-center justify-center text-[15px] text-wb-plum underline underline-offset-4">
             Keep swiping
           </button>
@@ -284,7 +284,7 @@ function BestieSwipe() {
         <Card className="mt-5 p-6 text-center">
           <p className="font-wb-serif text-[22px] text-wb-ink">That's everyone nearby today</p>
           <p className="mt-2 text-[15px] text-wb-soft">
-            {said.length ? `You said hi to ${said.join(' and ')}. When they say hi back, you'll connect on Instagram.` : 'New faces arrive every day for members.'}
+            {said.length ? `You said hi to ${said.join(' and ')}. We'll let you know when they say hi back.` : 'New faces arrive every day for members.'}
           </p>
           <PillButton
             tone="outline"

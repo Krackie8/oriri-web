@@ -15,8 +15,8 @@ import { useAuthHandlers } from '../../hooks/useAuthHandlers';
 import { ctaClick } from '../analytics/track';
 
 const FEATURES = [
-  { icon: CalendarHeart, title: 'Your weekly planner', text: 'Bestie plans every day around your energy, time and budget, and learns what works for you.' },
-  { icon: HeartHandshake, title: 'Swipe for a bestie', text: 'Meet women with the same rituals. When you both say hi, you connect on Instagram.' },
+  { icon: CalendarHeart, title: 'Your weekly planner', text: 'Bestie plans every day around your energy, time and budget, remembers your patterns and learns what works for you.' },
+  { icon: HeartHandshake, title: 'Swipe for a bestie', text: 'Everyone can see the profiles here. Swiping and saying hi to a bestie, like someone nearby with the same class or café in her plan, is for members.' },
 ];
 
 function displayName(user: any): string {

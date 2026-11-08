@@ -1,4 +1,4 @@
-/** 4 · Curated day: checklist, locked 4th item, email gate (one free day per email). */
+/** 4 · Free trial day: email first (one free day per email), then the whole day shows here. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Sparkles } from 'lucide-react';
@@ -30,9 +30,6 @@ export default function DayScreen() {
   if (!inputs || !plan) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
   const unlocked = !!unlockedFor;
-  // The last pick stays locked until they share an email
-  const visible = plan.items.slice(0, -1);
-  const locked = plan.items[plan.items.length - 1];
   const doneCount = Object.values(done).filter(Boolean).length;
   const toggle = (id: string) => {
     const on = !done[id];
@@ -42,23 +39,54 @@ export default function DayScreen() {
   };
 
   const chips = [inputs.energy + ' energy', ...inputs.goals, money(inputs.budget), inputs.area && inputs.area !== 'Somewhere else' ? inputs.area : null].filter(Boolean) as string[];
+  const chipRow = (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {chips.map((c) => (
+        <span key={c} className="rounded-full border border-wb-sand bg-wb-shell px-3.5 py-1.5 text-[14px] text-wb-soft">
+          {c}
+        </span>
+      ))}
+      <Link to={withUtm('/plan/inputs')} className="rounded-full px-2 py-1.5 text-[14px] text-wb-plum underline underline-offset-4">
+        Edit
+      </Link>
+    </div>
+  );
+
+  // Free trial: email first, then the whole day shows here straight away.
+  if (!unlocked) {
+    return (
+      <Screen className="pb-20">
+        <StepHeader back="/plan/inputs" step={2} total={2} title="Your day is ready." sub={`${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`} />
+        {chipRow}
+        {gate === 'used' ? (
+          <MembershipPrompt />
+        ) : (
+          <EmailGate
+            plan={plan.items}
+            onUnlocked={(email) => {
+              setUnlocked(email);
+              setUnlockedFor(email);
+              window.scrollTo({ top: 0 });
+            }}
+            onUsed={() => {
+              setGate('used');
+              track('membership_prompt_view', { reason: 'second_free_day' });
+            }}
+          />
+        )}
+        <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
+      </Screen>
+    );
+  }
 
   return (
     <Screen className="pb-20">
       <StepHeader back="/plan/inputs" step={2} total={2} title="Your day, curated." sub="Do these in any order, whenever suits you." />
+      {chipRow}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {chips.map((c) => (
-          <span key={c} className="rounded-full border border-wb-sand bg-wb-shell px-3.5 py-1.5 text-[14px] text-wb-soft">
-            {c}
-          </span>
-        ))}
-        <Link to={withUtm('/plan/inputs')} className="rounded-full px-2 py-1.5 text-[14px] text-wb-plum underline underline-offset-4">
-          Edit
-        </Link>
-      </div>
+      <Affirmation energy={inputs.energy} />
 
-      <div className="mt-6 grid grid-cols-3 divide-x divide-wb-sand rounded-[16px] border border-wb-sand bg-wb-shell py-3 text-center">
+      <div className="mt-4 grid grid-cols-3 divide-x divide-wb-sand rounded-[16px] border border-wb-sand bg-wb-shell py-3 text-center">
         <div>
           <p className="font-wb-serif text-[20px] text-wb-ink">{describeTime(plan.minutes)}</p>
           <p className="text-[14px] text-wb-taupe">in total</p>
@@ -76,36 +104,37 @@ export default function DayScreen() {
       </div>
 
       <ul className="mt-4 space-y-3">
-        {visible.map((item) => (
+        {plan.items.map((item) => (
           <PlanRow key={item.id} item={item} done={!!done[item.id]} onToggle={() => toggle(item.id)} />
         ))}
-        {unlocked ? <PlanRow item={locked} done={!!done[locked.id]} onToggle={() => toggle(locked.id)} /> : <LockedRow item={locked} />}
       </ul>
 
       <Tracker items={plan.items} done={done} />
 
       {event && <TodayEvent event={event} />}
 
-      {unlocked ? (
-        <Sent email={unlockedFor!} />
-      ) : gate === 'used' ? (
-        <MembershipPrompt />
-      ) : (
-        <EmailGate
-          plan={plan.items}
-          onUnlocked={(email) => {
-            setUnlocked(email);
-            setUnlockedFor(email);
-          }}
-          onUsed={() => {
-            setGate('used');
-            track('membership_prompt_view', { reason: 'second_free_day' });
-          }}
-        />
-      )}
+      <MembershipPrompt title="Want this every day?" />
 
       <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
     </Screen>
+  );
+}
+
+const AFFIRMATIONS: Record<string, string> = {
+  Low: 'Rest is part of the plan. Gentle still counts.',
+  Steady: 'Small steps, done often, are how you change.',
+  High: 'You have the energy today. Spend it on you.',
+};
+
+/** The daily affirmation that greets you after checking in. */
+function Affirmation({ energy }: { energy: string }) {
+  return (
+    <div className="wb-rise mt-5 rounded-[14px] bg-wb-plum px-5 py-4 text-white">
+      <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-white/75">Today's affirmation</p>
+      <p className="mt-1 text-[26px] leading-tight" style={{ fontFamily: 'var(--font-wb-hand)' }}>
+        {AFFIRMATIONS[energy] || AFFIRMATIONS.Steady}
+      </p>
+    </div>
   );
 }
 
@@ -294,28 +323,6 @@ function PlanRow({ item, done, onToggle }: { item: PlanItem; done: boolean; onTo
   );
 }
 
-function LockedRow({ item }: { item: PlanItem }) {
-  return (
-    <Card as="li" className="relative overflow-hidden p-4">
-      <div className="flex gap-3.5 opacity-40 blur-[1.5px]" aria-hidden>
-        <span className="mt-0.5 h-7 w-7 shrink-0 rounded-full border border-wb-plum/30" />
-        <div className="min-w-0 flex-1">
-          <span className="text-[14px] font-medium uppercase tracking-[0.14em] text-wb-taupe">{item.label}</span>
-          <p className="mt-1.5 font-wb-serif text-[20px] text-wb-ink">{item.title}</p>
-          <p className="mt-1.5 text-[14px] text-wb-soft">
-            {item.minutes} min · {item.venue}
-          </p>
-        </div>
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="inline-flex items-center gap-2 rounded-full bg-wb-shell px-4 py-2 text-[14px] text-wb-plum shadow-[0_8px_24px_-12px_rgba(125,109,97,0.35)]">
-          <Lock className="h-4 w-4" strokeWidth={1.6} /> One more pick unlocks with email
-        </span>
-      </div>
-    </Card>
-  );
-}
-
 function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: () => void }) {
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
@@ -328,7 +335,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     e.preventDefault();
     const em = normEmail(email);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) return setError('Please check your email address.');
-    if (!consent) return setError('Please tick the box so we can email your day.');
+    if (!consent) return setError('Please tick the box to see your day.');
     setError('');
     if (usedEmails().includes(em)) return onUsed();
 
@@ -353,8 +360,8 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
   return (
     <Card as="section" className="mt-6 p-6">
       <Sparkles className="h-5 w-5 text-wb-gold" strokeWidth={1.4} />
-      <h2 className="mt-3 text-[26px]">Unlock your full day</h2>
-      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Reveal your last pick and get the full list, with every link, in your inbox. One free day per email.</p>
+      <h2 className="mt-3 text-[26px]">See your day</h2>
+      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Pop in your email and your curated day opens right here, with every link. One free day per email.</p>
       <form onSubmit={submit} noValidate className="mt-5">
         <input type="hidden" name="utm_source" value={utm.utm_source || ''} />
         <input type="hidden" name="utm_medium" value={utm.utm_medium || ''} />
@@ -386,7 +393,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
             {consent && <Check className="h-4 w-4" strokeWidth={2.2} />}
           </span>
           <span className="text-[14px] leading-relaxed text-wb-soft">
-            Email me my day and occasional Wellness Bestie news. Unsubscribe any time.{' '}
+            Keep me posted with Wellness Bestie news. Unsubscribe any time.{' '}
             <Link to={withUtm('/privacy')} className="underline underline-offset-4">
               Privacy
             </Link>
@@ -398,26 +405,10 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
           </p>
         )}
         <PillButton type="submit" className="mt-5 w-full" disabled={sending} arrow={!sending}>
-          {sending ? 'Sending…' : 'Send my day'}
+          {sending ? 'Opening…' : 'Show my day'}
         </PillButton>
       </form>
     </Card>
-  );
-}
-
-function Sent({ email }: { email: string }) {
-  return (
-    <>
-      <Card as="section" className="mt-6 flex items-start gap-3 p-5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wb-plum text-wb-paper">
-          <Check className="h-4 w-4" strokeWidth={2.2} />
-        </span>
-        <p className="text-[15px] leading-relaxed text-wb-soft">
-          Your day is on its way to <span className="font-medium text-wb-ink">{email}</span>. Enjoy it.
-        </p>
-      </Card>
-      <MembershipPrompt title="Want this every day?" />
-    </>
   );
 }
 

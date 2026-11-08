@@ -7935,7 +7935,7 @@ const WELLNESS_KINDS: Record<string, { prefix: string; fields: string[] }> = {
   guides: {
     prefix: 'wellness:guide:',
     // Directory of places Ren recommends
-    fields: ['title', 'category', 'note', 'image', 'link', 'area', 'price', 'instagram', 'maps'],
+    fields: ['title', 'category', 'note', 'image', 'link', 'area', 'price', 'instagram', 'maps', 'city'],
   },
   // Stepsisters community activities: upcoming meetups + photo recaps
   moments: {
@@ -8225,6 +8225,80 @@ ${plan.length ? `<table style="width:100%;border-collapse:collapse;font-family:A
   }
 });
 
+// ── Wellness Bestie: free trial day. The visitor sees the plan on the site straight away;
+// we keep the lead (one free day per email) and notify the team. No email to the visitor.
+const FREEDAY_COLUMNS = [
+  'submitted_at', 'email', 'energy', 'goals', 'minutes', 'budget', 'area', 'plan', 'wb_source',
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'landing_page', 'referrer', 'page_url',
+];
+
+app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
+    const email = clip(body.email, 160).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
+
+    const key = `bestie:freeday:${email}`;
+    if (await kv.get(key)) return c.json({ success: false, used: true, error: 'This email has already had its free day.' }, 409);
+
+    const inputs = body.inputs || {};
+    const plan = (Array.isArray(body.plan) ? body.plan : []).slice(0, 6).map((r: any) => ({
+      time: clip(r.time, 12), label: clip(r.label, 20), title: clip(r.title, 120),
+    }));
+    const record: Record<string, string> = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      received_at: new Date().toISOString(),
+      submitted_at: clip(body.submitted_at, 40) || new Date().toISOString(),
+      email,
+      energy: clip(inputs.energy, 10),
+      goals: (Array.isArray(inputs.goals) ? inputs.goals : []).slice(0, 5).map((g: unknown) => clip(g, 12)).join(', '),
+      minutes: clip(inputs.minutes, 6),
+      budget: clip(inputs.budget, 8),
+      area: clip(inputs.area, 60),
+      plan: plan.map((r: any) => `${r.time} ${r.label}: ${r.title}`).join(' | '),
+      consent: 'yes',
+      wb_source: clip(body.wb_source, 30) || 'direct',
+    };
+    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) record[k] = clip(body[k], 100);
+    for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
+    await kv.set(key, record);
+
+    const sheetUrl = Deno.env.get('PILOT_SHEET_WEBHOOK_URL');
+    if (sheetUrl) {
+      fetch(sheetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheet: 'Free days', columns: FREEDAY_COLUMNS, row: FREEDAY_COLUMNS.map((k) => record[k] ?? ''), record }),
+      }).catch((e) => console.log('Free day sheet forward failed:', e?.message));
+    }
+    sendMail(SMTP.notify, `New free day: ${email} (${record.wb_source})`,
+      FREEDAY_COLUMNS.map((k) => `${k}: ${record[k] ?? ''}`).join('\n'),
+      `<table style="font-family:Arial,sans-serif;font-size:14px">${FREEDAY_COLUMNS.map((k) => `<tr><td style="color:#76636D;padding:3px 12px 3px 0">${k}</td><td>${esc(record[k])}</td></tr>`).join('')}</table>`,
+    ).catch((e) => console.log('Free day notify failed:', e?.message));
+
+    return c.json({ success: true, data: { id: record.id } });
+  } catch (error: any) {
+    console.log('Free day error:', error?.message);
+    return c.json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
+  }
+});
+
+// Admin: free trial leads, newest first
+app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('bestie:freeday:')) || []).filter(Boolean) as any[];
+    rows.sort((a, b) => String(b.received_at || '').localeCompare(String(a.received_at || '')));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load free trial leads' }, 500);
+  }
+});
+
+
 // Admin: list Plan my day sign-ups
 app.get('/make-server-a278ea32/plan/signups', async (c) => {
   try {
@@ -8340,82 +8414,6 @@ const PILOT_COLUMNS = [
   'wb_source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
   'landing_page', 'referrer', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign', 'page_url',
 ];
-
-// ── Wellness Bestie: free 1-day plan, one per email ──
-const FREEDAY_COLUMNS = [
-  'submitted_at', 'email', 'energy', 'goals', 'minutes', 'budget', 'area', 'plan', 'wb_source',
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'landing_page', 'referrer', 'page_url',
-];
-
-app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
-    const email = clip(body.email, 160).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
-    if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
-
-    const key = `bestie:freeday:${email}`;
-    if (await kv.get(key)) return c.json({ success: false, used: true, error: 'This email has already had its free day.' }, 409);
-
-    const inputs = body.inputs || {};
-    const plan = (Array.isArray(body.plan) ? body.plan : []).slice(0, 6).map((r: any) => ({
-      time: clip(r.time, 12), label: clip(r.label, 20), title: clip(r.title, 120), venue: clip(r.venue, 120), cost: clip(r.cost, 20),
-      url: (() => { const u = clip(r.url, 500); return u.startsWith('/') ? `https://oriri.me${u}` : /^https:\/\//.test(u) ? u : ''; })(),
-    }));
-    const record: Record<string, string> = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      received_at: new Date().toISOString(),
-      submitted_at: clip(body.submitted_at, 40) || new Date().toISOString(),
-      email,
-      energy: clip(inputs.energy, 10),
-      goals: (Array.isArray(inputs.goals) ? inputs.goals : []).slice(0, 5).map((g: unknown) => clip(g, 12)).join(', '),
-      minutes: clip(inputs.minutes, 6),
-      budget: clip(inputs.budget, 8),
-      area: clip(inputs.area, 60),
-      plan: plan.map((r: any) => `${r.time} ${r.label}: ${r.title}`).join(' | '),
-      consent: 'yes',
-      wb_source: clip(body.wb_source, 30) || 'direct',
-    };
-    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) record[k] = clip(body[k], 100);
-    for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
-    await kv.set(key, record);
-
-    const sheetUrl = Deno.env.get('PILOT_SHEET_WEBHOOK_URL');
-    if (sheetUrl) {
-      fetch(sheetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheet: 'Free days', columns: FREEDAY_COLUMNS, row: FREEDAY_COLUMNS.map((k) => record[k] ?? ''), record }),
-      }).catch((e) => console.log('Free day sheet forward failed:', e?.message));
-    }
-
-    // The visitor's plan, in the Wellness Bestie style
-    const rowsText = plan.map((r: any) => `[ ] ${r.label}: ${r.title} · ${r.time} · ${r.cost}\n    ${r.venue}${r.url ? `\n    ${r.url}` : ''}`).join('\n\n');
-    const rowsHtml = plan.map((r: any) =>
-      `<tr><td style="padding:10px 14px 10px 0;color:#76636D;font-size:14px;white-space:nowrap;vertical-align:top">${esc(r.time)}</td><td style="padding:10px 0;border-bottom:1px solid #EFE8E0"><div style="font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:#76636D">${esc(r.label)}</div><div style="font-family:Georgia,serif;font-size:18px;color:#4A2C3D">${esc(r.title)}</div><div style="font-size:14px;color:#5A4752">${esc(r.venue)} · ${esc(r.cost)}</div>${r.url ? `<a href="${esc(r.url)}" style="display:inline-block;margin-top:6px;font-size:14px;color:#4A2C3D">Open link &rarr;</a>` : ''}</td></tr>`).join('');
-    const text = `Your day, planned. Do these in any order.\n\n${rowsText}\n\nWant this every day? Join the Wellness Bestie waitlist: https://oriri.me/pilot\n\nPlans are suggestions based on your answers, not medical advice.\nWellness Bestie by ORIRI · https://oriri.me`;
-    const html = `<div style="background:#F7F3EE;padding:32px 16px;font-family:Arial,sans-serif"><div style="max-width:520px;margin:0 auto;background:#FFFDFA;border-radius:20px;padding:32px;border:1px solid #E4DAD0">
-<p style="font-family:Georgia,serif;font-size:20px;color:#4A2C3D;margin:0">Wellness Bestie <span style="font-family:Arial,sans-serif;font-size:14px;color:#76636D">by ORIRI</span></p>
-<div style="height:1px;background:#C9A46A;width:40px;margin:18px 0"></div>
-<h1 style="font-family:Georgia,serif;font-weight:400;font-size:30px;color:#2A1B24;margin:0 0 18px">Your day, planned.</h1>
-<table style="width:100%;border-collapse:collapse">${rowsHtml}</table>
-<p style="margin:28px 0 0"><a href="https://oriri.me/pilot" style="display:inline-block;background:#4A2C3D;color:#F7F3EE;text-decoration:none;padding:14px 26px;border-radius:999px;font-size:15px">Join the waitlist</a></p>
-<p style="font-size:14px;color:#76636D;margin-top:24px">Plans are suggestions based on your answers, not medical advice.</p>
-</div></div>`;
-
-    sendMail(email, 'Your day, planned · Wellness Bestie', text, html).catch((e) => console.log('Free day email failed:', e?.message));
-    sendMail(SMTP.notify, `New free day: ${email} (${record.wb_source})`,
-      FREEDAY_COLUMNS.map((k) => `${k}: ${record[k] ?? ''}`).join('\n'),
-      `<table style="font-family:Arial,sans-serif;font-size:14px">${FREEDAY_COLUMNS.map((k) => `<tr><td style="color:#76636D;padding:3px 12px 3px 0">${k}</td><td>${esc(record[k])}</td></tr>`).join('')}</table>`,
-    ).catch((e) => console.log('Free day notify failed:', e?.message));
-
-    return c.json({ success: true, data: { id: record.id } });
-  } catch (error: any) {
-    console.log('Free day error:', error?.message);
-    return c.json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
-  }
-});
 
 // ── Level 1 · Curate: email-only lead from the "Get details" button on /bestie ──
 const CURATE_COLUMNS = [
