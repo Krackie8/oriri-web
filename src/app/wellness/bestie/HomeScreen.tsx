@@ -38,10 +38,11 @@ function Hero() {
       <Screen className="relative flex min-h-[74svh] flex-col justify-end pb-12 pt-32">
         <div className="wb-rise">
           <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Wellness Bestie by ORIRI</p>
-          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">Your Wellness, Curated for You</h1>
-          <p className="mt-5 text-[17px] leading-relaxed text-white/90">
-            Move, Meal, Mindset and Meet up: my favourite places, and a planner that learns what works for you.
-          </p>
+          <h1 className="mt-4 text-[31px] leading-[1.1] text-white">
+            <span className="block whitespace-nowrap">Your Wellness,</span>
+            <span className="block whitespace-nowrap">Curated for You</span>
+          </h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-white/90">A planner that learns what works for you.</p>
           <a
             href="#guide"
             onClick={() => ctaClick('Explore the guide', 'hero')}
@@ -65,7 +66,7 @@ function HandLink() {
       className="group mx-auto mt-6 flex w-fit items-center gap-2 text-white"
       style={{ fontFamily: 'var(--font-wb-hand)' }}
     >
-      <span className="relative text-[32px] leading-none">
+      <span className="relative whitespace-nowrap text-[26px] leading-none">
         Or let Bestie plan your day
         <svg aria-hidden viewBox="0 0 300 14" preserveAspectRatio="none" className="absolute -bottom-2.5 left-0 h-3 w-full text-[#E9D9C8]">
           <path d="M3 9c40-6 90-7 140-5s100 3 154-3" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
@@ -265,8 +266,10 @@ function MeetupEvents() {
 function BestieIntro() {
   return (
     <Screen className="pt-16 text-center">
-      <Eyebrow>Experience full features</Eyebrow>
-      <h2 className="mt-2 text-[32px] text-wb-plum">Meet Bestie</h2>
+      <p className="text-[22px] leading-none text-wb-plum" style={{ fontFamily: 'var(--font-wb-hand)' }}>
+        Experience full features
+      </p>
+      <h2 className="mt-1 text-[32px] text-wb-plum">Meet Bestie</h2>
       <p className="mt-3 text-[16px] leading-relaxed text-wb-soft">
         A smart wellness planner you log into. Tell it your energy, time and budget, and it curates your day: where to move, what to eat, what to listen to and who to meet.
       </p>
@@ -351,7 +354,11 @@ function PlumBand() {
     <section className="mt-12 bg-wb-plum py-14 text-wb-paper">
       <Screen>
         <Sparkles className="mx-auto h-6 w-6 text-[#E9D9C8]" strokeWidth={1.4} />
-        <h2 className="mt-3 text-center text-[30px] leading-[1.1] text-white">Try Bestie free for a day</h2>
+        <h2 className="mt-3 text-center text-[30px] leading-[1.1] text-white">
+          Try Bestie free
+          <br />
+          for a day
+        </h2>
         <p className="mt-4 text-center text-[16px] leading-relaxed text-white/90">Check in in two minutes and see your curated day straight away. No card, no app download.</p>
         <PillLink to="/plan" tone="ivory" className="mt-8 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
           Check in · it's free
