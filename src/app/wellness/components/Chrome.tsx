@@ -44,7 +44,7 @@ export function SiteFooter({ onCookieSettings }: { onCookieSettings: () => void 
     <footer className="border-t border-wb-sand px-5 pb-12 pt-12">
       <div className="mx-auto max-w-[430px]">
         <Wordmark className="!items-start" />
-        <p className="mt-4 text-[15px] leading-relaxed text-wb-soft">Your wellness, already planned.</p>
+        <p className="mt-4 text-[15px] leading-relaxed text-wb-soft">Your wellness, curated for you.</p>
         <div className="mt-8 grid grid-cols-2 gap-x-6">
           <ul>
             <li><Link to={withUtm('/plan')} className={link}>Plan my day</Link></li>

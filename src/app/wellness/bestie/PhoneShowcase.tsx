@@ -110,7 +110,7 @@ const CALLOUTS = [
   { text: 'Check in with your energy, time and budget. Bestie plans the rest.', pos: 'top-[6%] right-0' },
   { text: 'Move, Meal, Mindset and Meet up picks, each linked to book, cook or listen.', pos: 'top-[31%] left-0' },
   { text: 'Tick things off and watch your week build.', pos: 'top-[56%] right-0' },
-  { text: 'Swipe for a bestie: meet women with the same rituals.', pos: 'top-[78%] left-0' },
+  { text: 'Bestie match: someone nearby booked the same class. Say hi with Premium.', pos: 'top-[78%] left-0' },
 ];
 
 export default function PhoneShowcase() {

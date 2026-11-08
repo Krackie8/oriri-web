@@ -25,7 +25,7 @@ export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/memb
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
 const TITLES: Record<string, string> = {
-  '/': 'Wellness Bestie by ORIRI · Your wellness, already planned',
+  '/': 'Wellness Bestie by ORIRI · Your wellness, curated for you',
   '/plan': 'Plan my day · Wellness Bestie by ORIRI',
   '/plan/inputs': 'Plan my day · Wellness Bestie by ORIRI',
   '/plan/day': 'Your day, curated · Wellness Bestie by ORIRI',

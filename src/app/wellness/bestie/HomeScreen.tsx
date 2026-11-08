@@ -1,11 +1,11 @@
-/** 1 · Homepage: Ren's Dubai wellness guide first, then Bestie the planner. */
-import React, { useEffect, useMemo, useState } from 'react';
+/** 1 · Homepage: Ren's four pillars (small, free), then Bestie the app. */
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, Globe, Instagram, MapPin, Pin } from 'lucide-react';
+import { ArrowUpRight, Award, Brain, ChevronDown, Globe, HeartHandshake, Instagram, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { WellnessGuide } from '../../utils/wellnessApi';
-import { Eyebrow, Photo, PillarIcon, PillLink, Screen, cx } from './kit';
-import { PILLARS, type PillarKey } from './picks';
+import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
+import type { PillarKey } from './picks';
 import { cardClick, ctaClick } from '../analytics/track';
 import { countPlaceClick } from '../analytics/firstParty';
 import { withUtm } from '../analytics/utm';
@@ -19,8 +19,9 @@ export default function HomeScreen() {
       <Hero />
       <Directory />
       <BestieIntro />
-      <PhoneShowcase />
       <HowItWorks />
+      <PhoneShowcase />
+      <AppFeatures />
       <PlumBand />
       <PodcastTeaser />
     </>
@@ -37,9 +38,9 @@ function Hero() {
       <Screen className="relative flex min-h-[74svh] flex-col justify-end pb-12 pt-32">
         <div className="wb-rise">
           <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-white/80">Wellness Bestie by ORIRI</p>
-          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">Your wellness, already planned</h1>
+          <h1 className="mt-4 text-[40px] leading-[1.05] text-white">Your Wellness, Curated for You</h1>
           <p className="mt-5 text-[17px] leading-relaxed text-white/90">
-            Move, Meal, Mindset and Meet up in Dubai: the places I love, and a planner that fits them around your day.
+            Move, Meal, Mindset and Meet up: my favourite places, and a planner that learns what works for you.
           </p>
           <a
             href="#guide"
@@ -48,32 +49,56 @@ function Hero() {
           >
             Explore the guide
           </a>
-          <Link to={withUtm('/plan')} onClick={() => ctaClick('Plan my day', 'hero')} className="mt-4 block text-center text-[14px] uppercase tracking-[0.12em] text-white/85 underline-offset-4 hover:underline">
-            Or let Bestie plan your day
-          </Link>
+          <HandLink />
         </div>
       </Screen>
     </section>
   );
 }
 
-/** Entries from the admin Directory, grouped into the four pillars. */
+/** "Or let Bestie plan your day", handwritten with a sketched underline and arrow. */
+function HandLink() {
+  return (
+    <Link
+      to={withUtm('/plan')}
+      onClick={() => ctaClick('Plan my day', 'hero')}
+      className="group mx-auto mt-6 flex w-fit items-center gap-2 text-white"
+      style={{ fontFamily: 'var(--font-wb-hand)' }}
+    >
+      <span className="relative text-[32px] leading-none">
+        Or let Bestie plan your day
+        <svg aria-hidden viewBox="0 0 300 14" preserveAspectRatio="none" className="absolute -bottom-2.5 left-0 h-3 w-full text-[#E9D9C8]">
+          <path d="M3 9c40-6 90-7 140-5s100 3 154-3" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+        </svg>
+      </span>
+      <svg aria-hidden viewBox="0 0 40 30" className="h-7 w-9 shrink-0 text-[#E9D9C8] transition-transform group-hover:translate-x-1">
+        <path d="M2 18c10-1 22-2 33-6M27 4c3 3 6 6 9 8-4 2-8 5-10 9" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </Link>
+  );
+}
+
+/** Entries from the admin Directory, grouped by city and pillar. */
 type Place = WellnessGuide & { builtIn?: boolean; internal?: string };
 type PillarName = 'Move' | 'Meal' | 'Mindset' | 'Meetup';
+type City = 'Dubai' | 'Kuala Lumpur';
+const CITIES: { key: City; label: string }[] = [
+  { key: 'Dubai', label: 'Dubai' },
+  { key: 'Kuala Lumpur', label: 'KL' },
+];
 
-const PILLAR_INFO: Record<PillarName, { key: PillarKey; title: string; covers: string; empty: string }> = {
-  Move: { key: 'move', title: 'Move', covers: 'Studios & classes I go to', empty: 'My favourite studios are coming soon.' },
-  Meal: { key: 'meal', title: 'Meal', covers: 'Cafés & restaurants worth the trip', empty: 'My favourite cafés are coming soon.' },
-  Mindset: { key: 'mindset', title: 'Mindset', covers: 'Podcasts & books that shift things', empty: '' },
-  Meetup: { key: 'meetup', title: 'Meet up', covers: 'Activities, organisers & our community', empty: '' },
+const PILLAR_INFO: Record<PillarName, { key: PillarKey; title: string; covers: string }> = {
+  Move: { key: 'move', title: 'Move', covers: 'Studios & classes I go to' },
+  Meal: { key: 'meal', title: 'Meal', covers: 'Cafés & restaurants worth the trip' },
+  Mindset: { key: 'mindset', title: 'Mindset', covers: 'Podcasts & books that shift things' },
+  Meetup: { key: 'meetup', title: 'Meet up', covers: 'Activities, organisers & our community' },
 };
 const PILLAR_ORDER: PillarName[] = ['Move', 'Meal', 'Mindset', 'Meetup'];
-const pillarPhoto = (key: PillarKey) => PILLARS.find((p) => p.key === key)?.image || '';
 
-/** Always listed: Ren's own podcast and community. */
-const BUILT_IN: Partial<Record<PillarName, Place[]>> = {
-  Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', image: teaForTwo, internal: '/podcast', builtIn: true }],
-  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true }],
+/** Always listed: Ren's own podcast (every city) and community (Dubai). */
+const BUILT_IN: Partial<Record<PillarName, (Place & { cities: City[] })[]>> = {
+  Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', internal: '/podcast', builtIn: true, cities: ['Dubai', 'Kuala Lumpur'] }],
+  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true, cities: ['Dubai'] }],
 };
 
 function usePlaces(): Place[] | null {
@@ -91,10 +116,11 @@ function usePlaces(): Place[] | null {
   return places;
 }
 
+const cityOf = (p: Place): City => (p.city === 'Kuala Lumpur' ? 'Kuala Lumpur' : 'Dubai');
 const withHttp = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 const igUrl = (v: string) => (/instagram\.com/i.test(v) ? withHttp(v) : `https://www.instagram.com/${v.replace(/^@/, '')}/`);
 const mapUrl = (place: Place) =>
-  place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} Dubai`)}`;
+  place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} ${cityOf(place)}`)}`;
 const BOX: Record<PillarKey, 'move' | 'meal' | 'mindset' | 'meetups'> = { move: 'move', meal: 'meal', mindset: 'mindset', meetup: 'meetups' };
 
 function PlaceAction({ href, label, icon: Icon, place, pillar }: { href: string; label: string; icon: typeof Globe; place: Place; pillar: PillarKey }) {
@@ -120,7 +146,7 @@ function PlaceRow({ place, pillar, open, onToggle }: { place: Place; pillar: Pil
   const panelId = `place-${place.id}`;
   return (
     <li>
-      <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className="flex w-full items-center gap-3 py-3.5 text-left">
+      <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className="flex w-full items-center gap-3 py-3 text-left">
         {place.pinned && <Pin aria-label="Top pick" className="h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.8} />}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[16px] font-medium text-wb-ink">{place.title}</span>
@@ -129,10 +155,9 @@ function PlaceRow({ place, pillar, open, onToggle }: { place: Place; pillar: Pil
         <ChevronDown className={cx('h-5 w-5 shrink-0 text-wb-taupe transition-transform duration-300', open && 'rotate-180')} strokeWidth={1.5} />
       </button>
       {open && (
-        <div id={panelId} className="wb-rise pb-5">
-          {place.image && <Photo src={place.image} className="aspect-[16/10] rounded-[12px]" w={860} h={538} />}
-          {place.note && <p className={cx('text-[15px] leading-relaxed text-wb-soft', place.image && 'mt-3')}>{place.note}</p>}
-          <div className="mt-4 flex flex-wrap gap-2">
+        <div id={panelId} className="wb-rise pb-4">
+          {place.note && <p className="text-[15px] leading-relaxed text-wb-soft">{place.note}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
             {place.internal ? (
               <Link
                 to={withUtm(place.internal)}
@@ -155,68 +180,92 @@ function PlaceRow({ place, pillar, open, onToggle }: { place: Place; pillar: Pil
   );
 }
 
-function PillarSection({ name, places }: { name: PillarName; places: Place[] }) {
-  const info = PILLAR_INFO[name];
-  const [openId, setOpenId] = useState<string | null>(null);
-  return (
-    <section aria-labelledby={`pillar-${info.key}`} className="overflow-hidden rounded-[14px] border border-wb-sand/60 bg-wb-shell">
-      <div className="relative">
-        <Photo src={pillarPhoto(info.key)} className="aspect-[3/1]" w={860} h={287} />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-black/10" />
-        <div className="absolute inset-y-0 left-5 flex items-center gap-3 text-white">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 backdrop-blur">
-            <PillarIcon pillar={info.key} className="h-[18px] w-[18px]" />
-          </span>
-          <span>
-            <h3 id={`pillar-${info.key}`} className="text-[24px] leading-none text-white">{info.title}</h3>
-            <span className="mt-1 block text-[14px] text-white/85">{info.covers}</span>
-          </span>
-        </div>
-      </div>
-      <div className="px-5">
-        {places.length ? (
-          <ul className="divide-y divide-wb-sand/70">
-            {places.map((p) => (
-              <PlaceRow key={p.id} place={p} pillar={info.key} open={openId === p.id} onToggle={() => setOpenId(openId === p.id ? null : p.id)} />
-            ))}
-          </ul>
-        ) : (
-          <p className="py-4 text-[15px] text-wb-taupe">{info.empty}</p>
-        )}
-        {name === 'Meetup' && <MeetupEvents />}
-      </div>
-    </section>
-  );
-}
-
+/**
+ * Compact directory: city tabs, four pillar icons on one seamless band, and the
+ * names for the chosen pillar. Free, and short, so Bestie is a quick scroll away.
+ */
 function Directory() {
   const places = usePlaces();
-  const byPillar = (n: PillarName) => [
-    ...(places || []).filter((p) => p.category === n || (n === 'Meetup' && p.category === 'Meet up')),
-    ...(BUILT_IN[n] || []),
+  const [city, setCity] = useState<City>('Dubai');
+  const [pillar, setPillar] = useState<PillarName>('Move');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const info = PILLAR_INFO[pillar];
+  const cityName = city === 'Kuala Lumpur' ? 'KL' : 'Dubai';
+
+  const list: Place[] = [
+    ...(places || []).filter((p) => cityOf(p) === city && (p.category === pillar || (pillar === 'Meetup' && p.category === 'Meet up'))),
+    ...(BUILT_IN[pillar] || []).filter((p) => p.cities.includes(city)),
   ];
+  const pick = (n: PillarName) => {
+    setPillar(n);
+    setOpenId(null);
+  };
 
   return (
-    <section id="guide" className="scroll-mt-20">
-      <Screen className="pt-16">
-        <Eyebrow className="text-center">The four pillars</Eyebrow>
-        <h2 className="mt-2 text-center text-[32px] text-wb-plum">Places I love</h2>
-        <p className="mt-3 text-center text-[15px] leading-relaxed text-wb-soft">
-          How I look after myself in Dubai: where I move, eat, what I listen to and who I meet. Tap a name for the details.
-        </p>
-        {places === null ? (
-          <div className="mt-6 space-y-4" aria-hidden>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-40 animate-pulse rounded-[14px] bg-wb-stone" />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {PILLAR_ORDER.map((n) => (
-              <PillarSection key={n} name={n} places={byPillar(n)} />
-            ))}
-          </div>
-        )}
+    <section id="guide" className="scroll-mt-20 bg-wb-stone py-10">
+      <Screen>
+        <div role="tablist" aria-label="City" className="mx-auto flex w-fit rounded-full bg-wb-shell p-1">
+          {CITIES.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              role="tab"
+              aria-selected={city === c.key}
+              onClick={() => {
+                setCity(c.key);
+                setOpenId(null);
+              }}
+              className={cx(
+                'h-10 min-w-[96px] rounded-full px-5 text-[14px] font-medium uppercase tracking-[0.1em] transition-colors',
+                city === c.key ? 'bg-wb-plum text-white' : 'text-wb-taupe hover:text-wb-ink',
+              )}
+            >
+              {c.key === 'Dubai' ? 'Dubai' : 'Kuala Lumpur'}
+            </button>
+          ))}
+        </div>
+        <p className="mt-5 text-center text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">My favourites · free to explore</p>
+
+        <div role="tablist" aria-label="Pillar" className="mt-4 grid grid-cols-4 gap-2">
+          {PILLAR_ORDER.map((n) => {
+            const on = pillar === n;
+            return (
+              <button key={n} type="button" role="tab" aria-selected={on} onClick={() => pick(n)} className="flex flex-col items-center gap-2">
+                <span
+                  className={cx(
+                    'flex h-16 w-16 items-center justify-center rounded-full transition-colors',
+                    on ? 'bg-wb-plum text-white' : 'bg-wb-shell text-wb-plum hover:bg-[#EAE5DF]',
+                  )}
+                >
+                  <PillarIcon pillar={PILLAR_INFO[n].key} className="h-6 w-6" />
+                </span>
+                <span className={cx('text-[14px] font-medium uppercase tracking-[0.08em]', on ? 'text-wb-ink' : 'text-wb-taupe')}>{PILLAR_INFO[n].title}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 rounded-[14px] bg-wb-shell px-5 pt-4" role="tabpanel">
+          <p className="text-[14px] text-wb-taupe">
+            {info.covers} · {cityName}
+          </p>
+          {places === null ? (
+            <div className="space-y-2 py-3" aria-hidden>
+              {[0, 1].map((i) => (
+                <div key={i} className="h-11 animate-pulse rounded-[10px] bg-wb-stone" />
+              ))}
+            </div>
+          ) : list.length ? (
+            <ul className="divide-y divide-wb-sand/70">
+              {list.map((p) => (
+                <PlaceRow key={p.id} place={p} pillar={info.key} open={openId === p.id} onToggle={() => setOpenId(openId === p.id ? null : p.id)} />
+              ))}
+            </ul>
+          ) : (
+            <p className="py-4 text-[15px] text-wb-soft">My {cityName} favourites are coming soon.</p>
+          )}
+          {pillar === 'Meetup' && city === 'Dubai' ? <MeetupEvents /> : <div className="pb-2" />}
+        </div>
       </Screen>
     </section>
   );
@@ -225,7 +274,7 @@ function Directory() {
 /** Inside Meet up: upcoming Stepsisters meetups and events from the admin calendar. */
 function MeetupEvents() {
   const rows = useUpcoming();
-  if (!rows || !rows.length) return null;
+  if (!rows || !rows.length) return <div className="pb-2" />;
   return (
     <div className="border-t border-wb-sand/70 pb-2 pt-4">
       <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">Coming up</p>
@@ -240,32 +289,41 @@ function MeetupEvents() {
 
 function BestieIntro() {
   return (
-    <Screen className="pt-20 text-center">
-      <Eyebrow>Free for you</Eyebrow>
+    <Screen className="pt-16 text-center">
+      <Eyebrow>The app</Eyebrow>
       <h2 className="mt-2 text-[32px] text-wb-plum">Meet Bestie</h2>
       <p className="mt-3 text-[16px] leading-relaxed text-wb-soft">
-        Your curated wellness planner. Tell it your energy, time and budget, and it builds your day from the places above.
+        A smart wellness planner you log into. Tell it your energy, time and budget, and it curates your day: where to move, what to eat, what to listen to and who to meet.
       </p>
+      <div className="mt-6 rounded-[14px] bg-wb-plum px-6 py-6 text-left text-white">
+        <Brain className="h-6 w-6 text-[#E9D9C8]" strokeWidth={1.4} />
+        <p className="mt-3 font-wb-serif text-[20px] font-medium uppercase leading-snug tracking-[0.02em]">It remembers you</p>
+        <p className="mt-2 text-[15px] leading-relaxed text-white/90">
+          Bestie learns your patterns: the energy you wake up with, the classes you actually go to, the cafés you go back to. Every plan gets closer to you and your goal. No generic advice.
+        </p>
+      </div>
     </Screen>
   );
 }
 
 const STEPS = [
-  { title: 'Check in', body: 'Tell us your energy, the time you have and your budget.' },
-  { title: 'Get your planner', body: 'Move, Meal and Mindset picks that fit your energy, time and budget, each linked so you can book, cook or listen.' },
-  { title: 'Tap & track', body: 'Tick things off and watch your progress build. Behind the scenes, Bestie remembers what works for you.' },
+  { title: 'Check in', body: 'Your energy, the time you have and your budget. Plus a little affirmation to start.' },
+  { title: 'Get your plan', body: 'Move, Meal, Mindset and Meet up picks that fit today, each linked to book, cook or listen.' },
+  { title: 'Tick & close your rings', body: 'Check things off, close your rings, and Bestie learns what works for you.' },
 ];
-const NUMBER_WORDS = ['One', 'Two', 'Three'];
 
 function HowItWorks() {
   return (
-    <Screen className="pt-10">
-      <ol className="space-y-3">
+    <Screen className="pt-8">
+      <p className="text-center text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">How it works</p>
+      <ol className="mt-4 space-y-3">
         {STEPS.map((st, n) => (
-          <li key={st.title} className="rounded-[14px] bg-wb-stone px-6 py-7 text-center">
-            <span className="block text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">{NUMBER_WORDS[n]}</span>
-            <span className="mt-2 block font-wb-serif text-[24px] font-medium uppercase tracking-[0.02em] text-wb-ink">{st.title}</span>
-            <span className="mx-auto mt-3 block max-w-[300px] text-[15px] leading-relaxed text-wb-soft">{st.body}</span>
+          <li key={st.title} className="flex items-start gap-4 rounded-[14px] bg-wb-stone px-5 py-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-wb-shell font-wb-serif text-[18px] font-medium text-wb-plum">{n + 1}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-wb-serif text-[18px] font-medium uppercase tracking-[0.02em] text-wb-ink">{st.title}</span>
+              <span className="mt-1 block text-[15px] leading-relaxed text-wb-soft">{st.body}</span>
+            </span>
           </li>
         ))}
       </ol>
@@ -273,12 +331,53 @@ function HowItWorks() {
   );
 }
 
+const FEATURES: { icon: typeof Sun; title: string; text: string; tag?: string }[] = [
+  { icon: Sun, title: 'Daily affirmation', text: 'A few words just for you, every time you check in.' },
+  { icon: Zap, title: 'Energy check-in', text: 'Builds your daily and weekly plan, with rings to close.' },
+  { icon: ListChecks, title: 'Simple to-do list', text: 'Your day as a list. Tick it off as you go.' },
+  { icon: Award, title: 'Badges to unlock', text: 'Little wins for showing up for yourself.', tag: 'Soon' },
+  {
+    icon: HeartHandshake,
+    title: 'Bestie match',
+    text: 'Booked the same class or café as someone nearby? Bestie suggests you meet. Everyone can see profiles; swiping and saying hi is for members.',
+    tag: 'Premium',
+  },
+];
+
+function AppFeatures() {
+  return (
+    <Screen className="pt-14">
+      <Eyebrow className="text-center">Inside the app</Eyebrow>
+      <h2 className="mt-2 text-center text-[28px] leading-[1.1] text-wb-ink">Everything you need to show up for you</h2>
+      <ul className="mt-6 divide-y divide-wb-sand/70 rounded-[14px] border border-wb-sand/60 bg-wb-shell px-5">
+        {FEATURES.map(({ icon: Icon, title, text, tag }) => (
+          <li key={title} className="flex items-start gap-4 py-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-wb-stone text-wb-plum">
+              <Icon className="h-5 w-5" strokeWidth={1.5} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2 text-[16px] font-medium text-wb-ink">
+                {title}
+                {tag && (
+                  <span className={cx('rounded-full px-2 py-0.5 text-[14px] font-normal', tag === 'Premium' ? 'bg-wb-plum text-white' : 'bg-wb-stone text-wb-taupe')}>{tag}</span>
+                )}
+              </span>
+              <span className="mt-0.5 block text-[15px] leading-relaxed text-wb-soft">{text}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Screen>
+  );
+}
+
 function PlumBand() {
   return (
-    <section className="mt-10 bg-wb-plum py-14 text-wb-paper">
+    <section className="mt-12 bg-wb-plum py-14 text-wb-paper">
       <Screen>
-        <h2 className="text-center text-[30px] leading-[1.1] text-white">Let Bestie curate your whole day</h2>
-        <p className="mt-4 text-center text-[16px] leading-relaxed text-white/90">Two minutes, no account. One tickable list, with links to book, cook or listen.</p>
+        <Sparkles className="mx-auto h-6 w-6 text-[#E9D9C8]" strokeWidth={1.4} />
+        <h2 className="mt-3 text-center text-[30px] leading-[1.1] text-white">Try Bestie free for a day</h2>
+        <p className="mt-4 text-center text-[16px] leading-relaxed text-white/90">Check in in two minutes and see your curated day straight away. No card, no app download.</p>
         <PillLink to="/plan" tone="ivory" className="mt-8 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
           Check in · it's free
         </PillLink>
