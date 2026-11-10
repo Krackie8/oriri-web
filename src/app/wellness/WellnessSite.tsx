@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { CookieBanner, SiteFooter, SiteHeader } from './components/Chrome';
 import BottomTabBar from '../components/BottomTabBar';
 import HomeScreen from './bestie/HomeScreen';
-import OptionsScreen from './bestie/OptionsScreen';
 import InputScreen from './bestie/InputScreen';
 import DayScreen from './bestie/DayScreen';
 import MembershipScreen from './bestie/MembershipScreen';
@@ -102,7 +101,7 @@ export default function WellnessSite() {
       <main id="main">
         <Routes>
           <Route path="/" element={<HomeScreen />} />
-          <Route path="/plan" element={<OptionsScreen />} />
+          <Route path="/plan" element={<Navigate to="/plan/inputs" replace />} />
           <Route path="/plan/inputs" element={<InputScreen />} />
           <Route path="/plan/day" element={<DayScreen />} />
           <Route path="/membership" element={<MembershipScreen />} />

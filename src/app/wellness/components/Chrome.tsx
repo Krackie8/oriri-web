@@ -40,7 +40,7 @@ export function SiteFooter({ onCookieSettings }: { onCookieSettings: () => void 
         <p className="mt-4 text-[15px] leading-relaxed text-wb-soft">Your wellness, curated for you.</p>
         <div className="mt-8 grid grid-cols-2 gap-x-6">
           <ul>
-            <li><Link to={withUtm('/plan')} className={link}>Plan my day</Link></li>
+            <li><Link to={withUtm('/plan/inputs')} className={link}>Plan my day</Link></li>
             <li><Link to={withUtm('/membership')} className={link}>Membership</Link></li>
             <li><Link to={withUtm('/pilot')} className={link}>Waitlist</Link></li>
             <li><Link to="/community" className={link}>Stepsisters</Link></li>

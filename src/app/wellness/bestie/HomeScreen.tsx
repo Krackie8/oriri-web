@@ -8,6 +8,7 @@ import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
 import type { PillarKey } from './picks';
 import { cardClick, ctaClick } from '../analytics/track';
 import { countPlaceClick } from '../analytics/firstParty';
+import { MembershipCard } from './OptionsScreen';
 import { withUtm } from '../analytics/utm';
 import { unsplash } from '../components/ui';
 import PhoneShowcase from './PhoneShowcase';
@@ -22,6 +23,9 @@ export default function HomeScreen() {
       <PhoneShowcase />
       <AppFeatures />
       <PlumBand />
+      <Screen className="pb-14 pt-10">
+        <MembershipCard source="home" />
+      </Screen>
     </>
   );
 }
@@ -59,7 +63,7 @@ function Hero() {
 function HandLink() {
   return (
     <Link
-      to={withUtm('/plan')}
+      to={withUtm('/plan/inputs')}
       onClick={() => ctaClick('Plan my day', 'hero')}
       className="group mx-auto mt-6 flex w-fit items-center gap-2 text-white"
       style={{ fontFamily: 'var(--font-wb-hand)' }}
@@ -494,7 +498,7 @@ function PlumBand() {
           for a day
         </h2>
         <p className="mt-4 text-center text-[16px] leading-relaxed text-white/90">Check in in two minutes and see your curated day straight away. No card, no app download.</p>
-        <PillLink to="/plan" tone="ivory" className="mt-8 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
+        <PillLink to="/plan/inputs" tone="ivory" className="mt-8 w-full" onClick={() => ctaClick('Check in — it\'s free', 'band')}>
           Check in · it's free
         </PillLink>
       </Screen>
