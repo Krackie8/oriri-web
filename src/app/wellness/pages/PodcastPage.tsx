@@ -74,7 +74,7 @@ export default function PodcastPage() {
         <img src={teaForTwo} alt="Tea for Two podcast cover" className="h-28 w-28 shrink-0 rounded-[14px] object-cover shadow-[0_12px_30px_-14px_rgba(43,37,34,0.45)]" />
         <div>
           <Eyebrow>The podcast</Eyebrow>
-          <h1 className="mt-2 text-[34px] leading-[1.02] text-wb-ink">Tea for Two</h1>
+          <h1 className="mt-2 whitespace-nowrap text-[26px] leading-[1.02] text-wb-ink sm:text-[34px]">Tea for Two</h1>
           <p className="mt-1 text-[15px] text-wb-taupe">with Renee &amp; Amanda</p>
         </div>
       </div>

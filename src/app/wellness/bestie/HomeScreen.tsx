@@ -10,7 +10,6 @@ import { cardClick, ctaClick } from '../analytics/track';
 import { countPlaceClick } from '../analytics/firstParty';
 import { withUtm } from '../analytics/utm';
 import { unsplash } from '../components/ui';
-import teaForTwo from '../../../assets/tea-for-two.jpg';
 import PhoneShowcase from './PhoneShowcase';
 
 export default function HomeScreen() {
@@ -23,7 +22,6 @@ export default function HomeScreen() {
       <PhoneShowcase />
       <AppFeatures />
       <PlumBand />
-      <PodcastTeaser />
     </>
   );
 }
@@ -132,6 +130,19 @@ function usePlaces(): { places: Place[] | null; failed: boolean; retry: () => vo
   });
   const [failed, setFailed] = useState(false);
   const [nonce, setNonce] = useState(0);
+
+  // First visit (nothing saved on the device yet): show the copy saved on
+  // oriri.me straight away, then swap in the live list when it arrives.
+  useEffect(() => {
+    if (places) return;
+    let live = true;
+    wellnessApi.getGuidesSnapshot().then((snap) => {
+      if (live && snap) setPlaces((p) => p ?? withDemo(wellnessApi.sortGuides(snap).filter((g) => !g.hidden)));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -394,7 +405,7 @@ function BestieIntro() {
       </p>
       <h2 className="mt-1 text-[32px] text-wb-plum">Meet Bestie</h2>
       <p className="mt-3 text-[16px] leading-relaxed text-wb-soft">
-        Share your energy, time and budget. Bestie curates where to move, what to eat and who to meet.
+        Bestie curates where to move, what to eat and who to meet.
       </p>
       <div className="mt-6 rounded-[14px] bg-wb-plum px-6 py-6 text-left text-white">
         <Brain className="h-6 w-6 text-[#E9D9C8]" strokeWidth={1.4} />
@@ -408,9 +419,9 @@ function BestieIntro() {
 }
 
 const STEPS = [
-  { title: 'Check in', body: 'Your energy, the time you have and your budget. Plus a little affirmation to start.' },
-  { title: 'Get your plan', body: 'Move, Meal, Mindset and Meet up picks that fit today, each linked to book, cook or listen.' },
-  { title: 'Tick & close your rings', body: 'Check things off, close your rings, and Bestie learns what works for you.' },
+  { title: 'Check in', body: 'Share your energy, the time you have and your budget.' },
+  { title: 'Get your plan', body: 'Move, Meal, Mindset and Meet up picks that fit your day.' },
+  { title: 'Tap & Track', body: "Tick what you've done and close your rings. Bestie learns what works for you." },
 ];
 
 function HowItWorks() {
@@ -488,22 +499,6 @@ function PlumBand() {
         </PillLink>
       </Screen>
     </section>
-  );
-}
-
-function PodcastTeaser() {
-  return (
-    <Screen className="pt-14">
-      <Link to="/podcast" onClick={() => ctaClick('Tea for Two', 'home_podcast')} className="flex items-center gap-4 rounded-[14px] bg-wb-stone p-4 transition-colors hover:bg-[#EAE5DF]">
-        <img src={teaForTwo} alt="" className="h-20 w-20 shrink-0 rounded-[12px] object-cover" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">The podcast</span>
-          <span className="mt-1 block font-wb-serif text-[22px] font-medium uppercase text-wb-ink">Tea for Two</span>
-          <span className="block text-[14px] text-wb-soft">with Renee &amp; Amanda</span>
-        </span>
-        <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
-      </Link>
-    </Screen>
   );
 }
 
