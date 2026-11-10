@@ -26,7 +26,8 @@ export const links = {
   maps: (what: string, area?: string) => `https://www.google.com/maps/search/?api=1&query=${q([what, areaFor(area), LOCALE.searchRegion])}`,
   web: (what: string, area?: string) => `https://www.google.com/search?q=${q([what, areaFor(area), LOCALE.searchRegion])}`,
   youtube: (what: string) => `https://www.youtube.com/results?search_query=${q([what])}`,
-  recipe: (what: string) => `https://www.bbcgoodfood.com/search?q=${q([what])}`,
+  /** Free for everyone: a YouTube search for the recipe video. */
+  recipe: (what: string) => `https://www.youtube.com/results?search_query=${q([what, 'recipe'])}`,
   spotify: (what: string) => `https://open.spotify.com/search/${q([what])}/podcasts`,
   book: (what: string) => `https://www.goodreads.com/search?q=${q([what])}`,
 };

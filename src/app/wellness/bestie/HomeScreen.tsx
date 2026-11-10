@@ -271,13 +271,13 @@ function BestieIntro() {
       </p>
       <h2 className="mt-1 text-[32px] text-wb-plum">Meet Bestie</h2>
       <p className="mt-3 text-[16px] leading-relaxed text-wb-soft">
-        A smart wellness planner you log into. Tell it your energy, time and budget, and it curates your day: where to move, what to eat, what to listen to and who to meet.
+        Share your energy, time and budget. Bestie curates where to move, what to eat and who to meet.
       </p>
       <div className="mt-6 rounded-[14px] bg-wb-plum px-6 py-6 text-left text-white">
         <Brain className="h-6 w-6 text-[#E9D9C8]" strokeWidth={1.4} />
         <p className="mt-3 font-wb-serif text-[20px] font-medium uppercase leading-snug tracking-[0.02em]">It remembers you</p>
         <p className="mt-2 text-[15px] leading-relaxed text-white/90">
-          Bestie learns your patterns: the energy you wake up with, the classes you actually go to, the cafés you go back to. Every plan gets closer to you and your goal. No generic advice.
+          Bestie learns your patterns and the places you love, so every plan fits you and your goal.
         </p>
       </div>
     </Screen>

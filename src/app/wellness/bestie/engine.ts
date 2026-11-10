@@ -101,11 +101,11 @@ const OPTIONS: Option[] = [
 
   // Meal
   { key: 'fridge', pillar: 'meal', title: '10-minute veggie omelette', venue: () => 'Recipe · from your fridge', min: 10, max: 15, needs: 0, energy: ['Low', 'Steady', 'High'], goals: ['Recharge', 'Focus'],
-    links: () => [{ label: 'Open the recipe', url: links.recipe('quick veggie omelette') }] },
+    links: () => [{ label: 'Watch on YouTube', url: links.recipe('quick veggie omelette') }] },
   { key: 'oats', pillar: 'meal', title: 'Protein overnight oats', venue: () => 'Recipe · free to follow', min: 10, max: 15, needs: 0, energy: ['Low', 'Steady', 'High'], goals: ['Focus', 'Recharge'],
-    links: () => [{ label: 'Open the recipe', url: links.recipe('protein overnight oats') }] },
+    links: () => [{ label: 'Watch on YouTube', url: links.recipe('protein overnight oats') }] },
   { key: 'glowbowl', pillar: 'meal', title: 'Glow bowl: salmon, greens, avocado', venue: () => 'Recipe · free to follow', min: 15, max: 25, needs: 0, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Recharge'],
-    links: () => [{ label: 'Open the recipe', url: links.recipe('salmon avocado bowl') }] },
+    links: () => [{ label: 'Watch on YouTube', url: links.recipe('salmon avocado bowl') }] },
   { key: 'juice', pillar: 'meal', title: 'Fresh juice or iced matcha', venue: (a) => `Café ${near(a)}`, range: [20, 35], min: 10, max: 20, needs: 30, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Focus', 'Recharge'],
     links: (a) => [{ label: 'Find a café', url: links.maps('fresh juice matcha cafe', a) }] },
   { key: 'bowl', pillar: 'meal', title: 'Healthy grain or poke bowl', venue: (a) => `Healthy café ${near(a)}`, range: [40, 60], min: 20, max: 40, needs: 30, energy: ['Low', 'Steady', 'High'], goals: ['Glow', 'Focus', 'Recharge'],
@@ -119,11 +119,20 @@ const OPTIONS: Option[] = [
 
   // Mindset
   { key: 'teafortwo', pillar: 'mindset', title: 'Tea for Two: pick an episode', venue: () => 'Podcast · Renee & Amanda', min: 25, max: 45, needs: 60, energy: ['Low', 'Steady', 'High'], goals: ['Connect', 'Unwind'],
-    links: () => [{ label: 'Listen to episodes', url: '/podcast' }] },
+    links: () => [
+      { label: 'Watch on YouTube', url: 'https://www.youtube.com/@Renreset' },
+      { label: 'Listen on Spotify', url: 'https://open.spotify.com/show/2dtKfW2MpiAAEbfM18m64r' },
+    ] },
   { key: 'podcast', pillar: 'mindset', title: 'The Mel Robbins Podcast', venue: () => 'Podcast · self-development', min: 15, max: 30, needs: 30, energy: ['Steady', 'High'], goals: ['Focus'],
-    links: () => [{ label: 'Listen on Spotify', url: links.spotify('The Mel Robbins Podcast') }] },
-  { key: 'book', pillar: 'mindset', title: 'Atomic Habits, one chapter', venue: () => 'Book · any format', min: 15, max: 30, needs: 30, energy: ['Steady', 'High'], goals: ['Focus', 'Glow'],
-    links: () => [{ label: 'See the book', url: links.book('Atomic Habits James Clear') }] },
+    links: () => [
+      { label: 'Watch on YouTube', url: links.youtube('The Mel Robbins Podcast') },
+      { label: 'Listen on Spotify', url: links.spotify('The Mel Robbins Podcast') },
+    ] },
+  { key: 'book', pillar: 'mindset', title: 'Atomic Habits, one chapter', venue: () => 'Book · free summary', min: 15, max: 30, needs: 30, energy: ['Steady', 'High'], goals: ['Focus', 'Glow'],
+    links: () => [
+      { label: 'Watch on YouTube', url: links.youtube('Atomic Habits James Clear summary') },
+      { label: 'Listen on Spotify', url: links.spotify('Atomic Habits James Clear') },
+    ] },
   { key: 'sleep', pillar: 'mindset', title: 'Read: how to sleep deeper', venue: () => 'Article · on your phone', min: 5, max: 10, needs: 0, energy: ['Low', 'Steady'], goals: ['Recharge'],
     links: () => [{ label: 'Read the article', url: 'https://www.sleepfoundation.org/sleep-hygiene' }] },
   { key: 'bookshop', pillar: 'mindset', title: 'Browse a bookshop, bring one home', venue: (a) => `Bookshop ${near(a)}`, range: [40, 70], min: 30, max: 45, needs: 60, energy: ['Low', 'Steady'], goals: ['Focus', 'Unwind', 'Glow'],

@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Mic, ShoppingBag, Sparkles } from 'lucide-react';
+import { Home, Mic, ShoppingBag, Sparkles, UserRound } from 'lucide-react';
 
 /**
- * One bottom bar for the whole app: Home (Wellness Bestie), Podcast (Tea for Two),
- * Shop (coming soon) and Bestie (your profile + the community). The free planner is reached from Home.
+ * One bottom bar for the whole app: Home, Podcast (Tea for Two), Bestie (the community, in the middle),
+ * Shop (coming soon) and Profile (log in / your account). The free planner is reached from Home.
  * Quiet-luxury: ivory ground, plum active state, thin line icons.
  */
-type Tab = 'home' | 'podcast' | 'shop' | 'bestie';
+type Tab = 'home' | 'podcast' | 'bestie' | 'shop' | 'profile';
 
 interface BottomTabBarProps {
   onShowLogin?: () => void;
@@ -16,9 +16,10 @@ interface BottomTabBarProps {
 const TABS: { id: Tab; icon: typeof Home; label: string; path: string }[] = [
   { id: 'home', icon: Home, label: 'Home', path: '/' },
   { id: 'podcast', icon: Mic, label: 'Podcast', path: '/podcast' },
+  { id: 'bestie', icon: Sparkles, label: 'Bestie', path: '/bestie' },
   // Coming soon page for now; later ORIRI merch and affiliate picks
   { id: 'shop', icon: ShoppingBag, label: 'Shop', path: '/shop' },
-  { id: 'bestie', icon: Sparkles, label: 'Bestie', path: '/bestie' },
+  { id: 'profile', icon: UserRound, label: 'Profile', path: '/profile' },
 ];
 
 export default function BottomTabBar(_props: BottomTabBarProps) {
@@ -30,16 +31,18 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
     ? 'podcast'
     : pathname.startsWith('/shop') || pathname.startsWith('/store')
       ? 'shop'
-      : pathname.startsWith('/bestie') || pathname.startsWith('/profile') || pathname.startsWith('/membership')
+      : pathname.startsWith('/bestie') || pathname.startsWith('/membership')
         ? 'bestie'
-        : 'home';
+        : pathname.startsWith('/profile')
+          ? 'profile'
+          : 'home';
 
   return (
     <nav
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-[#DDD4CD] bg-[#FAF8F5]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
     >
-      <div className="mx-auto grid h-16 max-w-[430px] grid-cols-4">
+      <div className="mx-auto grid h-16 max-w-[430px] grid-cols-5">
         {TABS.map((t) => {
           const Icon = t.icon;
           const on = current === t.id;
@@ -55,7 +58,7 @@ export default function BottomTabBar(_props: BottomTabBarProps) {
             >
               {on && <span aria-hidden className="absolute top-0 h-[2px] w-8 rounded-full bg-[#B8A291]" />}
               <Icon className="h-[22px] w-[22px]" strokeWidth={on ? 1.6 : 1.3} />
-              <span className="text-[14px] leading-none" style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
+              <span className="text-[13px] leading-none" style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
                 {t.label}
               </span>
             </button>

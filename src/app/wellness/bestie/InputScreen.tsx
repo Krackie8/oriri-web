@@ -31,8 +31,16 @@ export default function InputScreen() {
   const set = (patch: Partial<PlanInputs>) => setV((s) => ({ ...s, ...patch }));
   const toggleGoal = (g: Goal) => set({ goals: v.goals.includes(g) ? v.goals.filter((x) => x !== g) : [...v.goals, g] });
 
+  const [missing, setMissing] = useState<{ goals?: boolean; area?: boolean }>({});
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Everything is needed to curate a day that makes sense
+    const miss = { goals: !v.goals.length, area: !v.area };
+    if (miss.goals || miss.area) {
+      setMissing(miss);
+      document.getElementById(miss.goals ? 'need-goals' : 'need-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     saveInputs(v);
     ctaClick('Curate my day', 'input');
     track('plan_inputs_done', { energy: v.energy, goals: v.goals.join(','), minutes: v.minutes, budget: v.budget, area: v.area || 'unset' });
@@ -42,7 +50,7 @@ export default function InputScreen() {
   return (
     <form onSubmit={submit}>
       <Screen className="pb-36">
-        <StepHeader back="/plan" step={1} total={2} title="How's today looking?" sub="Three quick questions. Change anything later." />
+        <StepHeader back="/plan" step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
 
         <Section n={1} title="Energy now">
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Energy now">
@@ -52,7 +60,9 @@ export default function InputScreen() {
               </Chip>
             ))}
           </div>
-          <p className="mt-5 text-[14px] text-wb-taupe">I want to… (pick any)</p>
+          <p id="need-goals" className={cx('mt-5 text-[14px]', missing.goals && !v.goals.length ? 'text-[#9A3F45]' : 'text-wb-taupe')}>
+            I want to… {missing.goals && !v.goals.length ? '(pick at least one)' : '(pick any)'}
+          </p>
           <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Goals">
             {GOALS.map((g) => (
               <Chip key={g} selected={v.goals.includes(g)} onClick={() => toggleGoal(g)}>
@@ -124,12 +134,14 @@ export default function InputScreen() {
           </div>
 
           <label className="mt-6 block">
-            <span className="text-[14px] text-wb-taupe">Area</span>
+            <span id="need-area" className={cx('text-[14px]', missing.area && !v.area ? 'text-[#9A3F45]' : 'text-wb-taupe')}>
+              {missing.area && !v.area ? 'Area (please choose one)' : 'Area'}
+            </span>
             <div className="relative mt-2">
               <select value={v.area} onChange={(e) => set({ area: e.target.value })} className={cx(fieldCls, 'appearance-none pr-12')}>
                 <option value="">Choose your area</option>
                 {LOCALE.areas.map((a) => (
-                  <option key={a} value={a === 'Somewhere else' ? '' : a}>
+                  <option key={a} value={a}>
                     {a}
                   </option>
                 ))}
