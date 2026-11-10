@@ -113,20 +113,60 @@ const showDemo = () => {
   }
 };
 
-function usePlaces(): Place[] | null {
-  const [places, setPlaces] = useState<Place[] | null>(null);
+const PLACES_CACHE = 'wb_places_v1';
+
+/**
+ * Ren's places from the admin Directory. Shows the last good list straight away (saved on this
+ * device), retries a failed load a few times, and refreshes when the visitor comes back to the tab,
+ * so a flaky mobile connection never makes the directory look empty.
+ */
+function usePlaces(): { places: Place[] | null; failed: boolean; retry: () => void } {
+  const withDemo = (list: Place[]) => (showDemo() ? [...DEMO, ...list] : list);
+  const [places, setPlaces] = useState<Place[] | null>(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(PLACES_CACHE) || 'null');
+      return Array.isArray(cached) ? withDemo(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [failed, setFailed] = useState(false);
+  const [nonce, setNonce] = useState(0);
+
   useEffect(() => {
     let live = true;
-    wellnessApi.getGuides().then((res) => {
-      if (!live) return;
-      const real = res.ok && res.data ? wellnessApi.sortGuides(res.data).filter((g) => !g.hidden) : [];
-      setPlaces(showDemo() ? [...DEMO, ...real] : real);
-    });
+    const load = async () => {
+      for (let attempt = 0; attempt < 3 && live; attempt++) {
+        const res = await wellnessApi.getGuides();
+        if (!live) return;
+        if (res.ok && res.data) {
+          const real = wellnessApi.sortGuides(res.data).filter((g) => !g.hidden);
+          setPlaces(withDemo(real));
+          setFailed(false);
+          try {
+            localStorage.setItem(PLACES_CACHE, JSON.stringify(real));
+          } catch {
+            /* private mode */
+          }
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+      if (live) {
+        setFailed(true);
+        setPlaces((p) => p ?? withDemo([]));
+      }
+    };
+    load();
+    const onVisible = () => document.visibilityState === 'visible' && load();
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       live = false;
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, []);
-  return places;
+  }, [nonce]);
+
+  return { places, failed, retry: () => setNonce((n) => n + 1) };
 }
 
 const withHttp = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
@@ -253,7 +293,7 @@ function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
  * names for the chosen pillar. Free, and short, so Bestie is a quick scroll away.
  */
 function Directory() {
-  const places = usePlaces();
+  const { places, failed, retry } = usePlaces();
   const [pillar, setPillar] = useState<PillarName>('Move');
   const info = PILLAR_INFO[pillar];
 
@@ -305,7 +345,16 @@ function Directory() {
               ))}
             </ul>
           ) : (
+            failed ? (
+            <p className="py-4 text-[15px] text-wb-soft">
+              Couldn't load my favourites.{' '}
+              <button type="button" onClick={retry} className="text-wb-plum underline underline-offset-4">
+                Try again
+              </button>
+            </p>
+          ) : (
             <p className="py-4 text-[15px] text-wb-soft">My favourites are coming soon.</p>
+          )
           )}
           {pillar === 'Meetup' ? <MeetupEvents /> : <div className="pb-2" />}
         </div>
