@@ -1,0 +1,65 @@
+{
+  "site": "https://www.oriri.me",
+  "image": "/og-image.png",
+  "pages": {
+    "/": {
+      "title": "Wellness Bestie by ORIRI · Your wellness planner in Dubai",
+      "description": "Your wellness, curated for you. Bestie plans your day in Dubai: where to move, what to eat and who to meet, around your energy, time and budget. Try it free.",
+      "index": true,
+      "h1": "Your wellness, curated for you",
+      "text": ["Wellness Bestie by ORIRI is a wellness planner for women in Dubai that learns what works for you.", "My favourites, free to explore: fitness studios to move, healthy cafés and meals, mindset podcasts and books, and meetups with the Stepsisters community.", "Meet Bestie: Bestie curates where to move, what to eat and who to meet.", "How it works: 1. Check in: share your energy, the time you have and your budget. 2. Get your plan: Move, Meal, Mindset and Meet up picks that fit your day. 3. Tap and Track: tick what you've done and close your rings. Bestie learns what works for you.", "Try Bestie free for a day. No card, no app download."]
+    },
+    "/plan/inputs": {
+      "title": "Plan my day free · Wellness Bestie by ORIRI",
+      "description": "Share your energy, the time you have and your budget, and Bestie curates a free day plan in Dubai with Move, Meal, Mindset and Meet up picks.",
+      "index": true,
+      "h1": "Plan my day, free",
+      "text": ["Tell Bestie how today is looking: your energy, the time you have, your budget and your goals.", "Get a free, curated day plan for Dubai with places to move, meals to eat, a mindset pick and meetups."]
+    },
+    "/podcast": {
+      "title": "Tea for Two podcast with Renee & Amanda · ORIRI",
+      "description": "Tea for Two: honest conversations between friends about building a life in the UAE, growth, wellness and the highs and lows of change. On Spotify and YouTube.",
+      "index": true,
+      "h1": "Tea for Two podcast",
+      "text": ["Tea for Two with Renee and Amanda: honest conversations between friends about building a life in the UAE: growth, wellness, and the highs and lows of change.", "Listen on Spotify and YouTube, or browse every episode here."]
+    },
+    "/membership": {
+      "title": "Bestie membership: your week, planned · ORIRI",
+      "description": "Bestie membership remembers your patterns, plans your week ahead, finds you a bestie near you and gives you priority places at Stepsisters events in Dubai.",
+      "index": true,
+      "h1": "Bestie, every day",
+      "text": ["Remembers your patterns and behaviour.", "Plans your week ahead.", "Swipe for a bestie near you.", "Priority places at Stepsisters events.", "The membership waitlist is open."]
+    },
+    "/bestie": {
+      "title": "Find your people in Dubai · Bestie community by ORIRI",
+      "description": "The Bestie community: women in Dubai who move, eat well and show up for each other. Everyone can join for free.",
+      "index": true,
+      "h1": "Find your people",
+      "text": ["Women in Dubai who move, eat well and show up for each other. Everyone can join for free."]
+    },
+    "/pilot": {
+      "title": "Join the waitlist · Wellness Bestie by ORIRI",
+      "description": "Join the Wellness Bestie waitlist and be first to get a wellness planner in Dubai that learns what works for you.",
+      "index": true,
+      "h1": "Join the waitlist",
+      "text": ["Be first to get Bestie membership: a wellness planner in Dubai that learns what works for you."]
+    },
+    "/about": {
+      "title": "About ORIRI · Wellness Bestie and Tea for Two",
+      "description": "Oriri is Latin for to rise. ORIRI is the home of Wellness Bestie, the Stepsisters community and the Tea for Two podcast, made in Dubai.",
+      "index": true,
+      "h1": "Oriri. Latin for to rise.",
+      "text": ["ORIRI is the home of Wellness Bestie, the Stepsisters community for women in Dubai, and the Tea for Two podcast."]
+    },
+    "/privacy": {
+      "title": "Privacy · ORIRI",
+      "description": "How ORIRI and Wellness Bestie handle your data: what we collect, why, and the choices you have.",
+      "index": true,
+      "h1": "Your data, kept simple",
+      "text": []
+    },
+    "/shop": { "title": "Shop · ORIRI", "description": "The ORIRI shop is coming soon.", "index": false, "h1": "Coming soon", "text": [] },
+    "/plan/day": { "title": "Your day, curated · Wellness Bestie by ORIRI", "description": "Your curated day from Bestie.", "index": false, "h1": "Your day", "text": [] },
+    "/profile": { "title": "Your profile · ORIRI", "description": "Sign in to see your Bestie plans.", "index": false, "h1": "Your profile", "text": [] }
+  }
+}
