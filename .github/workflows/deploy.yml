@@ -28,6 +28,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Save a copy of the directory for the site to serve itself
+        run: node scripts/snapshot-guides.mjs
       - run: pnpm build
       - name: Upload to cPanel over FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5

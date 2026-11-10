@@ -152,6 +152,13 @@ function usePlaces(): { places: Place[] | null; failed: boolean; retry: () => vo
         }
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       }
+      const snap = live ? await wellnessApi.getGuidesSnapshot() : null;
+      if (!live) return;
+      if (snap) {
+        setPlaces(withDemo(wellnessApi.sortGuides(snap).filter((g) => !g.hidden)));
+        setFailed(false);
+        return;
+      }
       if (live) {
         setFailed(true);
         setPlaces((p) => p ?? withDemo([]));

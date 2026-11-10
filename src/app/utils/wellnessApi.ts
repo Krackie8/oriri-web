@@ -83,8 +83,10 @@ async function request<T>(
   try {
     const response = await fetch(`${BASE_URL}${path}`, {
       ...init,
+      // Only send Content-Type when there is a body. On a GET it adds a second
+      // header to the CORS preflight, and iPhone Safari dropped those GETs.
       headers: {
-        'Content-Type': 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         Authorization: `Bearer ${accessToken || publicAnonKey}`,
         ...(init.headers ?? {}),
       },
@@ -116,6 +118,17 @@ export const deleteEvent = (token: string | undefined, id: string) =>
 
 // ── Guides ───────────────────────────────────────────────────────────────────
 export const getGuides = () => request<WellnessGuide[]>('/wellness/guides', undefined, { cache: 'no-store' });
+/** Copy of the directory saved on oriri.me itself at deploy time. Used when the live list can't be reached. */
+export async function getGuidesSnapshot(): Promise<WellnessGuide[] | null> {
+  try {
+    const res = await fetch('/data/guides.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.data) ? (json.data as WellnessGuide[]) : null;
+  } catch {
+    return null;
+  }
+}
 export const createGuide = (token: string | undefined, guide: Omit<WellnessGuide, 'id'>) =>
   request<WellnessGuide>('/wellness/guides', token, { method: 'POST', body: JSON.stringify(guide) });
 export const updateGuide = (token: string | undefined, id: string, guide: Partial<WellnessGuide>) =>

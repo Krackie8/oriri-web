@@ -20,3 +20,4 @@ logs/
 /.plugins/
 /.opencode-skills/
 supabase/functions/make-server-a278ea32/
+public/data/
