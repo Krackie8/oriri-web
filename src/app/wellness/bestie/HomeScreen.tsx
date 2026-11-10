@@ -98,12 +98,12 @@ const BUILT_IN: Partial<Record<PillarName, Place[]>> = {
 
 /** Sample places, shown only with ?demo=1 so Ren can preview the layout before adding real ones. */
 const DEMO: Place[] = [
-  { id: 'demo-1', title: 'Sample Reformer Studio', category: 'Move', area: 'Al Quoz', price: 'From AED 120', link: 'https://example.com', pinned: true },
-  { id: 'demo-2', title: 'Sample Run Club', category: 'Move', area: 'Kite Beach', price: 'Free', instagram: '@example' },
-  { id: 'demo-3', title: 'Sample Matcha Café', category: 'Meal', area: 'Jumeirah', price: 'AED 40–80', link: 'https://example.com' },
-  { id: 'demo-4', title: 'Sample Salad Bar', category: 'Meal', area: 'DIFC', price: 'AED 50–90' },
-  { id: 'demo-5', title: 'Sample Book: Atomic Habits', category: 'Mindset', area: 'Book', link: 'https://example.com' },
-  { id: 'demo-6', title: 'Sample Sunrise Yoga Meetup', category: 'Meetup', area: 'Organiser · monthly', instagram: '@example' },
+  { id: 'demo-1', note: "Small classes and the instructors actually correct your form. Go for the 7am.", title: 'Sample Reformer Studio', category: 'Move', area: 'Al Quoz', price: 'From AED 120', link: 'https://example.com', pinned: true },
+  { id: 'demo-2', note: "Free, friendly and finishes with coffee. Perfect if you're new to running.", title: 'Sample Run Club', category: 'Move', area: 'Kite Beach', price: 'Free', instagram: '@example' },
+  { id: 'demo-3', note: "The best iced matcha in Dubai, and quiet enough to work from.", title: 'Sample Matcha Café', category: 'Meal', area: 'Jumeirah', price: 'AED 40–80', link: 'https://example.com' },
+  { id: 'demo-4', note: "Build-your-own bowls that keep me full all afternoon.", title: 'Sample Salad Bar', category: 'Meal', area: 'DIFC', price: 'AED 50–90' },
+  { id: 'demo-5', note: "Tiny habits, big change. Read one chapter a day.", title: 'Sample Book: Atomic Habits', category: 'Mindset', area: 'Book', link: 'https://example.com' },
+  { id: 'demo-6', note: "Sunrise flow on the beach, then breakfast together. Come alone, leave with friends.", title: 'Sample Sunrise Yoga Meetup', category: 'Meetup', area: 'Organiser · monthly', instagram: '@example' },
 ];
 const showDemo = () => {
   try {
@@ -139,9 +139,40 @@ const BOX: Record<PillarKey, 'move' | 'meal' | 'mindset' | 'meetups'> = { move: 
 const placeHref = (place: Place, pillar: PillarKey) =>
   place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : pillar === 'move' || pillar === 'meal' || place.maps ? mapUrl(place) : '';
 
-/** One name in a pillar list; tap goes straight to the place's website (or Instagram / map). */
+/** True on a mouse/trackpad device, where the note shows on hover. */
+const canHover = () => {
+  try {
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  } catch {
+    return false;
+  }
+};
+
+const visitLabel = (place: Place, pillar: PillarKey) =>
+  place.internal ? (pillar === 'mindset' ? 'Listen' : 'Join') : place.link ? 'Visit website' : place.instagram ? 'Open Instagram' : 'Open map';
+
+/**
+ * One name in a pillar list. Desktop: hover shows Ren's "why I like it" note, click opens the place.
+ * Phone: tap shows the note in a popup with a button to open the place (no note = straight through).
+ */
 function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
+  const [hover, setHover] = useState(false);
+  const [sheet, setSheet] = useState(false);
   const meta = [place.area, place.price].filter(Boolean).join(' · ');
+  const note = (place.note || '').trim();
+  const href = place.internal ? '' : placeHref(place, pillar);
+  const track = () => {
+    if (!place.internal) countPlaceClick(place.title);
+    cardClick(BOX[pillar], place.title);
+  };
+  const onTap = (e: React.MouseEvent) => {
+    if (note && !canHover()) {
+      e.preventDefault();
+      setSheet(true);
+      return;
+    }
+    track();
+  };
   const inner = (
     <>
       {place.pinned && <Pin aria-label="Top pick" className="h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.8} />}
@@ -153,31 +184,66 @@ function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
     </>
   );
   const cls = 'flex w-full items-center gap-3 py-3 text-left';
-  if (place.internal) {
-    return (
-      <li>
-        <Link to={withUtm(place.internal)} onClick={() => cardClick(BOX[pillar], place.title)} className={cls}>
+  const tipId = `note-${place.id}`;
+  const a11y = note ? { 'aria-describedby': tipId } : {};
+
+  const visit = (extra = '') =>
+    place.internal ? (
+      <Link to={withUtm(place.internal)} onClick={track} className={extra}>
+        {visitLabel(place, pillar)} <ArrowUpRight className="h-4 w-4" strokeWidth={1.6} />
+      </Link>
+    ) : href ? (
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={track} className={extra}>
+        {visitLabel(place, pillar)} <ArrowUpRight className="h-4 w-4" strokeWidth={1.6} />
+      </a>
+    ) : null;
+
+  return (
+    <li className="relative" onMouseEnter={() => note && canHover() && setHover(true)} onMouseLeave={() => setHover(false)}>
+      {place.internal ? (
+        <Link to={withUtm(place.internal)} onClick={onTap} onFocus={() => note && canHover() && setHover(true)} onBlur={() => setHover(false)} className={cls} {...a11y}>
           {inner}
         </Link>
-      </li>
-    );
-  }
-  const href = placeHref(place, pillar);
-  if (!href) return <li className={cls}>{inner}</li>;
-  return (
-    <li>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={() => {
-          countPlaceClick(place.title);
-          cardClick(BOX[pillar], place.title);
-        }}
-        className={cls}
-      >
-        {inner}
-      </a>
+      ) : href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" onClick={onTap} onFocus={() => note && canHover() && setHover(true)} onBlur={() => setHover(false)} className={cls} {...a11y}>
+          {inner}
+        </a>
+      ) : (
+        <button type="button" onClick={() => note && setSheet(true)} className={cls} {...a11y}>
+          {inner}
+        </button>
+      )}
+
+      {note && (
+        <div
+          id={tipId}
+          role="tooltip"
+          className={cx(
+            'pointer-events-none absolute inset-x-0 top-full z-20 -mt-1 rounded-[12px] bg-wb-ink px-4 py-3 text-[14px] leading-relaxed text-white shadow-[0_12px_30px_-12px_rgba(43,37,34,0.6)] transition-opacity duration-150',
+            hover ? 'opacity-100' : 'sr-only opacity-0',
+          )}
+        >
+          <span className="block text-[13px] uppercase tracking-[0.14em] text-white/60">Why I like it</span>
+          {note}
+        </div>
+      )}
+
+      {sheet && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setSheet(false)} role="dialog" aria-modal="true" aria-label={place.title}>
+          <div className="wb-rise mx-auto w-full max-w-[430px] rounded-t-[20px] bg-wb-shell px-6 pb-[max(env(safe-area-inset-bottom),24px)] pt-6" onClick={(e) => e.stopPropagation()}>
+            <p className="font-wb-serif text-[22px] font-medium uppercase leading-tight text-wb-ink">{place.title}</p>
+            {meta && <p className="mt-1 text-[14px] text-wb-taupe">{meta}</p>}
+            <p className="mt-4 text-[13px] uppercase tracking-[0.14em] text-wb-taupe">Why I like it</p>
+            <p className="mt-1 text-[16px] leading-relaxed text-wb-soft">{note}</p>
+            <div className="mt-6 flex gap-3">
+              {visit('inline-flex h-12 flex-1 items-center justify-center gap-1.5 rounded-full bg-wb-plum text-[14px] font-medium uppercase tracking-[0.1em] text-white')}
+              <button type="button" onClick={() => setSheet(false)} className="h-12 rounded-full border border-wb-plum/40 px-5 text-[14px] uppercase tracking-[0.1em] text-wb-plum">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -201,6 +267,7 @@ function Directory() {
     <section id="guide" className="scroll-mt-20 bg-wb-stone py-10">
       <Screen>
         <p className="text-center text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe">My favourites · free to explore</p>
+        <p className="mt-1 text-center text-[14px] text-wb-soft">Hover or tap a name to see why I love it.</p>
 
         <div role="tablist" aria-label="Pillar" className="mt-4 grid grid-cols-4 gap-2">
           {PILLAR_ORDER.map((n) => {
