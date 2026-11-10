@@ -17,26 +17,46 @@ import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
 import { flushPendingFreeDay } from './api';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
+import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
 /** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
 export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast'];
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
-const TITLES: Record<string, string> = {
-  '/': 'Wellness Bestie by ORIRI · Your wellness, curated for you',
-  '/plan': 'Plan my day · Wellness Bestie by ORIRI',
-  '/plan/inputs': 'Plan my day · Wellness Bestie by ORIRI',
-  '/plan/day': 'Your day, curated · Wellness Bestie by ORIRI',
-  '/membership': 'Membership · Wellness Bestie by ORIRI',
-  '/pilot': 'Join the waitlist · Wellness Bestie by ORIRI',
-  '/about': 'About ORIRI',
-  '/privacy': 'Privacy · ORIRI',
-  '/shop': 'Shop · ORIRI',
-  '/podcast': 'Tea for Two podcast · ORIRI',
-  '/bestie': 'Bestie community · ORIRI',
-  '/profile': 'Your profile · ORIRI',
-};
+type SeoPage = { title: string; description: string; index: boolean };
+const SEO_PAGES = seo.pages as Record<string, SeoPage>;
+
+/** Title, description, canonical and robots for the current page (same data the build bakes into each page's HTML). */
+function applySeo(path: string) {
+  const page = SEO_PAGES[path] || SEO_PAGES['/'];
+  const canonicalPath = SEO_PAGES[path] ? path : '/';
+  document.title = page.title;
+  const set = (selector: string, attr: string, value: string, create: () => HTMLElement) => {
+    let el = document.head.querySelector(selector);
+    if (!el) {
+      el = create();
+      document.head.appendChild(el);
+    }
+    el.setAttribute(attr, value);
+  };
+  const meta = (key: 'name' | 'property', name: string) => () => {
+    const m = document.createElement('meta');
+    m.setAttribute(key, name);
+    return m;
+  };
+  set('meta[name="description"]', 'content', page.description, meta('name', 'description'));
+  set('meta[property="og:title"]', 'content', page.title, meta('property', 'og:title'));
+  set('meta[property="og:description"]', 'content', page.description, meta('property', 'og:description'));
+  set('meta[property="og:url"]', 'content', seo.site + canonicalPath, meta('property', 'og:url'));
+  const staging = !/^(www\.)?oriri\.me$/i.test(window.location.hostname);
+  set('meta[name="robots"]', 'content', page.index && !staging ? 'index, follow' : 'noindex, follow', meta('name', 'robots'));
+  set('link[rel="canonical"]', 'href', seo.site + (canonicalPath === '/' ? '/' : canonicalPath), () => {
+    const l = document.createElement('link');
+    l.setAttribute('rel', 'canonical');
+    return l;
+  });
+}
 
 // Capture UTMs as early as possible, before any route change can drop them.
 if (typeof window !== 'undefined') captureAttribution();
@@ -74,7 +94,7 @@ export default function WellnessSite() {
   // page_view on every route change (GA4 is configured with send_page_view: false)
   useEffect(() => {
     const path = location.pathname.replace(/\/+$/, '') || '/';
-    document.title = TITLES[path] || TITLES['/'];
+    applySeo(path);
     if (!location.hash) {
       // The page scrolls on <body>, so reset every scroller, not just the window
       window.scrollTo(0, 0);
