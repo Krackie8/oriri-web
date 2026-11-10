@@ -8,6 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner@2.0.3';
 import { formSubmit } from '../wellness/analytics/track';
 import { getUtm } from '../wellness/analytics/utm';
+import { checkEmail } from '../utils/emailCheck';
 
 interface LoginScreenProps {
   onClose: () => void;
@@ -46,6 +47,9 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [loading, setLoading] = useState(false);
+  // A typo warning the visitor has seen once: submitting the same address again accepts it
+  const [warnedFor, setWarnedFor] = useState('');
+  const [suggestion, setSuggestion] = useState('');
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -55,10 +59,20 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
 
+    setSuggestion('');
     if (!email) {
       newErrors.email = 'Email is required';
-    } else if (!validateEmail(email)) {
+    } else if (!validateEmail(email.trim())) {
       newErrors.email = 'Invalid email address';
+    } else if (isSignUp) {
+      const c = checkEmail(email);
+      if (!c.ok && !(c.suggestion && warnedFor === c.email)) {
+        newErrors.email = c.suggestion ? `${c.error} Tap to fix, or continue if it's right.` : c.error || 'Please check your email address.';
+        if (c.suggestion) {
+          setSuggestion(c.suggestion);
+          setWarnedFor(c.email);
+        }
+      }
     }
 
     if (!password) {
@@ -83,7 +97,7 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
         if (isSignUp) {
           // Handle signup
           console.log('Attempting signup for:', email);
-          const { data, error } = await signUp(email, password);
+          const { data, error } = await signUp(email.trim().toLowerCase(), password);
           if (error) {
             console.error('Signup error:', error);
             toast.error(friendlySignupError(error.message));
@@ -98,7 +112,7 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
         } else {
           // Handle login
           console.log('Attempting login for:', email);
-          await onLogin(email, password);
+          await onLogin(email.trim().toLowerCase(), password);
         }
       } catch (error) {
         console.error('Auth failed:', error);
@@ -173,6 +187,19 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
             />
             {errors.email && (
               <p className="text-destructive text-sm mt-1">{errors.email}</p>
+            )}
+            {suggestion && errors.email && (
+              <button
+                type="button"
+                className="mt-1 text-sm underline underline-offset-4"
+                onClick={() => {
+                  setEmail(suggestion);
+                  setSuggestion('');
+                  setErrors((e) => ({ ...e, email: '' }));
+                }}
+              >
+                Use {suggestion}
+              </button>
             )}
           </div>
 

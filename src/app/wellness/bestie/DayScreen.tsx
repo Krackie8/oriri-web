@@ -9,6 +9,7 @@ import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked, usedEmails } from './state';
 import { submitFreeDay } from '../api';
+import { checkEmail } from '../../utils/emailCheck';
 import { ctaClick, formSubmit, track } from '../analytics/track';
 import { getUtm, withUtm } from '../analytics/utm';
 
@@ -27,7 +28,7 @@ export default function DayScreen() {
 
   const event = useTodayEvent();
 
-  if (!inputs || !plan) return <Navigate to={withUtm('/plan/inputs')} replace />;
+  if (!inputs || !plan || !inputs.area || !inputs.goals.length) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
   const unlocked = !!unlockedFor;
   const doneCount = Object.values(done).filter(Boolean).length;
@@ -328,13 +329,23 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [suggestion, setSuggestion] = useState('');
+  const [warnedFor, setWarnedFor] = useState('');
   const utm = getUtm();
   const inputs = loadInputs();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const em = normEmail(email);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) return setError('Please check your email address.');
+    const c = checkEmail(em);
+    setSuggestion('');
+    if (!c.ok && !(c.suggestion && warnedFor === em)) {
+      if (c.suggestion) {
+        setSuggestion(c.suggestion);
+        setWarnedFor(em);
+      }
+      return setError(c.error || 'Please check your email address.');
+    }
     if (!consent) return setError('Please tick the box to see your day.');
     setError('');
     if (usedEmails().includes(em)) return onUsed();
@@ -402,6 +413,22 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
         {error && (
           <p id="free-day-error" role="alert" className="mt-3 text-[14px] text-[#9A3F45]">
             {error}
+            {suggestion && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="font-medium underline underline-offset-4"
+                  onClick={() => {
+                    setEmail(suggestion);
+                    setSuggestion('');
+                    setError('');
+                  }}
+                >
+                  Use it
+                </button>
+              </>
+            )}
           </p>
         )}
         <PillButton type="submit" className="mt-5 w-full" disabled={sending} arrow={!sending}>

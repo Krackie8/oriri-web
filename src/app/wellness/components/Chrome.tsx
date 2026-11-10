@@ -6,7 +6,6 @@ import { withUtm } from '../analytics/utm';
 import { getConsent, onConsentChange, setConsent } from '../analytics/consent';
 import { SITE_CONFIG } from '../analytics/config';
 import { whatsappClick } from '../analytics/track';
-import { useAuth } from '../../hooks/useAuth';
 
 export function Wordmark({ className }: { className?: string }) {
   return (
@@ -18,20 +17,14 @@ export function Wordmark({ className }: { className?: string }) {
   );
 }
 
-/** White app header: centred wordmark, Log in / Profile pill on the right. */
+/** White app header: centred wordmark. Log in lives on the Profile tab at the bottom. */
 export function SiteHeader() {
-  const { isLoggedIn } = useAuth();
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-wb-sand/60 bg-wb-shell/95 backdrop-blur-xl">
       <div className="mx-auto grid h-16 max-w-[430px] grid-cols-[1fr_auto_1fr] items-center px-5">
         <span />
         <Wordmark />
-        <Link
-          to="/bestie"
-          className="justify-self-end rounded-full border border-wb-plum/50 px-4 py-1.5 text-[14px] font-medium uppercase tracking-[0.1em] text-wb-plum transition-colors hover:bg-wb-plum hover:text-white"
-        >
-          {isLoggedIn ? 'Profile' : 'Log in'}
-        </Link>
+        <span />
       </div>
     </header>
   );

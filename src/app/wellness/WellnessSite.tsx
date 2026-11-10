@@ -76,7 +76,12 @@ export default function WellnessSite() {
   useEffect(() => {
     const path = location.pathname.replace(/\/+$/, '') || '/';
     document.title = TITLES[path] || TITLES['/'];
-    if (!location.hash) window.scrollTo(0, 0);
+    if (!location.hash) {
+      // The page scrolls on <body>, so reset every scroller, not just the window
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    }
     trackPageView(document.title);
     countPageView(path); // cookieless first-party count for the admin Traffic tab
   }, [location.pathname, location.hash]);
