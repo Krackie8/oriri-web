@@ -10,7 +10,12 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteCond %{HTTP_HOST} ^oriri\.me$ [NC]
 RewriteRule ^ https://www.oriri.me%{REQUEST_URI} [L,R=301]
 
-# 3. Single-page app: any path that isn't a real file opens index.html
+# 3. Data relay: /api/fn/<path> goes to the Supabase function through api/fn.php
+#    (same site, so phones never make a cross-site request). Keep the login header.
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^api/fn/(.+)$ api/fn.php?p=$1 [QSA,L]
+
+# 4. Single-page app: any path that isn't a real file opens index.html
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
