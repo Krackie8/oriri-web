@@ -115,7 +115,7 @@ export const deleteEvent = (token: string | undefined, id: string) =>
   request<void>(`/wellness/events/${id}`, token, { method: 'DELETE' });
 
 // ── Guides ───────────────────────────────────────────────────────────────────
-export const getGuides = () => request<WellnessGuide[]>('/wellness/guides', undefined);
+export const getGuides = () => request<WellnessGuide[]>('/wellness/guides', undefined, { cache: 'no-store' });
 export const createGuide = (token: string | undefined, guide: Omit<WellnessGuide, 'id'>) =>
   request<WellnessGuide>('/wellness/guides', token, { method: 'POST', body: JSON.stringify(guide) });
 export const updateGuide = (token: string | undefined, id: string, guide: Partial<WellnessGuide>) =>
