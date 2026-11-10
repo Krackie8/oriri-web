@@ -50,7 +50,7 @@ export default function InputScreen() {
   return (
     <form onSubmit={submit}>
       <Screen className="pb-36">
-        <StepHeader back="/plan" step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
+        <StepHeader back="/" step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
 
         <Section n={1} title="Energy now">
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Energy now">
