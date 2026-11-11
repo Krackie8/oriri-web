@@ -22,5 +22,7 @@ jobs:
         run: |
           mkdir -p supabase/functions/$FUNCTION
           cp -r supabase/functions/server/. supabase/functions/$FUNCTION/
+          # The Supabase CLI now looks for index.ts; ours is index.tsx, so point to it.
+          [ -f supabase/functions/$FUNCTION/index.ts ] || echo "import './index.tsx';" > supabase/functions/$FUNCTION/index.ts
       - name: Deploy
         run: supabase functions deploy $FUNCTION --project-ref $PROJECT_REF --use-api --yes
