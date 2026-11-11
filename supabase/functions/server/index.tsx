@@ -8059,9 +8059,18 @@ for (const [kind, { prefix, fields }] of Object.entries(WELLNESS_KINDS)) {
 // SITE TRAFFIC: cookieless, first-party counts for the admin Traffic tab
 // ============================================================================
 // One small KV row per hit (stats:hit:<YYYY-MM-DD>:<id>) so concurrent writes
-// never overwrite each other. Finished days are rolled up into stats:day:<date>.
-const STAT_TYPES = new Set(['view', 'session', 'click']);
+// never overwrite each other. Finished days are rolled up into
+// stats:day2:<date>, split by site (prod www.oriri.me / staging new.oriri.me).
+// Hits saved before the site field existed have no `h`: before the launch day
+// (2026-11-11) only staging ran this code, so they count as staging; from the
+// launch day on they count as prod.
+const STAT_TYPES = new Set(['view', 'session', 'click', 'lead']);
+const STAT_SITES = new Set(['prod', 'staging', 'other']);
+const STAT_DEVICES = new Set(['mobile', 'desktop']);
+const PROD_LAUNCH_DATE = '2026-11-11';
+const SOURCE_ALIASES: Record<string, string> = { ig: 'instagram', insta: 'instagram', fb: 'facebook', wa: 'whatsapp', tt: 'tiktok', yt: 'youtube', twitter: 'x' };
 const statStr = (v: any, max = 120) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const statSource = (v: string) => SOURCE_ALIASES[v] || v;
 const dubaiDate = (d = new Date()) => new Date(d.getTime() + 4 * 3600 * 1000).toISOString().slice(0, 10);
 
 app.post('/make-server-a278ea32/wellness/track', async (c) => {
@@ -8069,7 +8078,16 @@ app.post('/make-server-a278ea32/wellness/track', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const t = statStr(body?.t, 10);
     if (!STAT_TYPES.has(t)) return c.json({ success: false, error: 'Bad event' }, 400);
-    const hit = { t, p: statStr(body?.p), s: statStr(body?.s, 40).toLowerCase(), k: statStr(body?.k) };
+    const h = statStr(body?.h, 10);
+    const d = statStr(body?.d, 10);
+    const hit = {
+      t,
+      p: statStr(body?.p),
+      s: statSource(statStr(body?.s, 40).toLowerCase()),
+      k: statStr(body?.k),
+      h: STAT_SITES.has(h) ? h : 'other',
+      ...(STAT_DEVICES.has(d) ? { d } : {}),
+    };
     await kv.set(`stats:hit:${dubaiDate()}:${Date.now().toString(36)}${crypto.randomUUID().slice(0, 6)}`, hit);
     return c.json({ success: true });
   } catch (error: any) {
@@ -8078,36 +8096,65 @@ app.post('/make-server-a278ea32/wellness/track', async (c) => {
   }
 });
 
-type DayStats = { date: string; views: number; sessions: number; clicks: number; pages: Record<string, number>; sources: Record<string, number>; places: Record<string, number> };
+type DayStats = {
+  date: string; views: number; sessions: number; clicks: number; leads: number;
+  pages: Record<string, number>; sources: Record<string, number>; places: Record<string, number>;
+  devices: Record<string, number>; forms: Record<string, number>; leadSources: Record<string, number>;
+};
+type DayRollup = { date: string; sites: Record<string, DayStats> };
 const bump = (o: Record<string, number>, k: string) => { if (k) o[k] = (o[k] || 0) + 1; };
+const emptyDay = (date: string): DayStats => ({ date, views: 0, sessions: 0, clicks: 0, leads: 0, pages: {}, sources: {}, places: {}, devices: {}, forms: {}, leadSources: {} });
 
-async function statsForDay(date: string, today: string): Promise<DayStats> {
+function addHit(day: DayStats, h: any) {
+  if (h.t === 'view') { day.views++; bump(day.pages, h.p); }
+  else if (h.t === 'session') { day.sessions++; bump(day.sources, statSource(h.s || 'direct')); if (h.d) bump(day.devices, h.d); }
+  else if (h.t === 'click') { day.clicks++; bump(day.places, h.k); }
+  else if (h.t === 'lead') { day.leads++; bump(day.forms, h.k); bump(day.leadSources, statSource(h.s || 'direct')); }
+}
+
+function mergeDays(date: string, days: DayStats[]): DayStats {
+  const out = emptyDay(date);
+  for (const d of days) {
+    out.views += d.views; out.sessions += d.sessions; out.clicks += d.clicks; out.leads += d.leads || 0;
+    for (const key of ['pages', 'sources', 'places', 'devices', 'forms', 'leadSources'] as const) {
+      for (const [k, v] of Object.entries(d[key] || {})) out[key][k] = (out[key][k] || 0) + (v as number);
+    }
+  }
+  return out;
+}
+
+async function rollupForDay(date: string, today: string): Promise<DayRollup> {
   if (date < today) {
-    const rolled = await kv.get(`stats:day:${date}`);
-    if (rolled) return rolled as DayStats;
+    const rolled = await kv.get(`stats:day2:${date}`);
+    if (rolled) return rolled as DayRollup;
   }
   const hits = ((await kv.getByPrefix(`stats:hit:${date}:`)) || []).filter(Boolean);
-  const day: DayStats = { date, views: 0, sessions: 0, clicks: 0, pages: {}, sources: {}, places: {} };
+  const sites: Record<string, DayStats> = { prod: emptyDay(date), staging: emptyDay(date), other: emptyDay(date) };
   for (const h of hits as any[]) {
-    if (h.t === 'view') { day.views++; bump(day.pages, h.p); }
-    else if (h.t === 'session') { day.sessions++; bump(day.sources, h.s || 'direct'); }
-    else if (h.t === 'click') { day.clicks++; bump(day.places, h.k); }
+    const site = h.h && sites[h.h] ? h.h : date < PROD_LAUNCH_DATE ? 'staging' : 'prod';
+    addHit(sites[site], h);
   }
-  if (date < today) await kv.set(`stats:day:${date}`, day);
+  const day = { date, sites };
+  if (date < today) await kv.set(`stats:day2:${date}`, day);
   return day;
 }
 
-// Admin: daily traffic for the last N days (Dubai time)
+// Admin: daily traffic for the last N days (Dubai time).
+// ?site=prod (default, the live site) | staging | all
 app.get('/make-server-a278ea32/wellness/stats', async (c) => {
   try {
     const auth = await wellnessAdmin(c);
     if (auth.error) return auth.error;
     const days = Math.min(Math.max(Number(c.req.query('days')) || 30, 1), 90);
+    const site = c.req.query('site') || 'prod';
     const today = dubaiDate();
     const dates: string[] = [];
     for (let i = days - 1; i >= 0; i--) dates.push(dubaiDate(new Date(Date.now() - i * 86400000)));
-    const data = await Promise.all(dates.map((d) => statsForDay(d, today)));
-    return c.json({ success: true, data });
+    const rollups = await Promise.all(dates.map((d) => rollupForDay(d, today)));
+    const data = rollups.map((r) =>
+      site === 'all' ? mergeDays(r.date, Object.values(r.sites)) : mergeDays(r.date, r.sites[site] ? [r.sites[site]] : []),
+    );
+    return c.json({ success: true, data, site });
   } catch (error: any) {
     console.error('[Stats] read failed:', error?.message);
     return c.json({ success: false, error: 'Failed to load traffic' }, 500);

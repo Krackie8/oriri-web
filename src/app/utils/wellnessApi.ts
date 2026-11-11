@@ -222,8 +222,17 @@ export interface DayStats {
   views: number;
   sessions: number;
   clicks: number;
+  /** Completed sign-up forms (newer server only). */
+  leads?: number;
   pages: Record<string, number>;
   sources: Record<string, number>;
   places: Record<string, number>;
+  devices?: Record<string, number>;
+  /** Leads by form name, e.g. free_day, pilot_application. */
+  forms?: Record<string, number>;
+  /** Leads by where the visit came from. */
+  leadSources?: Record<string, number>;
 }
-export const getStats = (token: string | undefined, days = 30) => request<DayStats[]>(`/wellness/stats?days=${days}`, token);
+export type StatsSite = 'prod' | 'staging' | 'all';
+export const getStats = (token: string | undefined, days = 30, site: StatsSite = 'prod') =>
+  request<DayStats[]>(`/wellness/stats?days=${days}&site=${site}`, token);
