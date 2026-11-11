@@ -251,7 +251,7 @@ function toItem(o: Option, dur: number, i: PlanInputs): PlanItem {
   if (v) {
     venue = v.chain ? `${v.name} · branch ${near(i.area)}` : `${v.name} · ${v.where}`;
     const map = v.chain ? links.maps(v.name, i.area) : links.maps(`${v.name} ${v.where?.split(' · ')[0] || ''}`);
-    itemLinks = [{ label: 'Open in Maps', url: map }, ...(v.url ? [{ label: 'Website', url: v.url }] : []), ...extra];
+    itemLinks = [{ label: 'Open in Maps', url: map }, ...extra]; // Maps only, no business websites (Ren's rule)
   } else if (o.search) {
     itemLinks = [{ label: o.range ? 'Find & book nearby' : 'Find one nearby', url: links.maps(o.search, i.area) }, ...extra];
   }
