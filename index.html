@@ -30,6 +30,44 @@
   </head>
   <body>
     <!-- figma:body-start -->
+    <div id="oriri-splash" aria-hidden="true">
+      <img src="/icon-512.png" alt="" width="112" height="112" />
+    </div>
+    <style>
+      #oriri-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #FAF8F5;
+        transition: opacity 0.45s ease;
+      }
+      #oriri-splash img {
+        width: 112px;
+        height: 112px;
+        animation: oriri-breathe 1.6s ease-in-out infinite;
+      }
+      #oriri-splash.is-leaving {
+        opacity: 0;
+        pointer-events: none;
+      }
+      @keyframes oriri-breathe {
+        0%, 100% { transform: scale(0.94); opacity: 0.75; }
+        50% { transform: scale(1); opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #oriri-splash img { animation: none; }
+      }
+    </style>
+    <script>
+      // Safety net: never leave the loading screen up if the app fails to start.
+      setTimeout(function () {
+        var s = document.getElementById('oriri-splash');
+        if (s) s.remove();
+      }, 8000);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- figma:body-end -->
