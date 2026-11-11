@@ -113,7 +113,7 @@ export function Noticed({ trial }: { trial?: boolean } = {}) {
       <p className="inline-flex items-center gap-1.5 text-[14px] font-medium uppercase tracking-[0.16em] text-wb-plum">
         <Sparkles className="h-4 w-4 text-wb-gold" strokeWidth={1.5} /> Bestie noticed
       </p>
-      {trial && <p className="mt-1 text-[14px] text-wb-taupe">Members: after a few days, Bestie learns your patterns, like this.</p>}
+      {trial && <p className="mt-1 text-[14px] text-wb-taupe">A sample from a member's first week: after about 7 days, Bestie spots patterns like this and plans around them.</p>}
       <p className="mt-3 font-wb-serif text-[20px] leading-snug text-wb-ink">
         You've picked a morning Move three times this week. Shall I keep Reformer as your Tuesday {time} ritual?
       </p>

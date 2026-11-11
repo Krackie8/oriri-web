@@ -32,6 +32,13 @@ export default function DayScreen() {
   const { isAdmin } = useAdmin();
 
   const event = useTodayEvent();
+  const [feel, setFeel] = useState<Record<string, Feel>>(() => loadFeel());
+  const rate = (id: string, f: Feel) => {
+    const next = { ...feel, [id]: f };
+    setFeel(next);
+    saveFeel(next);
+    track('plan_item_feel', { item: id, feel: f });
+  };
 
   if (!inputs || !plan || !inputs.area || !inputs.goals.length) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
@@ -104,6 +111,7 @@ export default function DayScreen() {
   return (
     <Screen className="pb-20">
       <PlannerHeader items={plan.items} done={done} onToggle={toggle} />
+      <LearnsYou inputs={inputs} />
       {chipRow}
       {isAdmin && !unlockedFor && <p className="mt-3 rounded-[12px] bg-wb-gold-soft/60 px-4 py-2 text-[14px] text-wb-soft">Admin preview: no email needed, nothing is saved.</p>}
 
@@ -130,7 +138,7 @@ export default function DayScreen() {
       <p className="mt-1 text-[15px] text-wb-soft">Do these in any order. Tap a place to open it in Maps.</p>
       <ul className="mt-4 space-y-3">
         {plan.items.map((item) => (
-          <PlanRow key={item.id} item={item} done={!!done[item.id]} onToggle={() => toggle(item.id)} />
+          <PlanRow key={item.id} item={item} done={!!done[item.id]} onToggle={() => toggle(item.id)} feel={feel[item.id]} onFeel={(f) => rate(item.id, f)} />
         ))}
       </ul>
 
@@ -380,7 +388,61 @@ function ActionLink({ link, onClick, solid }: { link: PlanLink; onClick?: () => 
   );
 }
 
-function PlanRow({ item, done, onToggle }: { item: PlanItem; done: boolean; onToggle: () => void }) {
+type Feel = 'loved' | 'ok' | 'skip';
+const FEEL_KEY = 'wb_plan_feel_v1';
+const FEELS: { key: Feel; label: string; note: string }[] = [
+  { key: 'loved', label: 'Loved it', note: 'Noted. Bestie would plan more like this.' },
+  { key: 'ok', label: 'It was fine', note: 'Noted. Bestie keeps it in the mix.' },
+  { key: 'skip', label: 'Not for me', note: 'Noted. Bestie would swap it next time.' },
+];
+function loadFeel(): Record<string, Feel> {
+  try {
+    return JSON.parse(localStorage.getItem(FEEL_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+function saveFeel(v: Record<string, Feel>) {
+  try {
+    localStorage.setItem(FEEL_KEY, JSON.stringify(v));
+  } catch {
+    /* private mode */
+  }
+}
+
+/** What a member's Bestie learns over the first weeks, starting from today's answers. */
+function LearnsYou({ inputs }: { inputs: { energy: string; goals: string[]; minutes: number; area: string } }) {
+  const goal = (inputs.goals[0] || 'feel good').toLowerCase();
+  const steps = [
+    { day: 'Today', text: `Planned around your ${inputs.energy.toLowerCase()} energy, ${describeTime(inputs.minutes)} and wanting to ${goal}.` },
+    { day: 'Day 3', text: 'Notices what you actually tick and what you skip, and how each one felt.' },
+    { day: 'Day 7', text: 'Plans your whole week around your patterns: your favourite studios, the times you really go, and when you need a rest day.' },
+    { day: 'Day 14', text: 'Matches you with a bestie nearby who loves the same class or café.' },
+  ];
+  return (
+    <Card as="section" className="mt-4 border-wb-gold/50 bg-wb-gold-soft/60 p-5" aria-labelledby="learns-title">
+      <p className="inline-flex items-center gap-1.5 text-[14px] font-medium uppercase tracking-[0.16em] text-wb-plum">
+        <Sparkles className="h-4 w-4 text-wb-gold" strokeWidth={1.5} /> A planner that learns you
+      </p>
+      <p id="learns-title" className="mt-2 font-wb-serif text-[20px] leading-snug text-wb-ink">
+        This is day 1. As a member, every tick teaches Bestie what works for you.
+      </p>
+      <ol className="mt-4 space-y-3">
+        {steps.map((s, i) => (
+          <li key={s.day} className="flex gap-3">
+            <span className={cx('mt-0.5 flex h-6 w-14 shrink-0 items-center justify-center rounded-full text-[12px] font-medium', i === 0 ? 'bg-wb-plum text-wb-paper' : 'border border-wb-plum/30 text-wb-plum')}>
+              {s.day}
+            </span>
+            <span className="text-[14px] leading-snug text-wb-soft">{s.text}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-4 text-[13px] text-wb-taupe">Try it: tick a pick when you've done it and tell Bestie how it felt.</p>
+    </Card>
+  );
+}
+
+function PlanRow({ item, done, onToggle, feel, onFeel }: { item: PlanItem; done: boolean; onToggle: () => void; feel?: Feel; onFeel: (f: Feel) => void }) {
   return (
     <Card as="li" className={cx('p-4 transition-colors', done && 'bg-wb-paper')}>
       <div className="flex gap-3.5">
@@ -426,6 +488,29 @@ function PlanRow({ item, done, onToggle }: { item: PlanItem; done: boolean; onTo
                 </li>
               ))}
             </ol>
+          )}
+          {done && (
+            <div className="mt-3 rounded-[14px] bg-wb-paper px-3 py-3">
+              <p className="text-[14px] text-wb-soft">How did it feel?</p>
+              <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={`How ${item.title} felt`}>
+                {FEELS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={feel === f.key}
+                    onClick={() => onFeel(f.key)}
+                    className={cx(
+                      'h-9 rounded-full border px-3.5 text-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
+                      feel === f.key ? 'border-wb-plum bg-wb-plum text-wb-paper' : 'border-wb-plum/25 text-wb-plum hover:border-wb-plum/60',
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {feel && <p className="mt-2 text-[13px] text-wb-taupe" role="status">{FEELS.find((f) => f.key === feel)?.note}</p>}
+            </div>
           )}
           {item.links.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
