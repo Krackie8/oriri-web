@@ -339,13 +339,5 @@ class ServiceWorkerManager {
 // Create singleton instance
 export const serviceWorkerManager = new ServiceWorkerManager();
 
-// Conditionally auto-register when imported
-if (typeof window !== 'undefined') {
-  // Wait for app to load before attempting registration
-  window.addEventListener('load', () => {
-    serviceWorkerManager.register().catch(error => {
-      // Silently fail - this is expected in development and preview environments
-      console.debug('[ServiceWorker] Auto-registration failed:', error.message);
-    });
-  });
-}
+// Auto-registration is off: /sw.js is now a clean-up worker that removes any
+// old service worker left by the previous (Figma-hosted) site.
