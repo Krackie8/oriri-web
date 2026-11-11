@@ -3,8 +3,8 @@
   "image": "/og-oriri.png",
   "pages": {
     "/": {
-      "title": "Wellness Bestie by ORIRI · Your wellness planner in Dubai",
-      "description": "Your wellness, curated for you. Bestie plans your day in Dubai: where to move, what to eat and who to meet, around your energy, time and budget. Try it free.",
+      "title": "Wellness Bestie by ORIRI · Your Wellness, Curated for You",
+      "description": "Your personal wellness planner. Bestie plans your day: where to move, what to eat and who to meet, around your energy, time and budget. Try it free.",
       "index": true,
       "h1": "Your wellness, curated for you",
       "text": ["Wellness Bestie by ORIRI is a wellness planner for women in Dubai that learns what works for you.", "My favourites, free to explore: fitness studios to move, healthy cafés and meals, mindset podcasts and books, and meetups with the Stepsisters community.", "Meet Bestie: Bestie curates where to move, what to eat and who to meet.", "How it works: 1. Check in: share your energy, the time you have and your budget. 2. Get your plan: Move, Meal, Mindset and Meet up picks that fit your day. 3. Tap and Track: tick what you've done and close your rings. Bestie learns what works for you.", "Try Bestie free for a day. No card, no app download."]
@@ -39,7 +39,7 @@
     },
     "/pilot": {
       "title": "Join the waitlist · Wellness Bestie by ORIRI",
-      "description": "Join the Wellness Bestie waitlist and be first to get a wellness planner in Dubai that learns what works for you.",
+      "description": "Join the Wellness Bestie waitlist and be first to get a wellness planner that learns what works for you.",
       "index": true,
       "h1": "Join the waitlist",
       "text": ["Be first to get Bestie membership: a wellness planner in Dubai that learns what works for you."]
