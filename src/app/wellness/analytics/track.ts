@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { getConsent, isDebug, trackersReady } from './consent';
 import { sourceLabel } from './utm';
+import { countLead } from './firstParty';
 
 type Params = Record<string, string | number | boolean | undefined>;
 
@@ -47,7 +48,10 @@ export const podcastPlayClick = (episode_title: string) => track('podcast_play_c
  * Any sign-up form. Mark `form_submit` as a Key Event in
  * GA4 → Admin → Events (or Key events → New key event → "form_submit").
  */
-export const formSubmit = (form_name: string, params: Params = {}) => track('form_submit', { form_name, ...params });
+export const formSubmit = (form_name: string, params: Params = {}) => {
+  countLead(form_name); // cookieless first-party lead count for the admin Traffic tab
+  track('form_submit', { form_name, ...params });
+};
 
 let outboundInstalled = false;
 /** One site-wide listener: every click on a link to another domain sends outbound_click. */

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { skipThisDevice } from '../wellness/analytics/firstParty';
 import { useAdmin } from '../contexts/AdminContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -164,6 +165,8 @@ function TopItemsList({ items, title, valuePrefix = '', valueSuffix = '' }: TopI
 }
 
 export default function AdminDashboard() {
+  // Ren's own visits on this device stop counting in the Traffic tab.
+  useEffect(() => skipThisDevice(), []);
   const {
     analytics,
     isLoading,
