@@ -2,6 +2,9 @@
 Options -Indexes
 RewriteEngine On
 
+# 0. Let SSL certificate checks (AutoSSL) through untouched
+RewriteRule ^\.well-known/ - [L]
+
 # 1. Always HTTPS
 RewriteCond %{HTTPS} !=on
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
