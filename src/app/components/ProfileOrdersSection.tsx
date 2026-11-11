@@ -15,6 +15,7 @@ import {
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { useCart } from '../contexts/CartContext';
+import OririLoader from './OririLoader';
 
 interface ProfileOrdersSectionProps {
   userId: string;
@@ -182,10 +183,7 @@ export default function ProfileOrdersSection({ userId }: ProfileOrdersSectionPro
 
       {/* Loading State */}
       {loading && (
-        <div className="text-center py-12">
-          <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-muted-foreground">Loading your orders...</p>
-        </div>
+        <OririLoader variant="inline" />
       )}
 
       {/* Error State */}

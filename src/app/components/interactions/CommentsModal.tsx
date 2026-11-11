@@ -8,6 +8,7 @@ import { toast } from 'sonner@2.0.3';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../utils/supabase/client';
+import OririLoader from '../OririLoader';
 
 interface Comment {
   id: string;
@@ -350,10 +351,7 @@ export function CommentsModal({ isOpen, onClose, episodeId, episodeTitle, onComm
         {/* Comments List */}
         <div className="flex-1 overflow-y-auto space-y-6 py-4">
           {loading ? (
-            <div className="text-center py-8">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading comments...</p>
-            </div>
+            <OririLoader variant="inline" />
           ) : comments.length === 0 ? (
             <div className="text-center py-8">
               <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
