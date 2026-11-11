@@ -91,3 +91,58 @@ export function stats(): Stats {
   }
   return { streak, weekDone, weekMoveMinutes, weekMindMinutes, daysThisWeek };
 }
+
+/** "Your week with Bestie": what the last 7 days on this device add up to. */
+export interface WeekRecap {
+  daysActive: number;
+  done: number;
+  moveMinutes: number;
+  mindMinutes: number;
+  /** The pick ticked most often. */
+  favourite?: string;
+  loved: string[];
+  notForMe: string[];
+  /** Picks planned but never ticked. */
+  skipped: string[];
+}
+
+export function weekRecap(): WeekRecap {
+  const log = read();
+  let feel: Record<string, string> = {};
+  try {
+    feel = JSON.parse(localStorage.getItem('wb_plan_feel_v1') || '{}');
+  } catch {
+    /* private mode */
+  }
+  const s = stats();
+  const count: Record<string, number> = {};
+  const titles: Record<string, string> = {};
+  const planned = new Set<string>();
+  const ticked = new Set<string>();
+  for (let i = 0; i < 7; i++) {
+    const x = new Date();
+    x.setDate(x.getDate() - i);
+    const day = log[dayKey(x)];
+    if (!day) continue;
+    for (const it of day.items) {
+      titles[it.id] = it.title;
+      if (it.id !== 'rest') planned.add(it.id);
+    }
+    for (const id of day.done) {
+      count[id] = (count[id] || 0) + 1;
+      ticked.add(id);
+    }
+  }
+  const favourite = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const byFeel = (f: string) => Object.entries(feel).filter(([id, v]) => v === f && titles[id]).map(([id]) => titles[id]);
+  return {
+    daysActive: s.daysThisWeek,
+    done: s.weekDone,
+    moveMinutes: s.weekMoveMinutes,
+    mindMinutes: s.weekMindMinutes,
+    favourite: favourite ? titles[favourite] : undefined,
+    loved: byFeel('loved'),
+    notForMe: byFeel('skip'),
+    skipped: [...planned].filter((id) => !ticked.has(id)).map((id) => titles[id]).slice(0, 2),
+  };
+}

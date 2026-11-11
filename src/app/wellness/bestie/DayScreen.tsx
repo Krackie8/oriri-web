@@ -1,11 +1,11 @@
 /** 4 · Free trial day: email first (one free day per email), then the whole day shows here. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Sparkles } from 'lucide-react';
+import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
 import { BestieSwipe, Noticed, greeting, week } from './MembershipScreen';
 import { saveToday, setDone as saveDone, stats as trackerStats } from './tracker';
 import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, cx } from './kit';
-import { buildPlan, describeTime, money, type PlanItem, type PlanLink } from './engine';
+import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, type PlanLink } from './engine';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked, usedEmails } from './state';
@@ -17,7 +17,24 @@ import { useAdmin } from '../../hooks/useAdmin';
 
 export default function DayScreen() {
   const inputs = useMemo(() => loadInputs(), []);
-  const plan = useMemo(() => (inputs ? buildPlan(inputs) : null), [inputs]);
+  // The plan, plus any swaps the visitor made this session
+  const [plan, setPlan] = useState<Plan | null>(() => (inputs ? loadSwapped(inputs) || buildPlan(inputs) : null));
+  const [swapNote, setSwapNote] = useState<{ id: string; text: string } | null>(null);
+  const swap = (id: string) => {
+    if (!inputs || !plan) return;
+    const skipped = loadSkipped();
+    const next = swapItem(inputs, plan, id, skipped);
+    if (!next) {
+      setSwapNote({ id, text: 'That’s the only pick that fits your time and budget right now.' });
+      return;
+    }
+    saveSkipped([...skipped, id]);
+    saveSwapped(inputs, next);
+    setPlan(next);
+    const added = next.items.find((x) => !plan.items.some((y) => y.id === x.id) && x.id !== 'rest');
+    setSwapNote(added ? { id: added.id, text: 'Swapped. As a member, Bestie remembers what you swap out.' } : null);
+    track('plan_item_swap', { from: id, to: added?.id || '' });
+  };
   const [done, setDone] = useState<Record<string, boolean>>({});
   // Restore today's ticks (Tap & track keeps progress on this device)
   useEffect(() => {
@@ -138,7 +155,16 @@ export default function DayScreen() {
       <p className="mt-1 text-[15px] text-wb-soft">Do these in any order. Tap a place to open it in Maps.</p>
       <ul className="mt-4 space-y-3">
         {plan.items.map((item) => (
-          <PlanRow key={item.id} item={item} done={!!done[item.id]} onToggle={() => toggle(item.id)} feel={feel[item.id]} onFeel={(f) => rate(item.id, f)} />
+          <PlanRow
+            key={item.id}
+            item={item}
+            done={!!done[item.id]}
+            onToggle={() => toggle(item.id)}
+            feel={feel[item.id]}
+            onFeel={(f) => rate(item.id, f)}
+            onSwap={item.id === 'rest' ? undefined : () => swap(item.id)}
+            note={swapNote?.id === item.id ? swapNote.text : undefined}
+          />
         ))}
       </ul>
 
@@ -388,6 +414,39 @@ function ActionLink({ link, onClick, solid }: { link: PlanLink; onClick?: () => 
   );
 }
 
+/* Swaps are kept for this visit only (sessionStorage), tied to the answers they were made for. */
+const SWAP_KEY = 'wb_plan_swapped_v1';
+const SKIP_KEY = 'wb_plan_skipped_v1';
+function loadSwapped(i: object): Plan | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(SWAP_KEY) || 'null');
+    return v && v.inputs === JSON.stringify(i) ? v.plan : null;
+  } catch {
+    return null;
+  }
+}
+function saveSwapped(i: object, plan: Plan) {
+  try {
+    sessionStorage.setItem(SWAP_KEY, JSON.stringify({ inputs: JSON.stringify(i), plan }));
+  } catch {
+    /* private mode */
+  }
+}
+function loadSkipped(): string[] {
+  try {
+    return JSON.parse(sessionStorage.getItem(SKIP_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+function saveSkipped(v: string[]) {
+  try {
+    sessionStorage.setItem(SKIP_KEY, JSON.stringify(v));
+  } catch {
+    /* private mode */
+  }
+}
+
 type Feel = 'loved' | 'ok' | 'skip';
 const FEEL_KEY = 'wb_plan_feel_v1';
 const FEELS: { key: Feel; label: string; note: string }[] = [
@@ -442,7 +501,23 @@ function LearnsYou({ inputs }: { inputs: { energy: string; goals: string[]; minu
   );
 }
 
-function PlanRow({ item, done, onToggle, feel, onFeel }: { item: PlanItem; done: boolean; onToggle: () => void; feel?: Feel; onFeel: (f: Feel) => void }) {
+function PlanRow({
+  item,
+  done,
+  onToggle,
+  feel,
+  onFeel,
+  onSwap,
+  note,
+}: {
+  item: PlanItem;
+  done: boolean;
+  onToggle: () => void;
+  feel?: Feel;
+  onFeel: (f: Feel) => void;
+  onSwap?: () => void;
+  note?: string;
+}) {
   return (
     <Card as="li" className={cx('p-4 transition-colors', done && 'bg-wb-paper')}>
       <div className="flex gap-3.5">
@@ -478,7 +553,16 @@ function PlanRow({ item, done, onToggle, feel, onFeel }: { item: PlanItem; done:
               <span>{item.venue}</span>
             </span>
           </p>
-          <p className="mt-2 text-[14px] leading-snug text-wb-taupe">{item.reason}</p>
+          {item.timing && (
+            <p className="mt-1.5 flex items-start gap-1 text-[14px] text-wb-soft">
+              <Sun className="mt-[3px] h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.6} />
+              <span>{item.timing}</span>
+            </p>
+          )}
+          <p className="mt-2 text-[14px] leading-snug text-wb-taupe">
+            <span className="font-medium text-wb-soft">Why this for you: </span>
+            {item.reason}
+          </p>
           {item.steps && (
             <ol className="mt-3 space-y-1.5 rounded-[14px] bg-wb-paper px-4 py-3">
               {item.steps.map((st, n) => (
@@ -518,6 +602,20 @@ function PlanRow({ item, done, onToggle, feel, onFeel }: { item: PlanItem; done:
                 <ActionLink key={l.url} link={l} solid={n === 0} onClick={() => track('plan_item_click', { pillar: item.pillar, title: item.title, action: l.label })} />
               ))}
             </div>
+          )}
+          {onSwap && !done && (
+            <button
+              type="button"
+              onClick={onSwap}
+              className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-full px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold"
+            >
+              <Shuffle className="h-4 w-4" strokeWidth={1.6} /> Not feeling it? Swap
+            </button>
+          )}
+          {note && (
+            <p className="mt-1 text-[13px] text-wb-taupe" role="status">
+              {note}
+            </p>
           )}
         </div>
       </div>
