@@ -12,6 +12,7 @@ import { submitFreeDay } from '../api';
 import { checkEmail } from '../../utils/emailCheck';
 import { ctaClick, formSubmit, track } from '../analytics/track';
 import { getUtm, withUtm } from '../analytics/utm';
+import { useAdmin } from '../../hooks/useAdmin';
 
 export default function DayScreen() {
   const inputs = useMemo(() => loadInputs(), []);
@@ -25,12 +26,15 @@ export default function DayScreen() {
   }, [plan, inputs]);
   const [unlockedFor, setUnlockedFor] = useState<string | null>(() => getUnlocked());
   const [gate, setGate] = useState<'form' | 'used'>('form');
+  const [usedEmail, setUsedEmail] = useState('');
+  // Admins (Ren) can preview any plan without using up a free day
+  const { isAdmin } = useAdmin();
 
   const event = useTodayEvent();
 
   if (!inputs || !plan || !inputs.area || !inputs.goals.length) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
-  const unlocked = !!unlockedFor;
+  const unlocked = !!unlockedFor || isAdmin;
   const doneCount = Object.values(done).filter(Boolean).length;
   const toggle = (id: string) => {
     const on = !done[id];
@@ -57,10 +61,25 @@ export default function DayScreen() {
   if (!unlocked) {
     return (
       <Screen className="pb-20">
-        <StepHeader back="/plan/inputs" step={2} total={2} title="Your day is ready." sub={`${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`} />
+        <StepHeader
+          back="/plan/inputs"
+          step={2}
+          total={2}
+          title={gate === 'used' ? 'You’ve had your free day.' : 'Your day is ready.'}
+          sub={gate === 'used' ? `${usedEmail || 'This email'} has already used its free day.` : `${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`}
+        />
         {chipRow}
         {gate === 'used' ? (
-          <MembershipPrompt />
+          <>
+            <MembershipPrompt />
+            <button
+              type="button"
+              onClick={() => setGate('form')}
+              className="mt-4 flex h-11 w-full items-center justify-center text-[15px] text-wb-plum underline underline-offset-4"
+            >
+              Use a different email
+            </button>
+          </>
         ) : (
           <EmailGate
             plan={plan.items}
@@ -69,7 +88,8 @@ export default function DayScreen() {
               setUnlockedFor(email);
               window.scrollTo({ top: 0 });
             }}
-            onUsed={() => {
+            onUsed={(email) => {
+              setUsedEmail(email);
               setGate('used');
               track('membership_prompt_view', { reason: 'second_free_day' });
             }}
@@ -84,6 +104,7 @@ export default function DayScreen() {
     <Screen className="pb-20">
       <StepHeader back="/plan/inputs" step={2} total={2} title="Your day, curated." sub="Do these in any order, whenever suits you." />
       {chipRow}
+      {isAdmin && !unlockedFor && <p className="mt-3 rounded-[12px] bg-wb-gold-soft/60 px-4 py-2 text-[14px] text-wb-soft">Admin preview: no email needed, nothing is saved.</p>}
 
       <Affirmation energy={inputs.energy} />
 
@@ -295,9 +316,9 @@ function PlanRow({ item, done, onToggle }: { item: PlanItem; done: boolean; onTo
               <Clock className="h-3.5 w-3.5" strokeWidth={1.6} />
               {item.minutes} min
             </span>
-            <span className="inline-flex min-w-0 items-center gap-1">
-              <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
-              <span className="truncate">{item.venue}</span>
+            <span className="inline-flex min-w-0 items-start gap-1">
+              <MapPin className="mt-[3px] h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
+              <span>{item.venue}</span>
             </span>
           </p>
           <p className="mt-2 text-[14px] leading-snug text-wb-taupe">{item.reason}</p>
@@ -324,7 +345,7 @@ function PlanRow({ item, done, onToggle }: { item: PlanItem; done: boolean; onTo
   );
 }
 
-function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: () => void }) {
+function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: (email: string) => void }) {
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -348,7 +369,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     }
     if (!consent) return setError('Please tick the box to see your day.');
     setError('');
-    if (usedEmails().includes(em)) return onUsed();
+    if (usedEmails().includes(em)) return onUsed(em);
 
     setSending(true);
     const r = await submitFreeDay({
@@ -360,7 +381,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     setSending(false);
     if (r.used) {
       markEmailUsed(em);
-      return onUsed();
+      return onUsed(em);
     }
     if (!r.ok) return setError(r.error || 'Something went wrong. Please try again.');
     markEmailUsed(em);
