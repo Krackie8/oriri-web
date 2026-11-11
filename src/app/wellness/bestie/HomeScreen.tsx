@@ -197,9 +197,14 @@ const mapUrl = (place: Place) =>
   place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} Dubai`)}`;
 const BOX: Record<PillarKey, 'move' | 'meal' | 'mindset' | 'meetups'> = { move: 'move', meal: 'meal', mindset: 'mindset', meetup: 'meetups' };
 
-/** Where a name goes when tapped: website first, then Instagram, then the map. */
+/**
+ * Where a name goes when tapped. Places (Move, Meal, Meetup) open Google Maps only,
+ * never the business's own website or Instagram, so visitors stay with ORIRI (Ren's rule).
+ * Mindset entries are episodes to listen to, not places, so they keep their link.
+ */
+const isMap = (pillar: PillarKey) => pillar !== 'mindset';
 const placeHref = (place: Place, pillar: PillarKey) =>
-  place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : pillar === 'move' || pillar === 'meal' || place.maps ? mapUrl(place) : '';
+  isMap(pillar) ? mapUrl(place) : place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : place.maps ? mapUrl(place) : '';
 
 /** True on a mouse/trackpad device, where the note shows on hover. */
 const canHover = () => {
@@ -211,7 +216,7 @@ const canHover = () => {
 };
 
 const visitLabel = (place: Place, pillar: PillarKey) =>
-  place.internal ? (pillar === 'mindset' ? 'Listen' : 'Join') : place.link ? 'Visit website' : place.instagram ? 'Open Instagram' : 'Open map';
+  place.internal ? (pillar === 'mindset' ? 'Listen' : 'Join') : isMap(pillar) ? 'Open in Maps' : place.link ? 'Listen' : place.instagram ? 'Open Instagram' : 'Open map';
 
 /**
  * One name in a pillar list. Desktop: hover shows Ren's "why I like it" note, click opens the place.
@@ -242,7 +247,11 @@ function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
         <span className="block truncate text-[16px] font-medium text-wb-ink">{place.title}</span>
         {meta && <span className="block truncate text-[14px] text-wb-taupe">{meta}</span>}
       </span>
-      <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      {!place.internal && isMap(pillar) ? (
+        <MapPin aria-label="Opens in Maps" className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      ) : (
+        <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      )}
     </>
   );
   const cls = 'flex w-full items-center gap-3 py-3 text-left';
