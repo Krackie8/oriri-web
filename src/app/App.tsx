@@ -20,6 +20,7 @@ import './utils/vipTestConsole';
 
 import { useAuthHandlers } from './hooks/useAuthHandlers';
 import { useAuth } from './hooks/useAuth';
+import OririLoader from './components/OririLoader';
 
 console.log('[App] Starting App component...');
 
@@ -72,12 +73,7 @@ function AppContent() {
   if (!isReady) {
     // This should never show since isReady starts as true
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
+      <OririLoader variant="screen" />
     );
   }
 
@@ -86,9 +82,7 @@ function AppContent() {
   // Guests on /profile get the Bestie sign-in / membership screen instead of a redirect home.
   if (isProfilePath && authLoading) {
     return (
-      <div className="min-h-screen bg-[#F7F3EE] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#4A2C3D] border-t-transparent rounded-full animate-spin" />
-      </div>
+      <OririLoader variant="screen" />
     );
   }
   if (isWellnessPath(location.pathname) || (isProfilePath && !isLoggedIn)) {
