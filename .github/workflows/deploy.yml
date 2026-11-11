@@ -31,6 +31,8 @@ jobs:
       - name: Save a copy of the directory for the site to serve itself
         run: node scripts/snapshot-guides.mjs
       - run: pnpm build
+        env:
+          SHARE_IMAGE_ORIGIN: ${{ (github.event.inputs.target || 'staging') == 'production' && 'https://www.oriri.me' || 'https://new.oriri.me' }}
       - name: Upload to cPanel over FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
