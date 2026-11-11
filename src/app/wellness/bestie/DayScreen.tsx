@@ -127,7 +127,7 @@ export default function DayScreen() {
 
   return (
     <Screen className="pb-20">
-      <PlannerHeader items={plan.items} done={done} onToggle={toggle} />
+      <PlannerHeader />
       <LearnsYou inputs={inputs} />
       {chipRow}
       {isAdmin && !unlockedFor && <p className="mt-3 rounded-[12px] bg-wb-gold-soft/60 px-4 py-2 text-[14px] text-wb-soft">Admin preview: no email needed, nothing is saved.</p>}
@@ -151,7 +151,7 @@ export default function DayScreen() {
         </div>
       </div>
 
-      <h2 className="mt-8 text-[24px] text-wb-ink">Today, in detail</h2>
+      <h2 className="mt-8 text-[24px] text-wb-ink">Today’s plan</h2>
       <p className="mt-1 text-[15px] text-wb-soft">Do these in any order. Tap a place to open it in Maps.</p>
       <ul className="mt-4 space-y-3">
         {plan.items.map((item) => (
@@ -183,7 +183,7 @@ export default function DayScreen() {
 }
 
 /** The member planner look (greeting, week strip, today's list), open for today only on the free trial. */
-function PlannerHeader({ items, done, onToggle }: { items: PlanItem[]; done: Record<string, boolean>; onToggle: (id: string) => void }) {
+function PlannerHeader() {
   const days = useMemo(week, []);
   const todayIdx = (new Date().getDay() + 6) % 7;
   const [day, setDay] = useState(todayIdx);
@@ -239,34 +239,7 @@ function PlannerHeader({ items, done, onToggle }: { items: PlanItem[]; done: Rec
             </button>
           </div>
         </Card>
-      ) : (
-        <Card className="mt-4 p-4">
-          <ul className="divide-y divide-wb-sand/80">
-            {items.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1">
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={!!done[t.id]}
-                  aria-label={`Mark ${t.title} as done`}
-                  onClick={() => onToggle(t.id)}
-                  className={cx(
-                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
-                    done[t.id] ? 'bg-wb-plum text-wb-paper' : 'bg-wb-paper text-wb-plum',
-                  )}
-                >
-                  {done[t.id] ? <Check className="h-4 w-4" strokeWidth={2.2} /> : <PillarIcon pillar={t.pillar} className="h-4 w-4" />}
-                </button>
-                <span className="min-w-0 flex-1">
-                  <span className={cx('block truncate text-[15px] text-wb-ink', done[t.id] && 'text-wb-taupe line-through')}>{t.title}</span>
-                  <span className="block truncate text-[13px] text-wb-taupe">{t.venue}</span>
-                </span>
-                <span className="shrink-0 text-[14px] text-wb-taupe">{t.minutes} min</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      ) : null}
     </div>
   );
 }
