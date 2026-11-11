@@ -5,12 +5,12 @@ import { Card, Chip, Eyebrow, GoldRule, Photo, PillButton, PillLink, PillarIcon,
 import type { PillarKey } from './picks';
 import { ctaClick, track } from '../analytics/track';
 
-const greeting = () => {
+export const greeting = () => {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 };
 
-function week() {
+export function week() {
   const now = new Date();
   const mon = new Date(now);
   mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -105,7 +105,7 @@ export default function MembershipScreen() {
 
 const ALT_TIMES = ['6:30 AM', '12:30 PM', '6:00 PM'];
 
-function Noticed() {
+export function Noticed({ trial }: { trial?: boolean } = {}) {
   const [state, setState] = useState<'ask' | 'change' | 'kept' | 'changed'>('ask');
   const [time, setTime] = useState('7:00 AM');
   return (
@@ -113,6 +113,7 @@ function Noticed() {
       <p className="inline-flex items-center gap-1.5 text-[14px] font-medium uppercase tracking-[0.16em] text-wb-plum">
         <Sparkles className="h-4 w-4 text-wb-gold" strokeWidth={1.5} /> Bestie noticed
       </p>
+      {trial && <p className="mt-1 text-[14px] text-wb-taupe">Members: after a few days, Bestie learns your patterns, like this.</p>}
       <p className="mt-3 font-wb-serif text-[20px] leading-snug text-wb-ink">
         You've picked a morning Move three times this week. Shall I keep Reformer as your Tuesday {time} ritual?
       </p>
@@ -171,7 +172,7 @@ function Noticed() {
 
 /* ── Meetup: swipe for a bestie ───────────────────────────────────────── */
 
-function BestieSwipe() {
+export function BestieSwipe() {
   const [idx, setIdx] = useState(0);
   const [dx, setDx] = useState(0);
   const [said, setSaid] = useState<string[]>([]);
