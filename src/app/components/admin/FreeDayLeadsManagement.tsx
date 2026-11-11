@@ -1,5 +1,5 @@
 /** Admin › Sign-ups: free trial leads (email given before the plan shows on /plan/day). */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -26,12 +26,20 @@ export default function FreeDayLeadsManagement() {
   const [rows, setRows] = useState<FreeDayLead[] | null>(null);
   const [error, setError] = useState('');
 
+  const latest = useRef(0);
   const load = useCallback(async () => {
+    // Admin-only list: wait for the sign-in to load, and ignore a slower,
+    // older answer so it can't overwrite the newest one with "Unauthorized".
+    if (!session?.access_token) return;
+    const id = ++latest.current;
     setRows(null);
     setError('');
-    const res = await wellnessApi.getFreeDayLeads(session?.access_token);
-    if (res.ok && res.data) setRows(res.data);
-    else {
+    const res = await wellnessApi.getFreeDayLeads(session.access_token);
+    if (id !== latest.current) return;
+    if (res.ok && res.data) {
+      setRows(res.data);
+      setError('');
+    } else {
       setRows([]);
       setError(res.error || 'Could not load free trial leads');
     }
