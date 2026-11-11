@@ -10,9 +10,9 @@ const PENDING_KEY = 'wb_pending_free_day';
 export interface FreeDayPayload {
   email: string;
   consent: boolean;
-  /** Waitlist fields: one sign-up unlocks the free day and joins the waitlist. */
-  instagram: string;
-  heard_from: string;
+  /** Optional waitlist extras (asked later, at account set-up). The sign-up itself is email + consent. */
+  instagram?: string;
+  heard_from?: string;
   inputs: { energy: string; goals: string[]; minutes: number; budget: number; area: string };
   /** `time` carries the duration, e.g. '45 min'. `url` is the follow-through link. */
   plan: { time: string; label: string; title: string; venue: string; cost: string; url: string }[];

@@ -11,7 +11,6 @@ import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked, usedEmails } from './state';
 import { submitFreeDay } from '../api';
 import { NO_MAIL_ERROR, checkEmail, domainAcceptsMail } from '../../utils/emailCheck';
-import { HEARD_FROM } from '../content';
 import { ctaClick, formSubmit, track } from '../analytics/track';
 import { getUtm, withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
@@ -91,7 +90,7 @@ export default function DayScreen() {
           back="/plan/inputs"
           step={2}
           total={2}
-          title={gate === 'used' ? 'You’ve had your free day.' : 'Your day is ready.'}
+          title={gate === 'used' ? 'You’ve had your free day.' : 'Almost there.'}
           sub={gate === 'used' ? `${usedEmail || 'This email'} has already used its free day.` : `${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`}
         />
         {chipRow}
@@ -595,11 +594,9 @@ function PlanRow({
   );
 }
 
-/** The one sign-up: joins the waitlist and opens the free day. Same fields as the old waitlist form's last step. */
+/** The one sign-up: email + consent joins the waitlist and opens the free day. Other details are asked later, at account set-up. */
 function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: (email: string) => void }) {
   const [email, setEmail] = useState('');
-  const [instagram, setInstagram] = useState('');
-  const [heard, setHeard] = useState('');
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -620,7 +617,6 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
       }
       return setError(c.error || 'Please check your email address.');
     }
-    if (!heard) return setError('Tell us how you heard about us.');
     if (!consent) return setError('Please tick the box to join and see your day.');
     setError('');
     if (usedEmails().includes(em)) return onUsed(em);
@@ -633,8 +629,6 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     const r = await submitFreeDay({
       email: em,
       consent: true,
-      instagram: instagram.replace(/^@/, ''),
-      heard_from: heard,
       inputs: { energy: inputs?.energy || '', goals: inputs?.goals || [], minutes: inputs?.minutes || 0, budget: inputs?.budget || 0, area: inputs?.area || '' },
       plan: plan.map((p) => ({ time: `${p.minutes} min`, label: p.label, title: p.title, venue: p.venue, cost: p.priceLabel, url: p.links[0]?.url || '' })),
     });
@@ -645,7 +639,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     }
     if (!r.ok) return setError(r.error || 'Something went wrong. Please try again.');
     markEmailUsed(em);
-    formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign, heard_from: heard.toLowerCase() });
+    formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
     formSubmit('pilot_application', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
     onUnlocked(em);
   };
@@ -656,10 +650,8 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
   return (
     <Card as="section" className="mt-6 p-6">
       <Sparkles className="h-5 w-5 text-wb-gold" strokeWidth={1.4} />
-      <h2 className="mt-3 text-[26px]">Join the waitlist to see your day</h2>
-      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">
-        One quick sign-up: your free day opens right here, and you’re on the Wellness Bestie waitlist to try the full planner first.
-      </p>
+      <h2 className="mt-3 text-[26px]">Your wellness 1 day trial is ready</h2>
+      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Pop in your email and join our waitlist to access Wellness Bestie.</p>
       <form onSubmit={submit} noValidate className="mt-5">
         <input type="hidden" name="utm_source" value={utm.utm_source || ''} />
         <input type="hidden" name="utm_medium" value={utm.utm_medium || ''} />
@@ -681,44 +673,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
           className={field}
         />
 
-        <label htmlFor="free-day-instagram" className="mt-4 block text-[14px] text-wb-taupe">
-          Instagram handle (optional)
-        </label>
-        <div className="relative">
-          <span className="pointer-events-none absolute left-5 top-1/2 mt-1 -translate-y-1/2 text-[16px] text-wb-taupe">@</span>
-          <input
-            id="free-day-instagram"
-            autoComplete="off"
-            autoCapitalize="none"
-            value={instagram}
-            onChange={(e) => setInstagram(e.target.value.replace(/[^A-Za-z0-9._]/g, '').slice(0, 30))}
-            placeholder="yourhandle"
-            className={cx(field, 'pl-10')}
-          />
-        </div>
-
-        <p id="free-day-heard" className="mt-4 text-[14px] text-wb-taupe">
-          How did you hear about us?
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="free-day-heard">
-          {HEARD_FROM.map((h) => (
-            <button
-              key={h}
-              type="button"
-              role="radio"
-              aria-checked={heard === h}
-              onClick={() => setHeard(h)}
-              className={cx(
-                'h-12 rounded-full border text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
-                heard === h ? 'border-wb-plum bg-wb-plum text-wb-paper' : 'border-wb-sand bg-wb-paper text-wb-ink hover:border-wb-plum/40',
-              )}
-            >
-              {h}
-            </button>
-          ))}
-        </div>
-
-        <label className="mt-5 flex cursor-pointer items-start gap-3">
+        <label className="mt-4 flex cursor-pointer items-start gap-3">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="peer sr-only" />
           <span
             aria-hidden
@@ -758,7 +713,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
           </p>
         )}
         <PillButton type="submit" className="mt-5 w-full" disabled={sending} arrow={!sending}>
-          {sending ? 'Opening…' : 'Join & show my day'}
+          {sending ? 'Opening…' : 'Join & see my day'}
         </PillButton>
         <p className="mt-3 text-center text-[14px] text-wb-taupe">One free day per email.</p>
       </form>

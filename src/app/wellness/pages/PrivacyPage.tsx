@@ -9,7 +9,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
       <>
         <p>
           <strong className="font-medium text-wb-ink">When you join the waitlist and get your free day</strong> (one sign-up does both): your email
-          address, Instagram handle (optional), how you heard about us, your consent, the answers you gave (energy, goals, time, budget, area)
+          address, your consent, the answers you gave (energy, goals, time, budget, area)
           and the plan we made, so we can keep it to one free day per email and email you about Wellness Bestie. We also attach where you came
           from (for example an Instagram or WhatsApp link, recorded as UTM tags), the page you first landed on, and the time you joined. If you
           joined through our earlier waitlist form, we also keep the first name, home area, age group and workouts you gave us then.
