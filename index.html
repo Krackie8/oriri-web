@@ -31,7 +31,7 @@
   <body>
     <!-- figma:body-start -->
     <div id="oriri-splash" aria-hidden="true">
-      <img src="/icon-512.png" alt="" width="112" height="112" />
+      <img src="/icon-512.png" alt="" width="128" height="128" />
     </div>
     <style>
       #oriri-splash {
@@ -45,17 +45,19 @@
         transition: opacity 0.45s ease;
       }
       #oriri-splash img {
-        width: 112px;
-        height: 112px;
-        animation: oriri-breathe 1.6s ease-in-out infinite;
+        width: 128px;
+        height: 128px;
+        animation: oriri-rise 1.3s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       #oriri-splash.is-leaving {
         opacity: 0;
         pointer-events: none;
       }
-      @keyframes oriri-breathe {
-        0%, 100% { transform: scale(0.94); opacity: 0.75; }
-        50% { transform: scale(1); opacity: 1; }
+      /* ORIRI = to rise: the O grows from small and rises into place */
+      @keyframes oriri-rise {
+        0% { transform: translateY(28px) scale(0.3); opacity: 0; }
+        60% { opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
       }
       @media (prefers-reduced-motion: reduce) {
         #oriri-splash img { animation: none; }
