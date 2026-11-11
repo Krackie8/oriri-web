@@ -6,7 +6,6 @@ import HomeScreen from './bestie/HomeScreen';
 import InputScreen from './bestie/InputScreen';
 import DayScreen from './bestie/DayScreen';
 import MembershipScreen from './bestie/MembershipScreen';
-import PilotPage from './pages/PilotPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ShopPage from './pages/ShopPage';
@@ -29,6 +28,12 @@ type SeoPage = { title: string; description: string; index: boolean };
 const SEO_PAGES = seo.pages as Record<string, SeoPage>;
 
 /** Title, description, canonical and robots for the current page (same data the build bakes into each page's HTML). */
+/** The old waitlist form. Joining now happens on the free day sign-up, so old links (with their UTMs) open the planner. */
+function JoinRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/plan/inputs${search}`} replace />;
+}
+
 function applySeo(path: string) {
   const page = SEO_PAGES[path] || SEO_PAGES['/'];
   const canonicalPath = SEO_PAGES[path] ? path : '/';
@@ -111,7 +116,7 @@ export default function WellnessSite() {
 
   const bannerOpen = cookieSettingsOpen || consent === null;
   // Screens with their own pinned button hide the tab bar
-  const showTabs = !['/plan/inputs', '/pilot'].includes(location.pathname.replace(/\/+$/, ''));
+  const showTabs = !['/plan/inputs'].includes(location.pathname.replace(/\/+$/, ''));
 
   return (
     <div className="wb-root wb-grain min-h-screen bg-wb-paper text-wb-ink">
@@ -127,7 +132,7 @@ export default function WellnessSite() {
           <Route path="/plan/day" element={<DayScreen />} />
           <Route path="/membership" element={<MembershipScreen />} />
           <Route path="/bestie" element={<BestiePage />} />
-          <Route path="/pilot" element={<PilotPage />} />
+          <Route path="/pilot" element={<JoinRedirect />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/podcast" element={<PodcastPage />} />

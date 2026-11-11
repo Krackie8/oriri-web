@@ -1,7 +1,7 @@
 /** Shop · coming soon. Later: ORIRI merch and curated affiliate picks. */
 import React from 'react';
 import { ShoppingBag } from 'lucide-react';
-import { Card, Eyebrow, GoldRule, PillLink, Screen } from '../bestie/kit';
+import { Card, Eyebrow, GoldRule, Screen, WaitlistLink } from '../bestie/kit';
 
 export default function ShopPage() {
   return (
@@ -20,9 +20,7 @@ export default function ShopPage() {
         <div>
           <h2 className="text-[22px]">Be first to know</h2>
           <p className="mt-2 text-[15px] leading-relaxed text-wb-soft">Join the waitlist and we'll tell you when the shop opens.</p>
-          <PillLink to="/pilot" className="mt-5" size="md">
-            Join the waitlist
-          </PillLink>
+          <WaitlistLink source="shop" className="mt-5" size="md" />
         </div>
       </Card>
     </Screen>

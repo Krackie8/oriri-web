@@ -2,8 +2,8 @@
 
 ## Scope
 - Marketing app lives in `src/app/wellness/` and renders standalone (no podcast header, tab bar, splash or onboarding).
-- Routes: `/` Homepage · `/plan` Options · `/plan/inputs` Input · `/plan/day` Curated day · `/membership` Membership preview · `/pilot` waitlist form · `/about` · `/privacy`.
-- Say "waitlist", never "founding". The waitlist form asks for email (never phone) plus an optional Instagram handle.
+- Routes: `/` Homepage · `/plan` Options · `/plan/inputs` Input · `/plan/day` Curated day · `/membership` Membership preview · `/about` · `/privacy`. `/pilot` (old waitlist form) redirects to `/plan/inputs` with its UTMs.
+- Say "waitlist", never "founding". ONE sign-up: the free day gate IS the waitlist form (email, optional Instagram handle, how they heard, consent; never phone). Every "Join the waitlist" button is `WaitlistLink` (kit.tsx): it opens the planner, or shows "You're on the waitlist" once this device has signed up.
 - Homepage order: hero "Your wellness plan, curated for you." → How it works (Check in · Get your planner · Tap & track) → Ren's picks directory (no times or prices; Meetup card holds Stepsisters + upcoming events) → plum band. No header CTA.
 - One shared bottom tab bar (`components/BottomTabBar.tsx`: Home `/`, Plan, Episodes, Shop, Profile) on the Wellness Bestie pages and the podcast-app pages. `/podcast` redirects to `/`. The podcast app uses the same ivory/plum/gold tokens (`src/styles/globals.css`) and Bodoni Moda display font.
 - Waitlist profile collects Move (workouts), Meal and Mindset tags; one shared tag is enough to match.
@@ -33,7 +33,9 @@
 - The last item is locked until the email gate.
 
 ## Free day + leads
-- One free day per email. Gate: email + consent → `POST /bestie/free-day` (KV `bestie:freeday:<email>`, Google Sheet tab "Free days", emails the plan, notifies account@oriri.me). 409 `used` → membership prompt. Also tracked on-device.
+- One free day per email. Gate = waitlist sign-up: email + Instagram + heard_from + consent → `POST /bestie/free-day` (KV `bestie:freeday:<email>`, Google Sheet tab "Free days", notifies account@oriri.me). 409 `used` → "already on the waitlist". Also tracked on-device.
+- Lead email checks: format, throwaway domains, and the domain must accept mail (MX lookup; `domainAcceptsMail` in `utils/emailCheck.ts` on the client, `leadEmailProblem` on the server). Lookups fail open.
+- Admin › Sign-ups › Wellness Bestie waitlist merges free day leads + old `/pilot` applications by email. Test leads (own email, example/test domains, "test" in the address, "+" copies, no mail server, or marked by hand via `/bestie/lead-flags`) are left out of the count.
 - No phone numbers on the free-day gate.
 
 ## Analytics
