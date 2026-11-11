@@ -12,9 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 
-// Branded ORIRI loading screen (in index.html): keep it up for at least 1.2s
+// Branded ORIRI loading screen (in index.html): keep it up for at least 1.8s (the O's rise animation plus a short hold)
 // from page start, then fade it out once the app has rendered.
-const SPLASH_MIN_MS = 1200
+const SPLASH_MIN_MS = 1800
 const splash = document.getElementById('oriri-splash')
 if (splash) {
   const wait = Math.max(0, SPLASH_MIN_MS - performance.now())
