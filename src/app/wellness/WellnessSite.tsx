@@ -13,6 +13,7 @@ import ShopPage from './pages/ShopPage';
 import PodcastPage from './pages/PodcastPage';
 import BestiePage from './pages/BestiePage';
 import GuestProfilePage from './pages/GuestProfilePage';
+import WeeklyRecap from './bestie/WeeklyRecap';
 import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
 import { flushPendingFreeDay } from './api';
@@ -143,6 +144,7 @@ export default function WellnessSite() {
           <BottomTabBar />
         </>
       )}
+      <WeeklyRecap />
       <CookieBanner forceOpen={cookieSettingsOpen} onClose={() => setCookieSettingsOpen(false)} />
     </div>
   );

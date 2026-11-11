@@ -48,6 +48,8 @@ export interface PlanItem {
   links: PlanLink[];
   /** Optional in-app guidance (e.g. journal prompts). */
   steps?: string[];
+  /** Best time of day, e.g. "Go after 6pm, when it cools down". */
+  timing?: string;
 }
 
 /**
@@ -81,6 +83,8 @@ interface Option {
   steps?: string[];
   /** Only offered when the visitor picked this goal. */
   requires?: Goal;
+  /** Outdoors: timed around the heat and sunset. */
+  outdoor?: boolean;
 }
 
 const near = (area: string) => (area && area !== 'Somewhere else' ? `near ${area}` : 'near you');
@@ -94,7 +98,7 @@ const OPTIONS: Option[] = [
   { key: 'matpilates', kind: 'workout', title: 'Mat Pilates flow', place: home('At home · follow-along video'), min: 15, max: 30, needs: 0, fit: { Steady: 3, High: 2 }, goals: ['Focus', 'Glow'],
     links: () => [{ label: 'Watch the video', url: links.youtube('Move With Nicole 20 minute mat pilates') }] },
   { key: 'runclub', kind: 'workout', title: 'Community run club', place: (a) => `Free group run ${near(a)}`, min: 45, max: 60, needs: 60, fit: { High: 4, Steady: 2 }, goals: ['Connect', 'Focus'],
-    links: () => [], search: 'free run club' },
+    links: () => [], search: 'free run club', outdoor: true },
   { key: 'hotclass', kind: 'workout', title: 'Hot workout class', place: (a) => `Heated studio ${near(a)}`, range: [90, 140], min: 45, max: 60, needs: 60, fit: { High: 5 }, goals: ['Glow', 'Focus'], search: 'hot yoga hot pilates studio' },
   { key: 'reformer', kind: 'workout', title: 'Reformer Pilates', place: (a) => `Reformer studio ${near(a)}`, range: [140, 200], min: 50, max: 55, needs: 60, fit: { Steady: 4, High: 3 }, goals: ['Glow', 'Focus'], search: 'reformer pilates studio' },
   { key: 'strength', kind: 'workout', title: 'Strength class', place: (a) => `Boutique gym ${near(a)}`, range: [100, 150], min: 45, max: 50, needs: 60, fit: { High: 5, Steady: 1 }, goals: ['Focus', 'Glow'], search: 'boutique gym strength class' },
@@ -102,7 +106,7 @@ const OPTIONS: Option[] = [
   // Move · gentle
   { key: 'stretch', kind: 'gentle', title: 'Gentle stretch & breathwork', place: home('At home · follow-along video'), min: 10, max: 30, needs: 0, fit: { Low: 4, Steady: 1 }, goals: ['Unwind', 'Recharge'],
     links: () => [{ label: 'Watch the video', url: links.youtube('Yoga With Adriene 20 minute stretch') }] },
-  { key: 'walk', kind: 'gentle', title: 'Sunset walk', place: (a) => `Beach path or park ${near(a)}`, min: 20, max: 45, needs: 45, fit: { Low: 4, Steady: 3, High: 1 }, goals: ['Unwind', 'Recharge', 'Connect'], search: 'park walking track' },
+  { key: 'walk', kind: 'gentle', title: 'Sunset walk', place: (a) => `Beach path or park ${near(a)}`, min: 20, max: 45, needs: 45, fit: { Low: 4, Steady: 3, High: 1 }, goals: ['Unwind', 'Recharge', 'Connect'], search: 'park walking track', outdoor: true },
   { key: 'yoga', kind: 'gentle', title: 'Yoga class', place: (a) => `Yoga studio ${near(a)}`, range: [80, 120], min: 60, max: 75, needs: 90, fit: { Low: 2, Steady: 4 }, goals: ['Unwind', 'Glow', 'Recharge', 'Connect'], search: 'yoga studio' },
   // Move · recovery
   { key: 'sauna', kind: 'recovery', title: 'Sauna & cold plunge', place: (a) => `Recovery studio ${near(a)}`, range: [100, 160], min: 45, max: 60, needs: 90, fit: { Low: 4, Steady: 3, High: 4 }, goals: ['Recharge', 'Unwind', 'Glow'], search: 'sauna cold plunge recovery' },
@@ -112,7 +116,7 @@ const OPTIONS: Option[] = [
   // Treats
   { key: 'manipedi', kind: 'treat', title: 'Mani-pedi', place: (a) => `Nail spa ${near(a)}`, range: [150, 250], min: 60, max: 75, needs: 180, fit: { Low: 4, Steady: 3, High: 3 }, goals: ['Glow', 'Unwind', 'Connect'], search: 'nail spa' },
   { key: 'bookshop', kind: 'treat', title: 'Browse a bookshop, bring one home', place: (a) => `Bookshop ${near(a)}`, range: [40, 70], min: 30, max: 45, needs: 120, fit: { Low: 3, Steady: 3, High: 2 }, goals: ['Focus', 'Unwind', 'Glow'], search: 'bookshop' },
-  { key: 'friendwalk', kind: 'treat', title: 'Walk-and-talk with a friend', place: (a) => `Beach path or park ${near(a)}`, min: 30, max: 45, needs: 120, fit: { Low: 2, Steady: 3, High: 3 }, goals: ['Connect'], requires: 'Connect', search: 'beach walk park' },
+  { key: 'friendwalk', kind: 'treat', title: 'Walk-and-talk with a friend', place: (a) => `Beach path or park ${near(a)}`, min: 30, max: 45, needs: 120, fit: { Low: 2, Steady: 3, High: 3 }, goals: ['Connect'], requires: 'Connect', search: 'beach walk park', outdoor: true },
 
   // Meal
   { key: 'fridge', kind: 'meal', title: '10-minute veggie omelette', place: home('Recipe · from your fridge'), min: 10, max: 15, needs: 0, fit: { Low: 3, Steady: 3, High: 3 }, goals: ['Recharge', 'Focus'],
@@ -186,9 +190,26 @@ function slotsFor(i: PlanInputs, M: number): Slot[] {
   return s;
 }
 
+/* ── Dubai-aware timing ──────────────────────────────────────────────────
+ * Approximate sunset by month, and the hot months when outdoor plans move to the evening.
+ */
+const SUNSET = ['6:00pm', '6:20pm', '6:30pm', '6:40pm', '6:55pm', '7:10pm', '7:10pm', '6:55pm', '6:30pm', '6:00pm', '5:35pm', '5:35pm'];
+const HOT_MONTHS = [4, 5, 6, 7, 8, 9]; // May to October (0 = January)
+let NOW = new Date();
+const isHot = () => HOT_MONTHS.includes(NOW.getMonth());
+
+function timingFor(o: Option): string | undefined {
+  const sunset = SUNSET[NOW.getMonth()];
+  if (o.outdoor) return isHot() ? `Go after ${sunset} sunset, when it cools down. Too hot before.` : `Lovely any time today. Sunset is around ${sunset}.`;
+  if (o.key === 'swim' && isHot()) return 'An indoor or shaded pool keeps this cool at midday.';
+  if ((o.kind === 'recovery' || o.kind === 'workout') && o.range && isHot()) return 'Indoors and air-conditioned, so any time works.';
+  return undefined;
+}
+
 function score(o: Option, i: PlanInputs, cap: number) {
   const fit = o.fit[i.energy] || 0;
   let s = fit * 3;
+  if (o.outdoor && isHot()) s -= 4; // in summer, prefer indoor picks
   for (const g of i.goals) if (o.goals.includes(g)) s += 3;
   s += o.needs / 120; // richer experience when time allows
   // They told us their budget: use it. A paid pick that fits beats a free one,
@@ -199,19 +220,25 @@ function score(o: Option, i: PlanInputs, cap: number) {
 
 const hash = (t: string) => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
+/** "Why this for you", written back in the visitor's own words. */
 function reasonFor(o: Option, i: PlanInputs, ren: boolean): string {
   const goal = i.goals.find((g) => o.goals.includes(g));
-  const fits = o.range ? `fits your ${money(i.budget)} budget` : "it's free";
-  const why: Partial<Record<Kind, string>> = {
-    recovery: 'Recovery counts as Move',
-    treat: 'A little treat for you',
-    meetup: 'Meet women who get it',
-    gentle: i.energy === 'Low' ? 'Gentle, for low energy' : 'A calmer way to move',
-    workout: i.energy === 'High' ? 'Uses your high energy' : 'A steady-paced workout',
+  const e = i.energy.toLowerCase();
+  const energyLine: Partial<Record<Kind, string>> = {
+    workout: i.energy === 'High' ? 'You said high energy, so this one makes you work.' : 'You said steady energy, so it’s a moderate pace, not a sweat-fest.',
+    gentle: i.energy === 'Low' ? 'You said low energy, so no HIIT today. Gentle still counts.' : `You said ${e} energy, so this keeps you moving without draining you.`,
+    recovery: i.energy === 'Low' ? 'You said low energy, so your body gets to recover. Recovery counts as Move.' : 'Recovery counts as Move, and it balances out the workout.',
+    treat: 'Your day has room for something just for you.',
+    meetup: 'You picked Connect, so here’s where to meet women who get it.',
+    meal: i.minutes >= 120 ? 'You have time to sit down and enjoy it.' : 'Quick, so it fits your time.',
+    snack: 'A pick-me-up between plans.',
+    mindset: i.energy === 'Low' ? 'Easy on a tired brain.' : 'Something for your mind, too.',
   };
-  const lead = why[o.kind] || (o.kind === 'meal' || o.kind === 'snack' ? 'Good food' : 'Feeds your mind');
-  const g = goal ? `, helps you ${goal.toLowerCase()}` : '';
-  return `${lead}${g}, and ${fits}.${ren ? ' One of Ren’s picks.' : ''}`;
+  const goalLine = goal
+    ? ({ Recharge: 'It helps you recharge.', Focus: 'It helps you focus.', Glow: 'Good for that glow.', Connect: 'Easy to do with a friend.', Unwind: 'It helps you unwind.' } as Record<Goal, string>)[goal]
+    : '';
+  const money_ = o.range ? (i.budget > 0 ? `${rangeLabel(o.range)}, inside your ${money(i.budget)}.` : '') : i.budget === 0 ? 'Free, as you asked.' : 'Free.';
+  return [energyLine[o.kind], goalLine, money_, ren ? 'One of Ren’s picks.' : ''].filter(Boolean).join(' ');
 }
 
 function toItem(o: Option, dur: number, i: PlanInputs): PlanItem {
@@ -240,6 +267,7 @@ function toItem(o: Option, dur: number, i: PlanInputs): PlanItem {
     minutes: dur,
     links: itemLinks,
     steps: o.steps,
+    timing: timingFor(o),
   };
 }
 
@@ -256,7 +284,15 @@ const REST = (min: number): PlanItem => ({
   links: [],
 });
 
-export function buildPlan(i: PlanInputs): { items: PlanItem[]; total: number; totalLabel: string; minutes: number } {
+export interface Plan {
+  items: PlanItem[];
+  total: number;
+  totalLabel: string;
+  minutes: number;
+}
+
+export function buildPlan(i: PlanInputs, now = new Date()): Plan {
+  NOW = now;
   const M = Math.max(30, i.minutes);
   const budget = Math.max(0, i.budget);
   const slots = slotsFor(i, M);
@@ -316,6 +352,62 @@ export function buildPlan(i: PlanInputs): { items: PlanItem[]; total: number; to
     totalLabel: hi ? rangeLabel([lo, hi]) : 'Free',
     minutes: items.reduce((s, x) => s + x.minutes, 0),
   };
+}
+
+function summarise(items: PlanItem[]): Plan {
+  const ranges = items.map((x) => OPTIONS.find((o) => o.key === x.id)?.range).filter(Boolean) as [number, number][];
+  const lo = ranges.reduce((s, r) => s + r[0], 0);
+  const hi = ranges.reduce((s, r) => s + r[1], 0);
+  return { items, total: items.reduce((s, x) => s + x.cost, 0), totalLabel: hi ? rangeLabel([lo, hi]) : 'Free', minutes: items.reduce((s, x) => s + x.minutes, 0) };
+}
+
+const SWAP_KINDS: Record<Kind, Kind[]> = {
+  workout: ['workout', 'gentle'],
+  gentle: ['gentle', 'workout', 'recovery'],
+  recovery: ['recovery', 'gentle'],
+  treat: ['treat'],
+  meal: ['meal'],
+  snack: ['snack'],
+  mindset: ['mindset'],
+  meetup: ['meetup'],
+};
+
+/**
+ * "Not feeling it?": replace one pick with the next best option of the same kind that
+ * still fits the time and budget. Time it frees up goes to rest. `skipped` keeps
+ * earlier swaps out so the visitor sees something new each tap. Returns null when
+ * there's nothing else that fits.
+ */
+export function swapItem(i: PlanInputs, plan: Plan, id: string, skipped: string[] = [], now = new Date()): Plan | null {
+  NOW = now;
+  const cur = OPTIONS.find((o) => o.key === id);
+  const idx = plan.items.findIndex((x) => x.id === id);
+  if (!cur || idx < 0) return null;
+  const item = plan.items[idx];
+  const rest = plan.items.find((x) => x.id === 'rest');
+  const room = item.minutes + (rest?.minutes || 0);
+  const spentElse = plan.items.reduce((s, x) => s + (x.id === id ? 0 : OPTIONS.find((o) => o.key === x.id)?.range?.[1] || 0), 0);
+  const cap = Math.max(0, i.budget) - spentElse;
+  const used = new Set(plan.items.map((x) => x.id));
+  const pool = OPTIONS.filter(
+    (o) =>
+      SWAP_KINDS[cur.kind].includes(o.kind) &&
+      !used.has(o.key) &&
+      !skipped.includes(o.key) &&
+      (o.fit[i.energy] || 0) > 0 &&
+      (!o.requires || i.goals.includes(o.requires)) &&
+      o.needs <= i.minutes &&
+      o.min <= room &&
+      maxOf(o) <= cap,
+  ).sort((a, b) => (b.kind === cur.kind ? 1 : 0) - (a.kind === cur.kind ? 1 : 0) || score(b, i, cap) - score(a, i, cap));
+  const next = pool[0];
+  if (!next) return null;
+  const dur = Math.min(next.max, Math.max(next.min, item.minutes));
+  const items = plan.items.filter((x) => x.id !== 'rest');
+  items[items.findIndex((x) => x.id === id)] = toItem(next, dur, i);
+  const free = item.minutes + (rest?.minutes || 0) - dur;
+  if (free > 0) items.push(REST(free));
+  return summarise(items);
 }
 
 export const describeTime = (m: number) =>

@@ -1,5 +1,5 @@
 /** 5 · Membership preview: greeting, week strip, "Bestie noticed", Meetup swipe, waitlist CTA. */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Check, Heart, HeartHandshake, MapPin, Sparkles, X } from 'lucide-react';
 import { Card, Chip, Eyebrow, GoldRule, Photo, PillButton, PillLink, PillarIcon, Screen, cx } from './kit';
 import type { PillarKey } from './picks';
@@ -21,12 +21,6 @@ export function week() {
   });
 }
 
-const TODAY: { pillar: PillarKey; time: string; title: string }[] = [
-  { pillar: 'move', time: '50 min', title: 'Reformer Pilates' },
-  { pillar: 'meal', time: '10 min', title: 'Protein overnight oats' },
-  { pillar: 'mindset', time: '30 min', title: 'Tea for Two, new episode' },
-  { pillar: 'meetup', time: 'Today', title: 'Stepsisters sunset walk' },
-];
 
 /** Sample profiles for the preview. Real members replace these at launch. */
 export const PROFILES = [
@@ -35,52 +29,33 @@ export const PROFILES = [
   { name: 'Maya', age: 35, area: 'Jumeirah', interests: ['Yoga', 'Sunset walks', 'Books'], photo: '1552699611-e2c208d5d9cf', handle: 'maya', likesYou: true },
 ];
 
-export default function MembershipScreen() {
-  const days = useMemo(week, []);
-  const todayIdx = (new Date().getDay() + 6) % 7;
-  const [day, setDay] = useState(todayIdx);
+const MEMBER_PERKS: { pillar: PillarKey; title: string; text: string }[] = [
+  { pillar: 'move', title: 'Every day planned', text: 'Not just one free day: Bestie plans your whole week around your energy, time and budget.' },
+  { pillar: 'mindset', title: 'Learns your patterns', text: 'Every tick, swap and "loved it" teaches Bestie what works for you.' },
+  { pillar: 'meal', title: 'Your week, recapped', text: 'Each week Bestie shows what you did, what you loved, and how next week will change.' },
+  { pillar: 'meetup', title: 'Swipe for a bestie', text: 'Meet women nearby with the same class or café in their plan.' },
+];
 
+export default function MembershipScreen() {
   return (
     <Screen className="pb-20 pt-24">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-wb-gold/70 px-3 py-1 text-[14px] text-wb-plum">
         <Sparkles className="h-3.5 w-3.5 text-wb-gold" strokeWidth={1.5} /> Membership preview
       </span>
-      <h1 className="mt-5 text-[36px] leading-[1.08] text-wb-ink">{greeting()}.</h1>
-      <p className="mt-2 text-[16px] text-wb-soft">Here's your week, planned around you.</p>
+      <h1 className="mt-5 text-[36px] leading-[1.08] text-wb-ink">Bestie, every day.</h1>
+      <p className="mt-2 text-[16px] text-wb-soft">Everything in your free day, plus a planner that learns you.</p>
 
-      {/* Week strip */}
-      <div className="mt-6 grid grid-cols-7 gap-1" role="tablist" aria-label="This week">
-        {days.map((d, i) => {
-          const on = i === day;
-          return (
-            <button
-              key={i}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => setDay(i)}
-              className={cx(
-                'flex h-[72px] flex-col items-center justify-center gap-1 rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
-                on ? 'bg-wb-plum text-wb-paper' : 'text-wb-soft hover:bg-wb-stone',
-              )}
-            >
-              <span className="text-[14px]">{d.toLocaleDateString('en-GB', { weekday: 'narrow' })}</span>
-              <span className={cx('text-[16px] font-medium', !on && i === todayIdx && 'text-wb-plum')}>{d.getDate()}</span>
-              <span className={cx('h-1 w-1 rounded-full', on ? 'bg-wb-gold' : i < 5 ? 'bg-wb-plum/40' : 'bg-transparent')} />
-            </button>
-          );
-        })}
-      </div>
-
-      <Card className="mt-4 p-4">
+      <Card className="mt-6 p-4">
         <ul className="divide-y divide-wb-sand/80">
-          {TODAY.map((t) => (
-            <li key={t.title} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1">
+          {MEMBER_PERKS.map((t) => (
+            <li key={t.title} className="flex items-start gap-3 py-3 first:pt-1 last:pb-1">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wb-paper text-wb-plum">
                 <PillarIcon pillar={t.pillar} className="h-4 w-4" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-[15px] text-wb-ink">{t.title}</span>
-              <span className="shrink-0 text-[14px] text-wb-taupe">{t.time}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-medium text-wb-ink">{t.title}</span>
+                <span className="block text-[14px] leading-snug text-wb-soft">{t.text}</span>
+              </span>
             </li>
           ))}
         </ul>
