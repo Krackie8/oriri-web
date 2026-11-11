@@ -212,6 +212,17 @@ export const getPlanSignups = (token?: string) => request<PlanSignup[]>('/plan/s
 export type FreeDayLead = Record<string, string>;
 export const getFreeDayLeads = (token?: string) => request<FreeDayLead[]>('/bestie/free-days', token);
 
+/** Admin: leads marked as tests (or as real, overriding the automatic guess). */
+export interface LeadFlag {
+  email: string;
+  test: boolean;
+  at?: string;
+}
+export const getLeadFlags = (token?: string) => request<LeadFlag[]>('/bestie/lead-flags', token);
+/** test: null clears the flag (back to the automatic guess). */
+export const setLeadFlag = (token: string | undefined, email: string, test: boolean | null) =>
+  request<unknown>('/bestie/lead-flags', token, { method: 'POST', body: JSON.stringify({ email, test }) });
+
 // Wellness Bestie founding pilot applications (admin)
 export type PilotApplication = Record<string, string>;
 export const getPilotApplications = (token?: string) => request<PilotApplication[]>('/pilot/applications', token);

@@ -8225,11 +8225,62 @@ ${plan.length ? `<table style="width:100%;border-collapse:collapse;font-family:A
   }
 });
 
-// ── Wellness Bestie: free trial day. The visitor sees the plan on the site straight away;
-// we keep the lead (one free day per email) and notify the team. No email to the visitor.
+// ── Lead email check: format, throwaway inboxes, and a real mail server ──
+// Stops made-up addresses like "rrrr@g.com" (no such domain) or "x@example.com"
+// (domain takes no mail). If DNS can't answer, the lead is let through.
+const LEAD_EMAIL_FORMAT = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+const LEAD_DISPOSABLE = new Set([
+  'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'sharklasers.com', 'grr.la', '10minutemail.com', '10minutemail.net',
+  'tempmail.com', 'temp-mail.org', 'temp-mail.io', 'tempmail.net', 'tempmailo.com', 'tempr.email', 'yopmail.com', 'yopmail.net',
+  'trashmail.com', 'trashmail.de', 'getnada.com', 'nada.email', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com',
+  'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'mintemail.com', 'mailnesia.com', 'mytemp.email', 'spamgourmet.com',
+  'burnermail.io', 'moakt.com', 'tmail.ws', 'tmpmail.org', 'tmpmail.net', 'discard.email', 'inboxkitten.com', 'mailpoof.com',
+  'example.com', 'example.org', 'example.net', 'test.com', 'test.org',
+]);
+const LEAD_MAIL_OK = new Set(['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'live.com', 'me.com', 'msn.com', 'aol.com', 'protonmail.com', 'proton.me', 'googlemail.com']);
+const leadDomainCache = new Map<string, boolean>();
+
+async function leadDomainTakesMail(domain: string): Promise<boolean> {
+  if (LEAD_MAIL_OK.has(domain)) return true;
+  if (leadDomainCache.has(domain)) return leadDomainCache.get(domain)!;
+  const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
+  const missing = (e: any) => e?.name === 'NotFound' || /no record|not found|NXDOMAIN/i.test(String(e?.message || ''));
+  let ok = true;
+  try {
+    const mx = await withTimeout(Deno.resolveDns(domain, 'MX'));
+    // "0 ." (null MX) means the domain says it takes no mail
+    ok = mx.some((r) => r.exchange && r.exchange !== '.');
+  } catch (e) {
+    if (!missing(e)) return true; // DNS trouble: don't block a real person
+    try {
+      const a = await withTimeout(Deno.resolveDns(domain, 'A'));
+      ok = a.length > 0; // no MX record: mail goes to the domain itself
+    } catch (e2) {
+      if (!missing(e2)) return true;
+      ok = false;
+    }
+  }
+  leadDomainCache.set(domain, ok);
+  return ok;
+}
+
+/** Returns an error message for a bad lead email, or '' when it looks real. */
+async function leadEmailProblem(email: string): Promise<string> {
+  if (!email || email.length > 160 || !LEAD_EMAIL_FORMAT.test(email) || email.includes('..')) return 'Please check your email address.';
+  const domain = email.split('@')[1];
+  if (LEAD_DISPOSABLE.has(domain)) return 'Please use your own email address, not a temporary one.';
+  if (!(await leadDomainTakesMail(domain))) return 'That email address can’t receive mail. Please check it.';
+  return '';
+}
+
+// ── Wellness Bestie: free trial day = waitlist sign-up. One form (email, Instagram,
+// how they heard, consent) unlocks the free day on the site AND joins the waitlist.
+// We keep the lead (one free day per email) and notify the team. No email to the visitor.
+// New columns go at the end so the Google Sheet's existing columns don't shift.
 const FREEDAY_COLUMNS = [
   'submitted_at', 'email', 'energy', 'goals', 'minutes', 'budget', 'area', 'plan', 'wb_source',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'landing_page', 'referrer', 'page_url',
+  'instagram', 'heard_from', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign',
 ];
 
 app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
@@ -8237,7 +8288,8 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
     const email = clip(body.email, 160).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
     if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
 
     const key = `bestie:freeday:${email}`;
@@ -8260,8 +8312,11 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
       plan: plan.map((r: any) => `${r.time} ${r.label}: ${r.title}`).join(' | '),
       consent: 'yes',
       wb_source: clip(body.wb_source, 30) || 'direct',
+      instagram: clip(body.instagram, 30).replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, ''),
+      heard_from: clip(body.heard_from, 20),
+      waitlist: 'yes',
     };
-    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) record[k] = clip(body[k], 100);
+    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign']) record[k] = clip(body[k], 100);
     for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
     await kv.set(key, record);
 
@@ -8273,7 +8328,7 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
         body: JSON.stringify({ sheet: 'Free days', columns: FREEDAY_COLUMNS, row: FREEDAY_COLUMNS.map((k) => record[k] ?? ''), record }),
       }).catch((e) => console.log('Free day sheet forward failed:', e?.message));
     }
-    sendMail(SMTP.notify, `New free day: ${email} (${record.wb_source})`,
+    sendMail(SMTP.notify, `New waitlist + free day: ${email} (${record.wb_source})`,
       FREEDAY_COLUMNS.map((k) => `${k}: ${record[k] ?? ''}`).join('\n'),
       `<table style="font-family:Arial,sans-serif;font-size:14px">${FREEDAY_COLUMNS.map((k) => `<tr><td style="color:#76636D;padding:3px 12px 3px 0">${k}</td><td>${esc(record[k])}</td></tr>`).join('')}</table>`,
     ).catch((e) => console.log('Free day notify failed:', e?.message));
@@ -8298,6 +8353,35 @@ app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
   }
 });
 
+
+// Admin: mark leads as tests so they drop out of the waitlist count.
+// kv bestie:leadflag:<email> = { email, test: boolean, at }. test:false = "real" (overrides auto-guess).
+app.get('/make-server-a278ea32/bestie/lead-flags', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('bestie:leadflag:')) || []).filter(Boolean);
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load lead flags' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/lead-flags', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const body = await c.req.json().catch(() => ({}));
+    const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+    if (!email.includes('@')) return c.json({ success: false, error: 'Missing email' }, 400);
+    const key = `bestie:leadflag:${email}`;
+    if (body.test === null) await kv.del(key);
+    else await kv.set(key, { email, test: body.test === true, at: new Date().toISOString() });
+    return c.json({ success: true });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to save' }, 500);
+  }
+});
 
 // Admin: list Plan my day sign-ups
 app.get('/make-server-a278ea32/plan/signups', async (c) => {
@@ -8426,7 +8510,8 @@ app.post('/make-server-a278ea32/curate/lead', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
     const email = clip(body.email, 160).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const record: Record<string, string> = { id, type: 'curate_lead', received_at: new Date().toISOString(), email };
@@ -8467,7 +8552,8 @@ app.post('/make-server-a278ea32/pilot/apply', async (c) => {
     const email = clip(body.email, 160).toLowerCase();
     const instagram = clip(body.instagram, 30).replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, '');
     if (!first_name) return c.json({ success: false, error: 'Please add your first name.' }, 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
     if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

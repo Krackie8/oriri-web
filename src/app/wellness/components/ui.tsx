@@ -65,7 +65,7 @@ export function Eyebrow({ children, className }: { children: React.ReactNode; cl
   return <p className={cx('text-[14px] font-medium uppercase tracking-[0.18em] text-wb-taupe', className)}>{children}</p>;
 }
 
-/** The one primary CTA. Always lands on /pilot with UTMs preserved. */
+/** The one primary CTA. Opens the free day planner (its sign-up is the waitlist), UTMs preserved. */
 export function PilotCta({
   location,
   label = 'Join the waitlist',
@@ -81,7 +81,7 @@ export function PilotCta({
 }) {
   return (
     <Link
-      to={withUtm('/pilot')}
+      to={withUtm('/plan/inputs')}
       onClick={() => ctaClick(label, location)}
       data-cta-location={location}
       className={cx(

@@ -1,9 +1,9 @@
 /** 5 · Membership preview: greeting, week strip, "Bestie noticed", Meetup swipe, waitlist CTA. */
 import React, { useRef, useState } from 'react';
 import { Check, Heart, HeartHandshake, MapPin, Sparkles, X } from 'lucide-react';
-import { Card, Chip, Eyebrow, GoldRule, Photo, PillButton, PillLink, PillarIcon, Screen, cx } from './kit';
+import { Card, Chip, Eyebrow, GoldRule, Photo, PillButton, PillarIcon, Screen, WaitlistLink, cx } from './kit';
 import type { PillarKey } from './picks';
-import { ctaClick, track } from '../analytics/track';
+import { track } from '../analytics/track';
 
 export const greeting = () => {
   const h = new Date().getHours();
@@ -68,9 +68,7 @@ export default function MembershipScreen() {
         <GoldRule />
         <h2 className="mt-4 text-[28px] text-wb-paper">Join the waitlist</h2>
         <p className="mt-2 text-[15px] leading-relaxed text-wb-paper/85">Be first to try Bestie every day, with priority places at Stepsisters events.</p>
-        <PillLink to="/pilot" tone="ivory" className="mt-6 w-full" onClick={() => ctaClick('Join the waitlist', 'membership')}>
-          Join the waitlist
-        </PillLink>
+        <WaitlistLink source="membership" tone="ivory" className="mt-6 w-full" />
       </section>
     </Screen>
   );

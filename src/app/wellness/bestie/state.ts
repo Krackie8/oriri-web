@@ -60,3 +60,12 @@ export function setUnlocked(email: string) {
     /* private mode */
   }
 }
+
+/**
+ * One sign-up does both: getting the free day puts you on the waitlist.
+ * True once this device has signed up with any email.
+ */
+export const onWaitlist = () => usedEmails().length > 0;
+
+/** Where every "Join the waitlist" button goes: the free day planner, whose sign-up is the waitlist. */
+export const JOIN_PATH = '/plan/inputs';

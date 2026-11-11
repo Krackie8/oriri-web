@@ -61,8 +61,7 @@ import WellnessGuideManagement from './admin/WellnessGuideManagement';
 import TrafficDashboard from './admin/TrafficDashboard';
 import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
-import FreeDayLeadsManagement from './admin/FreeDayLeadsManagement';
-import PilotApplicationsManagement from './admin/PilotApplicationsManagement';
+import WaitlistLeadsManagement from './admin/WaitlistLeadsManagement';
 import VipManagement from './admin/VipManagement';
 import PlatformConfig from './admin/PlatformConfig';
 import LiveSessionScheduler from './admin/LiveSessionScheduler';
@@ -1006,8 +1005,7 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="plan" className="space-y-6">
-          <FreeDayLeadsManagement />
-          <PilotApplicationsManagement />
+          <WaitlistLeadsManagement />
           <PlanSignupsManagement source="nourish" />
         </TabsContent>
 

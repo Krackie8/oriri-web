@@ -10,7 +10,7 @@ const DISPOSABLE = new Set([
   'trashmail.com', 'trashmail.de', 'getnada.com', 'nada.email', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com',
   'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'mintemail.com', 'mailnesia.com', 'mytemp.email', 'spamgourmet.com',
   'burnermail.io', 'moakt.com', 'tmail.ws', 'tmpmail.org', 'tmpmail.net', 'discard.email', 'inboxkitten.com', 'mailpoof.com',
-  'example.com', 'test.com',
+  'example.com', 'example.org', 'example.net', 'test.com', 'test.org',
 ]);
 
 const FORMAT = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
@@ -40,7 +40,8 @@ export function checkEmail(raw: string): EmailCheck {
   if (email.length > 160 || !FORMAT.test(email) || email.includes('..')) return { ok: false, email, error: 'Please check your email address.' };
   const [local, domain] = email.split('@');
   if (DISPOSABLE.has(domain)) return { ok: false, email, error: 'Please use your own email address, not a temporary one.' };
-  if (!POPULAR.includes(domain)) {
+  // Very short names (g.com) are too far from any real provider to guess; the mail-server check handles them.
+  if (!POPULAR.includes(domain) && domain.split('.')[0].length >= 3) {
     let best = '';
     let bestD = 3;
     for (const p of POPULAR) {
@@ -60,3 +61,44 @@ export function checkEmail(raw: string): EmailCheck {
   }
   return { ok: true, email };
 }
+
+const domainCache = new Map<string, boolean>();
+
+/**
+ * Does this email's domain accept mail? Looks up its mail server (MX) over
+ * DNS-over-HTTPS. Made-up domains like "g.com" or "example.com" fail. If the
+ * lookup itself can't be done (offline, slow), it answers true so a real
+ * visitor is never blocked by our check. The server checks again.
+ */
+export async function domainAcceptsMail(email: string): Promise<boolean> {
+  const domain = email.trim().toLowerCase().split('@')[1] || '';
+  if (!domain) return false;
+  if (POPULAR.includes(domain)) return true;
+  if (domainCache.has(domain)) return domainCache.get(domain)!;
+  const ask = async (type: 'MX' | 'A') => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    try {
+      const r = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=${type}`, { signal: ctrl.signal });
+      return (await r.json()) as { Status: number; Answer?: { type: number; data: string }[] };
+    } finally {
+      clearTimeout(t);
+    }
+  };
+  try {
+    const mx = await ask('MX');
+    let ok: boolean;
+    if (mx.Status === 3) ok = false; // domain doesn't exist
+    else {
+      const rows = (mx.Answer || []).filter((a) => a.type === 15);
+      if (rows.length) ok = !rows.every((a) => /^\d+\s+\.?$/.test(a.data.trim())); // "0 ." = domain says it takes no mail
+      else ok = ((await ask('A')).Answer || []).some((a) => a.type === 1); // no MX: mail goes to the domain itself
+    }
+    domainCache.set(domain, ok);
+    return ok;
+  } catch {
+    return true;
+  }
+}
+
+export const NO_MAIL_ERROR = 'That email address can’t receive mail. Please check it.';

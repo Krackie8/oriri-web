@@ -3,65 +3,16 @@ import { getAttribution, sourceLabel } from './analytics/utm';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a278ea32`;
 
-export interface PilotAnswers {
-  first_name: string;
-  home_area: string;
-  age_group: string;
-  workouts: string[];
-  meal_prefs: string[];
-  mindset_prefs: string[];
-  email: string;
-  /** Optional, without @. Used to connect bestie matches on Instagram. */
-  instagram: string;
-  heard_from: string;
-  consent: boolean;
-}
-
-/**
- * Sends one application. Hidden fields (UTMs, landing page, referrer,
- * source label, timestamp) are attached here so every row carries its source.
- * The server stores it (Admin → Sign-ups) and forwards it to the Google Sheet.
- */
-export async function submitPilotApplication(answers: PilotAnswers): Promise<{ ok: boolean; error?: string }> {
-  const a = getAttribution();
-  const payload = {
-    ...answers,
-    utm_source: a.utm_source || '',
-    utm_medium: a.utm_medium || '',
-    utm_campaign: a.utm_campaign || '',
-    utm_content: a.utm_content || '',
-    utm_term: a.utm_term || '',
-    landing_page: a.landing_page,
-    referrer: a.referrer,
-    first_touch_source: a.first_touch_source,
-    first_touch_medium: a.first_touch_medium,
-    first_touch_campaign: a.first_touch_campaign,
-    wb_source: sourceLabel(a),
-    submitted_at: new Date().toISOString(),
-    page_url: window.location.href,
-  };
-
-  try {
-    const res = await fetch(`${BASE_URL}/pilot/apply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.success) return { ok: false, error: json.error || 'Something went wrong. Please try again.' };
-    return { ok: true };
-  } catch {
-    return { ok: false, error: 'You seem to be offline. Please check your connection and try again.' };
-  }
-}
-
-// ── Free 1-day plan (one per email) ─────────────────────────────────────────
+// ── Free 1-day plan + waitlist (one sign-up does both; one free day per email) ──
 
 const PENDING_KEY = 'wb_pending_free_day';
 
 export interface FreeDayPayload {
   email: string;
   consent: boolean;
+  /** Waitlist fields: one sign-up unlocks the free day and joins the waitlist. */
+  instagram: string;
+  heard_from: string;
   inputs: { energy: string; goals: string[]; minutes: number; budget: number; area: string };
   /** `time` carries the duration, e.g. '45 min'. `url` is the follow-through link. */
   plan: { time: string; label: string; title: string; venue: string; cost: string; url: string }[];
@@ -95,6 +46,9 @@ export async function submitFreeDay(p: FreeDayPayload): Promise<{ ok: boolean; u
     utm_term: a.utm_term || '',
     landing_page: a.landing_page,
     referrer: a.referrer,
+    first_touch_source: a.first_touch_source,
+    first_touch_medium: a.first_touch_medium,
+    first_touch_campaign: a.first_touch_campaign,
     wb_source: sourceLabel(a),
     submitted_at: new Date().toISOString(),
     page_url: window.location.href,

@@ -4,13 +4,14 @@ import { Link, Navigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
 import { BestieSwipe, Noticed, greeting, week } from './MembershipScreen';
 import { saveToday, setDone as saveDone, stats as trackerStats } from './tracker';
-import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, cx } from './kit';
+import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, WaitlistLink, cx } from './kit';
 import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, type PlanLink } from './engine';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked, usedEmails } from './state';
 import { submitFreeDay } from '../api';
-import { checkEmail } from '../../utils/emailCheck';
+import { NO_MAIL_ERROR, checkEmail, domainAcceptsMail } from '../../utils/emailCheck';
+import { HEARD_FROM } from '../content';
 import { ctaClick, formSubmit, track } from '../analytics/track';
 import { getUtm, withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
@@ -175,7 +176,7 @@ export default function DayScreen() {
       <Noticed trial />
       <BestieSwipe />
 
-      <MembershipPrompt title="Want this every day?" />
+      <MembershipPrompt after />
 
       <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
     </Screen>
@@ -231,9 +232,7 @@ function PlannerHeader() {
           <p className="mt-2 font-wb-serif text-[20px] text-wb-ink">{days[day].toLocaleDateString('en-GB', { weekday: 'long' })} is for members</p>
           <p className="mt-1 text-[15px] text-wb-soft">Your free trial plans today. Members get every day planned, and Bestie learns what works for you.</p>
           <div className="mt-4 flex flex-col items-center gap-1">
-            <PillLink to="/pilot" className="w-full" onClick={() => ctaClick('Join the waitlist', 'trial_locked_day')}>
-              Join the waitlist
-            </PillLink>
+            <WaitlistLink source="trial_locked_day" className="w-full" />
             <button type="button" onClick={() => setDay(todayIdx)} className="flex h-11 items-center text-[15px] text-wb-plum underline underline-offset-4">
               Back to today
             </button>
@@ -596,8 +595,11 @@ function PlanRow({
   );
 }
 
+/** The one sign-up: joins the waitlist and opens the free day. Same fields as the old waitlist form's last step. */
 function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: (email: string) => void }) {
   const [email, setEmail] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [heard, setHeard] = useState('');
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -618,14 +620,21 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
       }
       return setError(c.error || 'Please check your email address.');
     }
-    if (!consent) return setError('Please tick the box to see your day.');
+    if (!heard) return setError('Tell us how you heard about us.');
+    if (!consent) return setError('Please tick the box to join and see your day.');
     setError('');
     if (usedEmails().includes(em)) return onUsed(em);
 
     setSending(true);
+    if (!(await domainAcceptsMail(em))) {
+      setSending(false);
+      return setError(NO_MAIL_ERROR);
+    }
     const r = await submitFreeDay({
       email: em,
       consent: true,
+      instagram: instagram.replace(/^@/, ''),
+      heard_from: heard,
       inputs: { energy: inputs?.energy || '', goals: inputs?.goals || [], minutes: inputs?.minutes || 0, budget: inputs?.budget || 0, area: inputs?.area || '' },
       plan: plan.map((p) => ({ time: `${p.minutes} min`, label: p.label, title: p.title, venue: p.venue, cost: p.priceLabel, url: p.links[0]?.url || '' })),
     });
@@ -636,15 +645,21 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     }
     if (!r.ok) return setError(r.error || 'Something went wrong. Please try again.');
     markEmailUsed(em);
-    formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
+    formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign, heard_from: heard.toLowerCase() });
+    formSubmit('pilot_application', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
     onUnlocked(em);
   };
+
+  const field =
+    'mt-2 h-14 w-full rounded-full border border-wb-sand bg-wb-paper px-5 text-[16px] text-wb-ink outline-none transition-colors placeholder:text-wb-taupe/70 focus:border-wb-plum';
 
   return (
     <Card as="section" className="mt-6 p-6">
       <Sparkles className="h-5 w-5 text-wb-gold" strokeWidth={1.4} />
-      <h2 className="mt-3 text-[26px]">See your day</h2>
-      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Pop in your email and your curated day opens right here, with every link. One free day per email.</p>
+      <h2 className="mt-3 text-[26px]">Join the waitlist to see your day</h2>
+      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">
+        One quick sign-up: your free day opens right here, and you’re on the Wellness Bestie waitlist to try the full planner first.
+      </p>
       <form onSubmit={submit} noValidate className="mt-5">
         <input type="hidden" name="utm_source" value={utm.utm_source || ''} />
         <input type="hidden" name="utm_medium" value={utm.utm_medium || ''} />
@@ -657,14 +672,53 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
           type="email"
           inputMode="email"
           autoComplete="email"
+          maxLength={160}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@email.com"
-          aria-invalid={!!error}
+          aria-invalid={!!error && !checkEmail(email).ok}
           aria-describedby={error ? 'free-day-error' : undefined}
-          className="mt-2 h-14 w-full rounded-full border border-wb-sand bg-wb-paper px-5 text-[16px] text-wb-ink outline-none transition-colors placeholder:text-wb-taupe/70 focus:border-wb-plum"
+          className={field}
         />
-        <label className="mt-4 flex cursor-pointer items-start gap-3">
+
+        <label htmlFor="free-day-instagram" className="mt-4 block text-[14px] text-wb-taupe">
+          Instagram handle (optional)
+        </label>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-5 top-1/2 mt-1 -translate-y-1/2 text-[16px] text-wb-taupe">@</span>
+          <input
+            id="free-day-instagram"
+            autoComplete="off"
+            autoCapitalize="none"
+            value={instagram}
+            onChange={(e) => setInstagram(e.target.value.replace(/[^A-Za-z0-9._]/g, '').slice(0, 30))}
+            placeholder="yourhandle"
+            className={cx(field, 'pl-10')}
+          />
+        </div>
+
+        <p id="free-day-heard" className="mt-4 text-[14px] text-wb-taupe">
+          How did you hear about us?
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="free-day-heard">
+          {HEARD_FROM.map((h) => (
+            <button
+              key={h}
+              type="button"
+              role="radio"
+              aria-checked={heard === h}
+              onClick={() => setHeard(h)}
+              className={cx(
+                'h-12 rounded-full border text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
+                heard === h ? 'border-wb-plum bg-wb-plum text-wb-paper' : 'border-wb-sand bg-wb-paper text-wb-ink hover:border-wb-plum/40',
+              )}
+            >
+              {h}
+            </button>
+          ))}
+        </div>
+
+        <label className="mt-5 flex cursor-pointer items-start gap-3">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="peer sr-only" />
           <span
             aria-hidden
@@ -676,7 +730,7 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
             {consent && <Check className="h-4 w-4" strokeWidth={2.2} />}
           </span>
           <span className="text-[14px] leading-relaxed text-wb-soft">
-            Keep me posted with Wellness Bestie news. Unsubscribe any time.{' '}
+            I’m happy for ORIRI to store my answers and email me about Wellness Bestie. Unsubscribe any time.{' '}
             <Link to={withUtm('/privacy')} className="underline underline-offset-4">
               Privacy
             </Link>
@@ -704,30 +758,29 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
           </p>
         )}
         <PillButton type="submit" className="mt-5 w-full" disabled={sending} arrow={!sending}>
-          {sending ? 'Opening…' : 'Show my day'}
+          {sending ? 'Opening…' : 'Join & show my day'}
         </PillButton>
+        <p className="mt-3 text-center text-[14px] text-wb-taupe">One free day per email.</p>
       </form>
     </Card>
   );
 }
 
-function MembershipPrompt({ title }: { title?: string }) {
-  const second = !title;
+/** After the sign-up (after) or when the email already had its free day. Either way they're on the waitlist. */
+function MembershipPrompt({ after = false }: { after?: boolean }) {
   return (
     <section className="mt-4 rounded-[20px] bg-wb-plum p-6 text-wb-paper">
       <GoldRule />
-      <h2 className="mt-4 text-[26px] text-wb-paper">{title || "You've had your free day"}</h2>
-      <p className="mt-2 text-[15px] leading-relaxed text-wb-paper/85">
-        {second
-          ? 'Each email gets one free day. Bestie membership plans every day, remembers what works for you and finds you a bestie nearby.'
-          : 'Bestie remembers your patterns, plans your week ahead and finds you a bestie nearby.'}
+      <p className="mt-4 flex items-center gap-2 text-[14px] font-medium uppercase tracking-[0.18em] text-wb-gold">
+        <Check className="h-4 w-4" strokeWidth={2} /> {after ? 'You’re on the waitlist' : 'Already on the waitlist'}
       </p>
-      <PillLink to="/pilot" tone="ivory" className="mt-6 w-full" onClick={() => ctaClick('Join the waitlist', second ? 'day_used' : 'day_sent')}>
-        Join the waitlist
-      </PillLink>
-      <Link to={withUtm('/membership')} className="mt-3 flex h-11 items-center justify-center text-[15px] text-wb-paper/85 underline underline-offset-4 hover:text-wb-paper">
+      <h2 className="mt-2 text-[26px] text-wb-paper">{after ? 'Want this every day?' : 'You’ve had your free day'}</h2>
+      <p className="mt-2 text-[15px] leading-relaxed text-wb-paper/85">
+        {after ? '' : 'Each email gets one free day. '}When membership opens, Bestie plans every day, remembers what works for you and finds you a bestie nearby. We’ll email you first.
+      </p>
+      <PillLink to="/membership" tone="ivory" className="mt-6 w-full" onClick={() => ctaClick('Preview membership', after ? 'day_sent' : 'day_used')}>
         Preview membership
-      </Link>
+      </PillLink>
     </section>
   );
 }
