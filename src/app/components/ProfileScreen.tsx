@@ -50,6 +50,7 @@ import { supabase } from '../utils/supabase/client';
 import { toast } from 'sonner';
 import { useCart } from '../contexts/CartContext';
 import ProfileOrdersSection from './ProfileOrdersSection';
+import OririLoader from './OririLoader';
 
 /** Display metadata for the server-authoritative journey badge ids. */
 const JOURNEY_BADGE_META: Record<string, { label: string; icon: typeof Award }> = {
@@ -346,14 +347,7 @@ export default function ProfileScreen({ onLogout, onEpisodeSelect, onNavigateToS
 
   if (!profile) {
     return (
-      <div className="pt-[60px] min-h-screen w-full relative flex items-center justify-center" style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)' }}>
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-muted-foreground">Loading profile...</p>
-        </div>
-      </div>
+      <OririLoader variant="screen" />
     );
   }
 

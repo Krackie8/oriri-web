@@ -25,6 +25,7 @@ import { useAuth } from '../hooks/useAuth';
 import { notificationService } from '../utils/notificationService';
 import { projectId } from '../utils/supabase/info';
 import { toast } from 'sonner';
+import OririLoader from './OririLoader';
 
 const PUSH_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a278ea32`;
 
@@ -235,10 +236,7 @@ function SettingsContent({ onBack }: SettingsScreenProps) {
         </div>
         
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="text-muted-foreground">Loading settings...</p>
-          </div>
+          <OririLoader variant="inline" />
         </div>
       </div>
     );
