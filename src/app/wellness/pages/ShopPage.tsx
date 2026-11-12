@@ -3,8 +3,8 @@
  * Dubai shops Amazon.ae, KL shops Shopee. Picks live in ../shop/catalog.ts.
  * Buy buttons open the store in a new tab and are counted for Admin › Traffic.
  */
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cx } from '../bestie/kit';
 import { countShopClick } from '../analytics/firstParty';
 import { CITIES, FEATURED_ID, PICKS, SHELVES, type CityKey, type ShopPick } from '../shop/catalog';
@@ -53,14 +53,24 @@ export default function ShopPage() {
     <div className="pb-6">
       {/* Hero */}
       <section className="mt-16 overflow-hidden bg-gradient-to-b from-[#CDB49C] to-[#D9C4B0]">
-        <div className="mx-auto max-w-[430px] px-5 pt-9 text-center">
-          <p className={cx(label, 'text-[#4A2F24]')}>The ORIRI Shop</p>
-          <h1 className="mt-3 text-[52px] leading-[0.95] text-wb-paper" style={DISPLAY}>
-            Shop with Ren
-          </h1>
-          <p className="mx-auto mt-4 max-w-[34ch] text-[16px] leading-relaxed text-[#4A2F24]">
-            The things I actually use for slow mornings, real meals and moving my body. Tried, loved, re-bought.
-          </p>
+        <div className="mx-auto max-w-[430px] px-5 pb-8 pt-8">
+          <div className="flex items-end gap-4">
+            <div className="min-w-0 flex-1 pb-2">
+              <p className={cx(label, 'text-[#4A2F24]')}>The ORIRI Shop</p>
+              <h1 className="mt-2 text-[40px] leading-[0.98] text-wb-paper" style={DISPLAY}>
+                Shop with Ren
+              </h1>
+              <p className="mt-3 text-[14px] leading-relaxed text-[#4A2F24]">The things I actually use. Tried, loved, re-bought.</p>
+            </div>
+            <img
+              src="/shop/ren-studio.jpg"
+              alt="Ren, founder of ORIRI"
+              width={760}
+              height={1013}
+              fetchPriority="high"
+              className="h-[188px] w-[138px] shrink-0 rounded-t-full border-4 border-wb-paper/60 object-cover object-top"
+            />
+          </div>
           <div className="mt-6 grid gap-2.5">
             {[
               ['ORIRI Originals', () => scrollToId('originals')],
@@ -71,22 +81,13 @@ export default function ShopPage() {
                 key={t as string}
                 type="button"
                 onClick={go as () => void}
-                className="bg-wb-paper py-[15px] text-[21px] text-wb-ink transition-colors hover:bg-[#4A2F24] hover:text-wb-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A2F24]"
+                className="bg-wb-paper py-[14px] text-[20px] text-wb-ink transition-colors hover:bg-[#4A2F24] hover:text-wb-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A2F24]"
                 style={DISPLAY}
               >
                 {t as string}
               </button>
             ))}
           </div>
-          <img
-            src="/shop/ren-studio.jpg"
-            alt="Ren, founder of ORIRI"
-            width={760}
-            height={1013}
-            fetchPriority="high"
-            className="mx-auto mt-8 block w-[88%]"
-            style={{ WebkitMaskImage: 'radial-gradient(120% 95% at 50% 70%, #000 62%, transparent 92%)', maskImage: 'radial-gradient(120% 95% at 50% 70%, #000 62%, transparent 92%)' }}
-          />
         </div>
       </section>
 
@@ -153,22 +154,11 @@ export default function ShopPage() {
             const items = picks.filter((p) => p.shelf === s.key && p.id !== featured?.id);
             if (!items.length) return null;
             return (
-              <section key={s.key} className="mt-11">
-                <div className="flex items-center gap-4">
-                  <img src={s.cover} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover" />
-                  <div className="min-w-0">
-                    <h3 className="text-[24px] leading-tight" style={SERIF}>
-                      {s.title}
-                    </h3>
-                    <p className="mt-0.5 text-[13px] text-[#8A6E5C]">{s.sub}</p>
-                  </div>
-                </div>
-                <div className="-mx-5 mt-4 grid snap-x snap-mandatory auto-cols-[62%] grid-flow-col gap-3 overflow-x-auto px-5 pb-2 [scrollbar-width:none]">
-                  {items.map((p) => (
-                    <PickCard key={p.id} pick={p} city={city} />
-                  ))}
-                </div>
-              </section>
+              <Shelf key={s.key} title={s.title} sub={s.sub} cover={s.cover}>
+                {items.map((p) => (
+                  <PickCard key={p.id} pick={p} city={city} />
+                ))}
+              </Shelf>
             );
           })
         )}
@@ -182,6 +172,48 @@ export default function ShopPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+/** A swipeable row. Phones swipe; laptops get arrow buttons. */
+function Shelf({ title, sub, cover, children }: { title: string; sub: string; cover: string; children: React.ReactNode }) {
+  const rail = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ start: true, end: false });
+  const update = () => {
+    const el = rail.current;
+    if (el) setEdge({ start: el.scrollLeft < 8, end: el.scrollLeft + el.clientWidth > el.scrollWidth - 8 });
+  };
+  useEffect(update, [children]);
+  const move = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * rail.current.clientWidth * 0.8, behavior: 'smooth' });
+  const arrow =
+    'hidden h-9 w-9 items-center justify-center rounded-full border border-[#4A2F24]/40 text-[#4A2F24] transition hover:bg-[#4A2F24] hover:text-wb-paper disabled:pointer-events-none disabled:opacity-30 [@media(hover:hover)]:flex';
+  return (
+    <section className="mt-11">
+      <div className="flex items-center gap-4">
+        <img src={cover} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover" />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[24px] leading-tight" style={SERIF}>
+            {title}
+          </h3>
+          <p className="mt-0.5 text-[13px] text-[#8A6E5C]">{sub}</p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          <button type="button" aria-label="Scroll left" className={arrow} disabled={edge.start} onClick={() => move(-1)}>
+            <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+          <button type="button" aria-label="Scroll right" className={arrow} disabled={edge.end} onClick={() => move(1)}>
+            <ChevronRight className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+      <div
+        ref={rail}
+        onScroll={update}
+        className="mt-4 grid snap-x snap-mandatory auto-cols-[62%] grid-flow-col gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </div>
+    </section>
   );
 }
 
