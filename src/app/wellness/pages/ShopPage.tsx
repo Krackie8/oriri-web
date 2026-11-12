@@ -203,8 +203,8 @@ const price = (pick: ShopPick, city: CityKey) => {
 function PickCard({ pick, city }: { pick: ShopPick; city: CityKey }) {
   return (
     <article className="flex min-w-0 snap-start flex-col gap-2.5">
-      <div className="relative aspect-[4/5] overflow-hidden bg-wb-stone">
-        <img src={pick.image} alt={pick.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+      <div className="relative aspect-[4/5] overflow-hidden bg-[#F1EEEA]">
+        <img src={pick.image} alt={pick.name} loading="lazy" decoding="async" className="h-full w-full object-contain p-3 mix-blend-multiply" />
         {pick.tag && <span className="absolute left-2.5 top-2.5 bg-wb-paper px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[#4A2F24]">{pick.tag}</span>}
       </div>
       <h4 className="text-[14px] font-medium">{pick.name}</h4>
@@ -235,7 +235,7 @@ function Featured({ pick, city }: { pick: ShopPick; city: CityKey }) {
         <span className={cx(label, 'shrink-0 text-[#8A6E5C]')}>Ren's pick</span>
       </div>
       <article className="mt-4 bg-wb-stone">
-        <img src={pick.image} alt={pick.name} className="aspect-[4/3] w-full object-cover" />
+        <div className="bg-[#EAE4DE]"><img src={pick.image} alt={pick.name} className="mx-auto aspect-[4/3] w-full object-contain p-4 mix-blend-multiply" /></div>
         <div className="flex flex-col gap-3 p-6">
           <span className={cx(label, 'text-[#8A6E5C]')}>
             {CITIES[city].store}
