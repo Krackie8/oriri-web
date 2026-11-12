@@ -459,7 +459,7 @@ function HowItWorks() {
 const FEATURES: { icon: typeof Sun; title: string; text: string; tag?: string }[] = [
   { icon: Sun, title: 'Daily affirmation', text: 'A few words just for you, every time you check in.' },
   { icon: Zap, title: 'Energy check-in', text: 'Builds your daily and weekly plan, with rings to close.' },
-  { icon: ListChecks, title: 'Simple to-do list', text: 'Your day as a list. Tick it off as you go.' },
+  { icon: ListChecks, title: 'Be well organised with a to-do list', text: 'Your whole day in one list. Tick it off as you go.' },
   { icon: Award, title: 'Badges to unlock', text: 'Little wins for showing up for yourself.', tag: 'Soon' },
   {
     icon: HeartHandshake,
