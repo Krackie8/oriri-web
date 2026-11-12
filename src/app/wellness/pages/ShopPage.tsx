@@ -1,5 +1,5 @@
 /**
- * Shop with Ren: ORIRI Originals (coming soon) + Ren's affiliate picks.
+ * The Ren Edit: ORIRI Originals (coming soon) + Ren's affiliate picks.
  * Dubai shops Amazon.ae, KL shops Shopee. Picks live in ../shop/catalog.ts.
  * Buy buttons open the store in a new tab and are counted for Admin › Traffic.
  */
@@ -42,7 +42,7 @@ export default function ShopPage() {
     }
   };
   useEffect(() => {
-    document.title = 'Shop with Ren · ORIRI';
+    document.title = 'The Ren Edit · ORIRI';
   }, []);
 
   const picks = useMemo(() => PICKS.filter((p) => p.links[city]), [city]);
@@ -56,8 +56,8 @@ export default function ShopPage() {
         <div className="mx-auto max-w-[430px] px-5 pb-10 pt-9">
           <div className="text-center">
             <p className={cx(label, 'text-[#4A2F24]')}>The ORIRI Shop</p>
-            <h1 className="mt-3 whitespace-nowrap text-[clamp(40px,12vw,52px)] leading-[0.95] text-wb-paper" style={DISPLAY}>
-              Shop with Ren
+            <h1 className="mt-3 whitespace-nowrap text-[clamp(40px,12vw,52px)] leading-[0.95] text-wb-paper" style={SERIF}>
+              The Ren Edit
             </h1>
             <p className="mx-auto mt-4 max-w-[34ch] text-[16px] leading-relaxed text-[#4A2F24]">
               The things I actually use for slow mornings, real meals and moving my body. Tried, loved, re-bought.

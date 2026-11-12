@@ -58,7 +58,7 @@
       "h1": "Your data, kept simple",
       "text": []
     },
-    "/shop": { "title": "Shop · ORIRI", "description": "The ORIRI shop is coming soon.", "index": false, "h1": "Coming soon", "text": [] },
+    "/shop": { "title": "The Ren Edit · ORIRI", "description": "The things Ren actually uses for slow mornings, real meals and moving her body. Tried, loved, re-bought.", "index": true, "h1": "The Ren Edit", "text": ["Shop Ren's Dubai and KL edits."] },
     "/plan/day": { "title": "Your day, curated · Wellness Bestie by ORIRI", "description": "Your curated day from Bestie.", "index": false, "h1": "Your day", "text": [] },
     "/profile": { "title": "Your profile · ORIRI", "description": "Sign in to see your Bestie plans.", "index": false, "h1": "Your profile", "text": [] }
   }
