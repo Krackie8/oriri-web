@@ -61,6 +61,11 @@ export function countPageView(path: string) {
   send({ t: 'view', p: path });
 }
 
+/** A tap on a Shop pick's buy button. Shows in Admin › Traffic › Shop. */
+export function countShopClick(city: string, id: string) {
+  send({ t: 'click', k: `shop:${city}:${id}` });
+}
+
 /** A tap on a directory place (Instagram, website or map). */
 export function countPlaceClick(place: string) {
   send({ t: 'click', k: place });
