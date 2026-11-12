@@ -8,7 +8,7 @@ import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, W
 import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, type PlanLink } from './engine';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
-import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked, usedEmails } from './state';
+import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked } from './state';
 import { submitFreeDay } from '../api';
 import { NO_MAIL_ERROR, checkEmail, domainAcceptsMail } from '../../utils/emailCheck';
 import { ctaClick, formSubmit, track } from '../analytics/track';
@@ -109,7 +109,7 @@ export default function DayScreen() {
           <EmailGate
             plan={plan.items}
             onUnlocked={(email) => {
-              setUnlocked(email);
+              setUnlocked(email, inputs);
               setUnlockedFor(email);
               window.scrollTo({ top: 0 });
             }}
@@ -352,7 +352,7 @@ function useTodayEvent() {
 }
 
 function TodayEvent({ event }: { event: StepsistersMoment }) {
-  const url = event.link || '/community';
+  const url = event.link || '/bestie#stepsisters';
   const time = event.startTime ? new Date(`2000-01-01T${event.startTime}`).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase() : '';
   return (
     <Card as="section" className="mt-4 border-wb-gold/50 bg-wb-gold-soft/60 p-5">
@@ -619,7 +619,6 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
     }
     if (!consent) return setError('Please tick the box to join and see your day.');
     setError('');
-    if (usedEmails().includes(em)) return onUsed(em);
 
     setSending(true);
     if (!(await domainAcceptsMail(em))) {
@@ -633,6 +632,11 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
       plan: plan.map((p) => ({ time: `${p.minutes} min`, label: p.label, title: p.title, venue: p.venue, cost: p.priceLabel, url: p.links[0]?.url || '' })),
     });
     setSending(false);
+    if (r.used && r.today) {
+      // Same email, same day (e.g. back on another phone): it's still their free day
+      markEmailUsed(em);
+      return onUnlocked(em);
+    }
     if (r.used) {
       markEmailUsed(em);
       return onUsed(em);

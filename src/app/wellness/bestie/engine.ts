@@ -156,7 +156,7 @@ const OPTIONS: Option[] = [
 
   // Meetup (Connect only)
   { key: 'stepsisters', kind: 'meetup', title: 'Stepsisters community meetup', place: home('Stepsisters · free community events'), min: 60, max: 90, needs: 180, fit: { Low: 2, Steady: 4, High: 4 }, goals: ['Connect'],
-    links: () => [{ label: 'See upcoming events', url: '/community' }] },
+    links: () => [{ label: 'See upcoming events', url: '/bestie#stepsisters' }] },
 ];
 
 const costOf = (o: Option) => (o.range ? Math.round((o.range[0] + o.range[1]) / 2) : 0);
