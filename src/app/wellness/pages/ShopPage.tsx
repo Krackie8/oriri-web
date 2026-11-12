@@ -53,23 +53,15 @@ export default function ShopPage() {
     <div className="pb-6">
       {/* Hero */}
       <section className="mt-16 overflow-hidden bg-gradient-to-b from-[#CDB49C] to-[#D9C4B0]">
-        <div className="mx-auto max-w-[430px] px-5 pb-8 pt-8">
-          <div className="flex items-end gap-4">
-            <div className="min-w-0 flex-1 pb-2">
-              <p className={cx(label, 'text-[#4A2F24]')}>The ORIRI Shop</p>
-              <h1 className="mt-2 text-[40px] leading-[0.98] text-wb-paper" style={DISPLAY}>
-                Shop with Ren
-              </h1>
-              <p className="mt-3 text-[14px] leading-relaxed text-[#4A2F24]">The things I actually use. Tried, loved, re-bought.</p>
-            </div>
-            <img
-              src="/shop/ren-studio.jpg"
-              alt="Ren, founder of ORIRI"
-              width={760}
-              height={1013}
-              fetchPriority="high"
-              className="h-[188px] w-[138px] shrink-0 rounded-t-full border-4 border-wb-paper/60 object-cover object-top"
-            />
+        <div className="mx-auto max-w-[430px] px-5 pb-10 pt-9">
+          <div className="text-center">
+            <p className={cx(label, 'text-[#4A2F24]')}>The ORIRI Shop</p>
+            <h1 className="mt-3 whitespace-nowrap text-[clamp(40px,12vw,52px)] leading-[0.95] text-wb-paper" style={DISPLAY}>
+              Shop with Ren
+            </h1>
+            <p className="mx-auto mt-4 max-w-[34ch] text-[16px] leading-relaxed text-[#4A2F24]">
+              The things I actually use for slow mornings, real meals and moving my body. Tried, loved, re-bought.
+            </p>
           </div>
           <div className="mt-6 grid gap-2.5">
             {[
@@ -94,15 +86,13 @@ export default function ShopPage() {
       {/* ORIRI Originals */}
       <section id="originals" className="scroll-mt-16 bg-wb-stone">
         <div className="mx-auto max-w-[430px] px-5 py-12">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 className="text-[32px] leading-tight text-[#4A2F24]" style={DISPLAY}>
-              ORIRI Originals
-            </h2>
-            <span className={cx(label, 'text-[#8A6E5C]')}>Made by Ren</span>
-          </div>
+          <span className={cx(label, 'text-[#8A6E5C]')}>Made by Ren</span>
+          <h2 className="mt-1 text-[32px] leading-tight text-[#4A2F24]" style={DISPLAY}>
+            ORIRI Originals
+          </h2>
           <div className="mt-5 flex flex-col items-center gap-1.5 border border-wb-sand bg-wb-paper px-5 py-11 text-center">
             <span className={cx(label, 'text-[#8A6E5C]')}>Coming soon</span>
-            <p className="text-[24px] text-[#4A2F24]" style={DISPLAY}>
+            <p className="whitespace-nowrap text-[21px] text-[#4A2F24]" style={DISPLAY}>
               Something I'm making for you.
             </p>
           </div>
@@ -114,7 +104,7 @@ export default function ShopPage() {
         <h2 className="text-[38px] leading-tight text-[#4A2F24]" style={DISPLAY}>
           Ren's Picks
         </h2>
-        <p className="mt-1 text-[15px] text-[#8A6E5C]">Choose your city to shop my favourites where you live.</p>
+        <p className="mt-1 text-[15px] text-[#8A6E5C]">Choose your city to shop my favourites.</p>
       </div>
       <nav aria-label="Choose your city" className="sticky top-16 z-30 border-b border-wb-sand bg-wb-paper/95 backdrop-blur">
         <div className="mx-auto grid max-w-[430px] grid-cols-2 px-5 py-3">
@@ -125,19 +115,17 @@ export default function ShopPage() {
               aria-pressed={city === k}
               onClick={() => setCity(k)}
               className={cx(
-                'flex flex-col items-center gap-0.5 border border-[#4A2F24] py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A6E5C] focus-visible:ring-offset-2',
+                'flex flex-col items-center gap-0.5 border border-[#4A2F24] py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A6E5C] focus-visible:ring-offset-2',
                 city === k ? 'bg-[#4A2F24] text-wb-paper' : 'text-[#4A2F24]',
               )}
             >
               <span className="text-[20px] leading-tight" style={DISPLAY}>
                 {CITIES[k].label}
               </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-80">{CITIES[k].store}</span>
             </button>
           ))}
         </div>
       </nav>
-      <p className="mx-auto max-w-[430px] px-5 pt-2 text-center text-[13px] text-[#8A6E5C]">{c.hint}</p>
 
       <div className="mx-auto max-w-[430px] px-5">
         {featured && <Featured pick={featured} city={city} />}
@@ -145,7 +133,7 @@ export default function ShopPage() {
         {picks.length === 0 ? (
           <div className="mt-10 flex flex-col items-center gap-1.5 border border-wb-sand px-5 py-11 text-center">
             <span className={cx(label, 'text-[#8A6E5C]')}>{c.label} edit</span>
-            <p className="text-[24px] text-[#4A2F24]" style={DISPLAY}>
+            <p className="text-[21px] text-[#4A2F24]" style={DISPLAY}>
               My first picks land here this week.
             </p>
           </div>
@@ -192,7 +180,7 @@ function Shelf({ title, sub, cover, children }: { title: string; sub: string; co
       <div className="flex items-center gap-4">
         <img src={cover} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[24px] leading-tight" style={SERIF}>
+          <h3 className="text-[22px] leading-tight" style={SERIF}>
             {title}
           </h3>
           <p className="mt-0.5 text-[13px] text-[#8A6E5C]">{sub}</p>
@@ -260,19 +248,14 @@ function PickCard({ pick, city }: { pick: ShopPick; city: CityKey }) {
 function Featured({ pick, city }: { pick: ShopPick; city: CityKey }) {
   return (
     <section className="mt-10">
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-[30px] leading-tight text-[#4A2F24]" style={DISPLAY}>
-          This week's obsession
-        </h2>
-        <span className={cx(label, 'shrink-0 text-[#8A6E5C]')}>Ren's pick</span>
-      </div>
+      <span className={cx(label, 'text-[#8A6E5C]')}>Ren's pick</span>
+      <h2 className="mt-1 whitespace-nowrap text-[28px] leading-tight text-[#4A2F24]" style={DISPLAY}>
+        This week's obsession
+      </h2>
       <article className="mt-4 bg-wb-stone">
         <div className="bg-[#EAE4DE]"><img src={pick.image} alt={pick.name} className="mx-auto aspect-[4/3] w-full object-contain p-4 mix-blend-multiply" /></div>
         <div className="flex flex-col gap-3 p-6">
-          <span className={cx(label, 'text-[#8A6E5C]')}>
-            {CITIES[city].store}
-            {price(pick, city) && ` · ${price(pick, city)}`}
-          </span>
+          {price(pick, city) && <span className={cx(label, 'text-[#8A6E5C]')}>{price(pick, city)}</span>}
           <h3 className="text-[30px] leading-tight" style={SERIF}>
             {pick.name}
           </h3>
@@ -284,7 +267,7 @@ function Featured({ pick, city }: { pick: ShopPick; city: CityKey }) {
             city={city}
             className="inline-flex items-center gap-2 self-start rounded-full bg-[#4A2F24] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-wb-paper hover:bg-wb-ink"
           >
-            Shop on {CITIES[city].store}
+            Shop now
           </BuyLink>
         </div>
       </article>
