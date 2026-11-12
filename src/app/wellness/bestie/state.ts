@@ -1,4 +1,8 @@
-/** Flow state kept on this device: the inputs between screens and which emails used a free day. */
+/**
+ * Flow state kept on this device: the inputs between screens, which emails used a free day,
+ * and today's unlocked free day (kept in localStorage so closing the tab or the Instagram
+ * browser doesn't lose it; it lasts until midnight, local time).
+ */
 import type { PlanInputs } from './engine';
 
 const INPUTS = 'wb_plan_inputs';
@@ -7,22 +11,53 @@ const UNLOCKED = 'wb_free_day_unlocked';
 
 export const DEFAULT_INPUTS: PlanInputs = { energy: 'Steady', goals: [], minutes: 60, budget: 100, area: '' };
 
+/** Today's date on this device, YYYY-MM-DD. A free day lasts until local midnight. */
+export function localDay(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+type Unlock = { email: string; day: string; inputs?: PlanInputs };
+
+function readUnlock(): Unlock | null {
+  try {
+    const u = JSON.parse(localStorage.getItem(UNLOCKED) || 'null') as Unlock | null;
+    if (u && u.email && u.day === localDay()) return u;
+  } catch {
+    /* private mode or old value */
+  }
+  return null;
+}
+
+function writeUnlock(u: Unlock) {
+  try {
+    localStorage.setItem(UNLOCKED, JSON.stringify(u));
+  } catch {
+    /* private mode: the plan still shows for this visit */
+  }
+}
+
 export function saveInputs(i: PlanInputs) {
   try {
     sessionStorage.setItem(INPUTS, JSON.stringify(i));
-    sessionStorage.removeItem(UNLOCKED);
   } catch {
     /* private mode */
   }
+  // Editing answers on your free day re-plans the same day; it doesn't lock it again.
+  const u = readUnlock();
+  if (u) writeUnlock({ ...u, inputs: i });
 }
 
 export function loadInputs(): PlanInputs | null {
   try {
     const raw = sessionStorage.getItem(INPUTS);
-    return raw ? { ...DEFAULT_INPUTS, ...JSON.parse(raw) } : null;
+    if (raw) return { ...DEFAULT_INPUTS, ...JSON.parse(raw) };
   } catch {
-    return null;
+    /* fall through */
   }
+  // New tab or coming back later today: pick up the answers from today's free day
+  const u = readUnlock();
+  return u?.inputs ? { ...DEFAULT_INPUTS, ...u.inputs } : null;
 }
 
 export const normEmail = (e: string) => e.trim().toLowerCase();
@@ -45,20 +80,19 @@ export function markEmailUsed(email: string) {
   }
 }
 
-/** The email that unlocked this session's plan (so a refresh keeps it open). */
+/** The email that unlocked today's free day on this device, if any. */
 export function getUnlocked(): string | null {
+  const u = readUnlock();
+  if (u) return u.email;
   try {
+    // Older visits kept the unlock for the tab only
     return sessionStorage.getItem(UNLOCKED);
   } catch {
     return null;
   }
 }
-export function setUnlocked(email: string) {
-  try {
-    sessionStorage.setItem(UNLOCKED, email);
-  } catch {
-    /* private mode */
-  }
+export function setUnlocked(email: string, inputs?: PlanInputs | null) {
+  writeUnlock({ email: normEmail(email), day: localDay(), inputs: inputs || undefined });
 }
 
 /**

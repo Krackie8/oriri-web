@@ -1,17 +1,13 @@
 /** Profile for visitors who aren't signed in: sign in, or see what membership gives you. */
 import React, { useState } from 'react';
-import { AnimatePresence } from 'motion/react';
 import { CircleUserRound } from 'lucide-react';
 import { Eyebrow, GoldRule, PillButton, Screen } from '../bestie/kit';
 import { MembershipCard } from '../bestie/OptionsScreen';
-import LoginScreen from '../../components/LoginScreen';
-import { Toaster } from '../../components/ui/sonner';
-import { useAuthHandlers } from '../../hooks/useAuthHandlers';
+import SignInSheet from '../components/SignInSheet';
 
 
 export default function GuestProfilePage() {
   const [showLogin, setShowLogin] = useState(false);
-  const { handleLogin } = useAuthHandlers();
 
   return (
     <Screen className="pb-16">
@@ -35,19 +31,7 @@ export default function GuestProfilePage() {
 
       <MembershipCard source="profile" className="mt-10" />
 
-      <AnimatePresence>
-        {showLogin && (
-          <LoginScreen
-            onClose={() => setShowLogin(false)}
-            onGuestMode={() => setShowLogin(false)}
-            onLogin={async (email, password) => {
-              await handleLogin(email, password);
-            }}
-          />
-        )}
-      </AnimatePresence>
-      {/* Only for sign-in messages; avoids background podcast-sync toasts on this page */}
-      {showLogin && <Toaster />}
+      {showLogin && <SignInSheet source="profile" onClose={() => setShowLogin(false)} />}
     </Screen>
   );
 }

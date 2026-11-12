@@ -8293,7 +8293,14 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
     if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
 
     const key = `bestie:freeday:${email}`;
-    if (await kv.get(key)) return c.json({ success: false, used: true, error: 'This email has already had its free day.' }, 409);
+    const localDay = /^\d{4}-\d{2}-\d{2}$/.test(String(body.local_day || '')) ? String(body.local_day) : '';
+    const existing: any = await kv.get(key);
+    if (existing) {
+      // Same email back on the same day (new tab, another phone): it's still their free day.
+      const theirDay = existing.local_day || String(existing.received_at || '').slice(0, 10);
+      const today = !!localDay && theirDay === localDay;
+      return c.json({ success: false, used: true, today, error: 'This email has already had its free day.' }, 409);
+    }
 
     const inputs = body.inputs || {};
     const plan = (Array.isArray(body.plan) ? body.plan : []).slice(0, 6).map((r: any) => ({
@@ -8315,6 +8322,7 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
       instagram: clip(body.instagram, 30).replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, ''),
       heard_from: clip(body.heard_from, 20),
       waitlist: 'yes',
+      local_day: localDay,
     };
     for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign']) record[k] = clip(body[k], 100);
     for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
