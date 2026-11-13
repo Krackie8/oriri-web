@@ -59,8 +59,8 @@ export default function ShopPage() {
             <h1 className="mt-3 whitespace-nowrap text-[clamp(40px,12vw,52px)] leading-[0.95] text-wb-paper" style={SERIF}>
               The Ren Edit
             </h1>
-            <p className="mx-auto mt-4 max-w-[34ch] text-[16px] leading-relaxed text-[#4A2F24]">
-              The things I actually use for slow mornings, real meals and moving my body. Tried, loved, re-bought.
+            <p className="mt-4 whitespace-nowrap text-[clamp(13px,4vw,16px)] text-[#4A2F24]">
+              The things I actually tried, loved, re-bought.
             </p>
           </div>
           <div className="mt-6 grid gap-2.5">
