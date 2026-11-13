@@ -4,15 +4,14 @@
  */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AnimatePresence } from 'motion/react';
 import { CalendarHeart, HeartHandshake, Lock, MapPin, Sparkles } from 'lucide-react';
-import { Eyebrow, Photo, PillButton, PillLink, Screen } from '../bestie/kit';
+import { Eyebrow, Photo, PillLink, Screen, WaitlistLink } from '../bestie/kit';
 import { PROFILES } from '../bestie/MembershipScreen';
-import LoginScreen from '../../components/LoginScreen';
-import { Toaster } from '../../components/ui/sonner';
+import SignInSheet from '../components/SignInSheet';
+import { MeetupEvents } from '../bestie/HomeScreen';
 import { useAuth } from '../../hooks/useAuth';
-import { useAuthHandlers } from '../../hooks/useAuthHandlers';
 import { ctaClick } from '../analytics/track';
+import { INSTAGRAM_URL } from '../analytics/config';
 
 const FEATURES = [
   { icon: CalendarHeart, title: 'Your weekly planner', text: 'Bestie plans every day around your energy, time and budget, remembers your patterns and learns what works for you.' },
@@ -24,18 +23,16 @@ function displayName(user: any): string {
   return m.name || m.full_name || (user?.email ? String(user.email).split('@')[0] : 'You');
 }
 
-function YourProfile({ onJoin }: { onJoin: (mode: 'signup' | 'login') => void }) {
+function YourProfile({ onJoin }: { onJoin: (mode: 'login') => void }) {
   const { user, isLoggedIn } = useAuth();
   if (!isLoggedIn) {
     return (
       <div className="rounded-[14px] bg-wb-stone p-6 text-center">
         <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">Free to join</p>
-        <h2 className="mt-2 text-[24px] text-wb-ink">Create your profile</h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-wb-soft">Join the community, see who's here and come to Stepsisters meetups. No card needed.</p>
-        <PillButton onClick={() => onJoin('signup')} className="mt-5 w-full">
-          Join free
-        </PillButton>
-        <button type="button" onClick={() => onJoin('login')} className="mt-3 text-[14px] text-wb-plum underline underline-offset-4">
+        <h2 className="mt-2 text-[24px] text-wb-ink">Join with your email</h2>
+        <p className="mt-2 text-[15px] leading-relaxed text-wb-soft">Get a free day with Bestie and a place on the waitlist. Your profile comes with membership. No card needed.</p>
+        <WaitlistLink source="bestie_tab" className="mt-5 w-full" label="Join free" />
+        <button type="button" onClick={() => onJoin('login')} className="mt-3 block w-full text-[14px] text-wb-plum underline underline-offset-4">
           I already have an account
         </button>
       </div>
@@ -59,11 +56,10 @@ function YourProfile({ onJoin }: { onJoin: (mode: 'signup' | 'login') => void })
 }
 
 export default function BestiePage() {
-  const [showLogin, setShowLogin] = useState<false | 'signup' | 'login'>(false);
-  const { handleLogin } = useAuthHandlers();
-  const join = (mode: 'signup' | 'login') => {
-    ctaClick(mode === 'signup' ? 'Join free' : 'Log in', 'bestie_tab');
-    setShowLogin(mode);
+  const [showLogin, setShowLogin] = useState(false);
+  const join = () => {
+    ctaClick('Log in', 'bestie_tab');
+    setShowLogin(true);
   };
 
   return (
@@ -124,20 +120,23 @@ export default function BestiePage() {
         <p className="mt-3 text-center text-[14px] text-wb-taupe">Try a free day first: check in from the homepage.</p>
       </div>
 
-      <AnimatePresence>
-        {showLogin && (
-          <LoginScreen
-            initialSignUp={showLogin === 'signup'}
-            onClose={() => setShowLogin(false)}
-            onGuestMode={() => setShowLogin(false)}
-            onLogin={async (email, password) => {
-              await handleLogin(email, password);
-              setShowLogin(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
-      {showLogin && <Toaster />}
+      <section id="stepsisters" className="mt-12 scroll-mt-24">
+        <Eyebrow>Stepsisters · free</Eyebrow>
+        <h2 className="mt-2 text-[24px] text-wb-ink">Meet up in real life</h2>
+        <p className="mt-2 text-[15px] leading-relaxed text-wb-soft">
+          Free meetups by ORIRI for women in Dubai: walks, coffee and classes together. Come alone, leave with friends.
+        </p>
+        <MeetupEvents />
+        <p className="mt-2 text-[14px] text-wb-taupe">
+          New dates go up on{' '}
+          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-wb-plum underline underline-offset-4">
+            @ren_reset
+          </a>
+          .
+        </p>
+      </section>
+
+      {showLogin && <SignInSheet source="bestie_tab" onClose={() => setShowLogin(false)} />}
     </Screen>
   );
 }

@@ -43,7 +43,7 @@ export function SiteFooter({ onCookieSettings }: { onCookieSettings: () => void 
             <li><Link to={withUtm('/plan/inputs')} className={link}>Plan my day</Link></li>
             <li><Link to={withUtm('/membership')} className={link}>Membership</Link></li>
             <li><Link to={withUtm('/plan/inputs')} className={link}>Waitlist</Link></li>
-            <li><Link to="/community" className={link}>Stepsisters</Link></li>
+            <li><Link to="/bestie#stepsisters" className={link}>Stepsisters</Link></li>
             <li><Link to="/podcast" className={link}>Tea for Two</Link></li>
           </ul>
           <ul>

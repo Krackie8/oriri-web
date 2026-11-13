@@ -21,7 +21,7 @@ import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
 /** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
-export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast'];
+export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast', '/community'];
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
 type SeoPage = { title: string; description: string; index: boolean };
@@ -106,6 +106,10 @@ export default function WellnessSite() {
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
       document.documentElement.scrollTop = 0;
+    } else {
+      // In-app links like /bestie#stepsisters: scroll to the section once it has rendered
+      const id = decodeURIComponent(location.hash.slice(1));
+      window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }), 150);
     }
     trackPageView(document.title);
     countPageView(path); // cookieless first-party count for the admin Traffic tab
@@ -133,6 +137,8 @@ export default function WellnessSite() {
           <Route path="/membership" element={<MembershipScreen />} />
           <Route path="/bestie" element={<BestiePage />} />
           <Route path="/pilot" element={<JoinRedirect />} />
+          {/* Old podcast-app community page: Stepsisters now lives on the Bestie community page */}
+          <Route path="/community" element={<Navigate to="/bestie#stepsisters" replace />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/podcast" element={<PodcastPage />} />

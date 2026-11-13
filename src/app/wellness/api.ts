@@ -1,5 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { getAttribution, sourceLabel } from './analytics/utm';
+import { localDay } from './bestie/state';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a278ea32`;
 
@@ -25,7 +26,7 @@ async function postFreeDay(body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  return { status: res.status, ok: res.ok && !!json.success, used: !!json.used, error: json.error as string | undefined };
+  return { status: res.status, ok: res.ok && !!json.success, used: !!json.used, today: !!json.today, error: json.error as string | undefined };
 }
 
 /**
@@ -34,7 +35,7 @@ async function postFreeDay(body: Record<string, unknown>) {
  * - If the server can't be reached, the plan unlocks anyway and the request
  *   is re-sent on the next visit.
  */
-export async function submitFreeDay(p: FreeDayPayload): Promise<{ ok: boolean; used?: boolean; queued?: boolean; error?: string }> {
+export async function submitFreeDay(p: FreeDayPayload): Promise<{ ok: boolean; used?: boolean; today?: boolean; queued?: boolean; error?: string }> {
   const a = getAttribution();
   const body = {
     ...p,
@@ -51,12 +52,14 @@ export async function submitFreeDay(p: FreeDayPayload): Promise<{ ok: boolean; u
     first_touch_campaign: a.first_touch_campaign,
     wb_source: sourceLabel(a),
     submitted_at: new Date().toISOString(),
+    /** The visitor's own date: the same email on the same day gets its free day back. */
+    local_day: localDay(),
     page_url: window.location.href,
   };
   try {
     const r = await postFreeDay(body);
     if (r.ok) return { ok: true };
-    if (r.used) return { ok: false, used: true };
+    if (r.used) return { ok: false, used: true, today: r.today };
     if (r.status === 400) return { ok: false, error: r.error || 'Please check your details.' };
   } catch {
     /* offline or server unreachable: queue below */

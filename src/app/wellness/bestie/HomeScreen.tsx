@@ -95,7 +95,7 @@ const PILLAR_ORDER: PillarName[] = ['Move', 'Meal', 'Mindset', 'Meetup'];
 /** Always listed: Ren's own podcast and community. */
 const BUILT_IN: Partial<Record<PillarName, Place[]>> = {
   Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', internal: '/podcast', builtIn: true }],
-  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true }],
+  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/bestie#stepsisters', builtIn: true }],
 };
 
 /** Sample places, shown only with ?demo=1 so Ren can preview the layout before adding real ones. */
@@ -395,7 +395,7 @@ function Directory() {
 }
 
 /** Inside Meet up: upcoming Stepsisters meetups and events from the admin calendar. */
-function MeetupEvents() {
+export function MeetupEvents() {
   const rows = useUpcoming();
   if (!rows || !rows.length) return <div className="pb-2" />;
   return (
@@ -529,7 +529,7 @@ function useUpcoming(): EventRow[] | null {
         t ? new Date(`2000-01-01T${t}`).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase() : '';
       const moments: EventRow[] = (m.data || [])
         .filter((x) => x.type !== 'recap' && x.date && x.date >= today)
-        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '/community' }));
+        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '/bestie#stepsisters' }));
       const events: EventRow[] = (e.data || [])
         .filter((x) => x.date >= today)
         .map((x) => ({ id: `e-${x.id}`, date: x.date, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: x.partner || x.category || 'Wellness event', url: x.link || '' }));
