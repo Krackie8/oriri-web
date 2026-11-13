@@ -46,7 +46,7 @@ export default function ShopPage() {
   }, []);
 
   const picks = useMemo(() => PICKS.filter((p) => p.links[city]), [city]);
-  const featured = FEATURED_ID ? picks.find((p) => p.id === FEATURED_ID) : undefined;
+  const featured = FEATURED_ID[city] ? picks.find((p) => p.id === FEATURED_ID[city]) : undefined;
   const c = CITIES[city];
 
   return (
@@ -224,7 +224,13 @@ function PickCard({ pick, city }: { pick: ShopPick; city: CityKey }) {
   return (
     <article className="flex min-w-0 snap-start flex-col gap-2.5">
       <div className="relative aspect-[4/5] overflow-hidden bg-[#F1EEEA]">
-        <img src={pick.image} alt={pick.name} loading="lazy" decoding="async" className="h-full w-full object-contain p-3 mix-blend-multiply" />
+        {pick.image ? (
+          <img src={pick.image} alt={pick.name} loading="lazy" decoding="async" className="h-full w-full object-contain p-3 mix-blend-multiply" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center p-5 text-center text-[20px] leading-tight text-[#4A2F24]" style={SERIF}>
+            {pick.name}
+          </div>
+        )}
         {pick.tag && <span className="absolute left-2.5 top-2.5 bg-wb-paper px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[#4A2F24]">{pick.tag}</span>}
       </div>
       <h4 className="text-[14px] font-medium">{pick.name}</h4>
