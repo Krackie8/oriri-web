@@ -8114,6 +8114,60 @@ app.get('/make-server-a278ea32/wellness/stats', async (c) => {
   }
 });
 
+// Admin: Shop affiliate earnings, entered monthly from the Amazon / Shopee dashboards.
+// One row per month + program: kv shop:earnings:<YYYY-MM>:<program>
+const EARN_PROGRAMS = ['amazon-web', 'amazon-social', 'shopee'];
+app.get('/make-server-a278ea32/wellness/earnings', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('shop:earnings:')) || []).filter(Boolean);
+    rows.sort((a: any, b: any) => (b.month + b.program).localeCompare(a.month + a.program));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    console.error('[Earnings] read failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to load earnings' }, 500);
+  }
+});
+app.put('/make-server-a278ea32/wellness/earnings/:month/:program', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const month = c.req.param('month');
+    const program = c.req.param('program');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !EARN_PROGRAMS.includes(program)) {
+      return c.json({ success: false, error: 'Bad month or program' }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const num = (v: any) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v) * 100) / 100 : 0);
+    const row = {
+      month,
+      program,
+      clicks: Math.round(num(body.clicks)),
+      orders: Math.round(num(body.orders)),
+      earnings: num(body.earnings),
+      note: typeof body.note === 'string' ? body.note.trim().slice(0, 200) : '',
+      updatedAt: new Date().toISOString(),
+    };
+    await kv.set(`shop:earnings:${month}:${program}`, row);
+    return c.json({ success: true, data: row });
+  } catch (error: any) {
+    console.error('[Earnings] save failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to save earnings' }, 500);
+  }
+});
+app.delete('/make-server-a278ea32/wellness/earnings/:month/:program', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    await kv.del(`shop:earnings:${c.req.param('month')}:${c.req.param('program')}`);
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[Earnings] delete failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to delete' }, 500);
+  }
+});
+
 // Signed-in users: join the Wellness Bestie waitlist
 app.post('/make-server-a278ea32/waitlist/bestie', async (c) => {
   try {

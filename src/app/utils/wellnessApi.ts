@@ -238,3 +238,20 @@ export interface DayStats {
   places: Record<string, number>;
 }
 export const getStats = (token: string | undefined, days = 30) => request<DayStats[]>(`/wellness/stats?days=${days}`, token);
+
+// ── Shop affiliate earnings (admin, entered monthly) ───────────────────────
+export type EarnProgram = 'amazon-web' | 'amazon-social' | 'shopee';
+export interface EarningsRow {
+  month: string; // YYYY-MM
+  program: EarnProgram;
+  clicks: number;
+  orders: number;
+  earnings: number;
+  note?: string;
+  updatedAt?: string;
+}
+export const getEarnings = (token: string | undefined) => request<EarningsRow[]>('/wellness/earnings', token, { cache: 'no-store' });
+export const saveEarnings = (token: string | undefined, row: Omit<EarningsRow, 'updatedAt'>) =>
+  request<EarningsRow>(`/wellness/earnings/${row.month}/${row.program}`, token, { method: 'PUT', body: JSON.stringify(row) });
+export const deleteEarnings = (token: string | undefined, month: string, program: EarnProgram) =>
+  request<void>(`/wellness/earnings/${month}/${program}`, token, { method: 'DELETE' });
