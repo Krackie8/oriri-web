@@ -59,6 +59,7 @@ import SocialLinksManagement from './admin/SocialLinksManagement';
 import WellnessCalendarManagement from './admin/WellnessCalendarManagement';
 import WellnessGuideManagement from './admin/WellnessGuideManagement';
 import TrafficDashboard from './admin/TrafficDashboard';
+import ShopEarnings from './admin/ShopEarnings';
 import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
 import WaitlistLeadsManagement from './admin/WaitlistLeadsManagement';
@@ -411,11 +412,12 @@ export default function AdminDashboard() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="flex w-full justify-start overflow-x-auto scrollbar-none">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="guide">Directory</TabsTrigger>
           <TabsTrigger value="traffic">Traffic</TabsTrigger>
+          <TabsTrigger value="shop">Shop</TabsTrigger>
           <TabsTrigger value="stepsisters">Stepsisters</TabsTrigger>
           <TabsTrigger value="plan">Sign-ups</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
@@ -998,6 +1000,10 @@ export default function AdminDashboard() {
 
         <TabsContent value="traffic" className="space-y-6">
           <TrafficDashboard />
+        </TabsContent>
+
+        <TabsContent value="shop" className="space-y-6">
+          <ShopEarnings />
         </TabsContent>
 
         <TabsContent value="stepsisters" className="space-y-6">
