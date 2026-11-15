@@ -40,8 +40,12 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 
 **Profile**: a Member's growth across the four Pillars, shown as a spider chart.
 
-**Level**: a Member's standing in one Pillar, earned through Completions.
+**Level**: a Member's standing in one Pillar (1–10), earned through Completions. Levels never go down.
 
-**Status**: the title a Member's combination of Levels gives her (e.g. "Clean Eater"). Names to be decided.
+**Status**: the title a Member's Levels give her, made of a Shape and a Tier (e.g. "Radiant Social Mover"). Names to be decided.
+
+**Shape**: the part of a Status that says where a Member is strongest: one Pillar, a pair of Pillars, or Balanced.
+
+**Tier**: the part of a Status that says how far a Member has grown overall, from her total Levels.
 
 **City**: where Suggestions come from, taken from the Member's current location. Dubai only for now.
