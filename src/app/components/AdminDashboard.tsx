@@ -184,7 +184,10 @@ export default function AdminDashboard() {
   } = useAdmin();
 
   // Open straight on the posting tabs; /admin/dashboard?tab=stepsisters deep-links
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'calendar');
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get('tab') || 'stepsisters';
+    return t === 'calendar' ? 'stepsisters' : t; // Calendar now lives under Stepsisters
+  });
   const [showEpisodeManagementPage, setShowEpisodeManagementPage] = useState(false);
   const [showLiveSessionManagementPage, setShowLiveSessionManagementPage] = useState(false);
   const [showCommunityManagementPage, setShowCommunityManagementPage] = useState(false);
@@ -415,11 +418,10 @@ export default function AdminDashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="stepsisters">Stepsisters & events</TabsTrigger>
           <TabsTrigger value="guide">Directory</TabsTrigger>
           <TabsTrigger value="traffic">Traffic</TabsTrigger>
           <TabsTrigger value="shop">Shop</TabsTrigger>
-          <TabsTrigger value="stepsisters">Stepsisters</TabsTrigger>
           <TabsTrigger value="plan">Sign-ups</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -991,10 +993,6 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        <TabsContent value="calendar" className="space-y-6">
-          <EventBookings />
-          <WellnessCalendarManagement />
-        </TabsContent>
 
         <TabsContent value="guide" className="space-y-6">
           <WellnessGuideManagement />
@@ -1009,7 +1007,9 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="stepsisters" className="space-y-6">
+          <EventBookings />
           <StepsistersManagement />
+          <WellnessCalendarManagement />
         </TabsContent>
 
         <TabsContent value="plan" className="space-y-6">
