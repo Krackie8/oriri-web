@@ -38,6 +38,12 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 
 **Met at Oriri**: the badge a Member earns by scanning the QR code at an Oriri or partner Meet up. It is the only trust mark other Members see by default.
 
+**Morning with Bestie**: the daily card (a line from Ren, today's hints, this week's Meet up) with the Check-in underneath. The reason to open Oriri each morning.
+
+**Wrap-up**: the evening moment when a Member ticks off her Completions and writes her Reflection.
+
+**Streak**: the run of days on which a Member completed at least one Suggestion, with one free rest day per week. It never affects Levels.
+
 **Profile**: a Member's growth across the four Pillars, shown as a spider chart.
 
 **Level**: a Member's standing in one Pillar (1–10), earned through Completions. Levels never go down.
