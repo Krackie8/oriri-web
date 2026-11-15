@@ -24,6 +24,8 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 
 **Pillar**: one of the four areas Bestie suggests in and a Member grows in: **Move** (activity), **Meal** (a place to eat or something to eat), **Mindset** (a video or podcast to watch or listen to), **Meet up** (a social or community connection).
 
+**Day plan**: the four Suggestions Bestie makes from one Check-in, fitted together into her time and budget. A Member has one active Day plan per day; checking in again replaces it.
+
 **Suggestion**: one thing Bestie offers for one Pillar after a Check-in. A Member accepts, swaps or skips it.
 
 **Completion**: a Member marking a Suggestion as done, with Proof. Only Completions grow her Profile.
