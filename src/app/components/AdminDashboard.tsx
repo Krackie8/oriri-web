@@ -60,6 +60,7 @@ import WellnessCalendarManagement from './admin/WellnessCalendarManagement';
 import WellnessGuideManagement from './admin/WellnessGuideManagement';
 import TrafficDashboard from './admin/TrafficDashboard';
 import ShopEarnings from './admin/ShopEarnings';
+import EventBookings from './admin/EventBookings';
 import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
 import WaitlistLeadsManagement from './admin/WaitlistLeadsManagement';
@@ -991,6 +992,7 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="calendar" className="space-y-6">
+          <EventBookings />
           <WellnessCalendarManagement />
         </TabsContent>
 

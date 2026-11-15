@@ -8416,6 +8416,77 @@ app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
 });
 
 
+// ── Event bookings: visitors book a meetup / calendar event on the site.
+// kv rsvp:<ref>:<email> where ref = e-<event id> (calendar) or m-<moment id> (Stepsisters).
+async function rsvpEvent(ref: string): Promise<any | null> {
+  const m = /^(e|m)-([A-Za-z0-9-]{6,64})$/.exec(ref);
+  if (!m) return null;
+  const item: any = await kv.get(`${m[1] === 'e' ? 'wellness:event:' : 'wellness:moment:'}${m[2]}`);
+  return item ? { ...item, ref } : null;
+}
+
+app.post('/make-server-a278ea32/wellness/rsvp', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
+    const ref = clip(body.ref, 80);
+    const event = await rsvpEvent(ref);
+    const today = dubaiDate();
+    if (!event || !event.date || event.date < today) return c.json({ success: false, error: 'This event is no longer taking bookings.' }, 400);
+    const name = clip(body.name, 80);
+    if (name.length < 2) return c.json({ success: false, error: 'Please add your name.' }, 400);
+    const email = clip(body.email, 160).toLowerCase();
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
+    const phone = clip(body.phone, 24).replace(/[^0-9+ ]/g, '');
+    const guests = Math.min(Math.max(Number(body.guests) || 1, 1), 6);
+    const key = `rsvp:${ref}:${email}`;
+    const existing: any = await kv.get(key);
+    const record = {
+      ref, email, name, phone, guests,
+      eventTitle: clip(event.title, 160), eventDate: event.date,
+      wb_source: clip(body.wb_source, 30) || 'direct',
+      bookedAt: existing?.bookedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await kv.set(key, record);
+    if (!existing) {
+      sendMail(SMTP.notify, `New booking: ${record.eventTitle} (${record.eventDate}) - ${name}`,
+        `Event: ${record.eventTitle} on ${record.eventDate}\nName: ${name}\nEmail: ${email}\nWhatsApp: ${phone}\nSpots: ${guests}\nSource: ${record.wb_source}`,
+        `<p style="font-family:Arial,sans-serif;font-size:14px"><b>${esc(record.eventTitle)}</b> on ${esc(record.eventDate)}<br>Name: ${esc(name)}<br>Email: ${esc(email)}<br>WhatsApp: ${esc(phone)}<br>Spots: ${guests}<br>Source: ${esc(record.wb_source)}</p>`,
+      ).catch((e) => console.log('Booking notify failed:', e?.message));
+    }
+    return c.json({ success: true, data: { alreadyBooked: !!existing, link: event.link || '' } });
+  } catch (error: any) {
+    console.log('Booking error:', error?.message);
+    return c.json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
+  }
+});
+
+// Admin: all bookings, newest first
+app.get('/make-server-a278ea32/wellness/rsvps', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('rsvp:')) || []).filter(Boolean) as any[];
+    rows.sort((a, b) => String(b.bookedAt || '').localeCompare(String(a.bookedAt || '')));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load bookings' }, 500);
+  }
+});
+
+app.delete('/make-server-a278ea32/wellness/rsvps/:ref/:email', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    await kv.del(`rsvp:${c.req.param('ref')}:${decodeURIComponent(c.req.param('email')).toLowerCase()}`);
+    return c.json({ success: true });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to delete booking' }, 500);
+  }
+});
+
 // Admin: mark leads as tests so they drop out of the waitlist count.
 // kv bestie:leadflag:<email> = { email, test: boolean, at }. test:false = "real" (overrides auto-guess).
 app.get('/make-server-a278ea32/bestie/lead-flags', async (c) => {
