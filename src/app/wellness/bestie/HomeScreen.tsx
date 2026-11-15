@@ -1,7 +1,7 @@
 /** 1 · Homepage: Ren's four pillars (small, free), then Bestie the app. */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Award, Brain, ChevronDown, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
+import { ArrowUpRight, Award, Brain, ChevronDown, Share2, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { WellnessGuide } from '../../utils/wellnessApi';
 import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
@@ -9,7 +9,8 @@ import type { PillarKey } from './picks';
 import { cardClick, ctaClick } from '../analytics/track';
 import { countPlaceClick } from '../analytics/firstParty';
 import { MembershipCard } from './OptionsScreen';
-import { withUtm } from '../analytics/utm';
+import { sourceLabel, withUtm } from '../analytics/utm';
+import { checkEmail } from '../../utils/emailCheck';
 import { unsplash } from '../components/ui';
 import PhoneShowcase from './PhoneShowcase';
 
@@ -542,17 +543,52 @@ function useUpcoming(): EventRow[] | null {
   return rows;
 }
 
+/** Share link for one event; opening it scrolls to the event with its details open. */
+const eventShareUrl = (id: string) => `${location.origin}/bestie?event=${encodeURIComponent(id)}#stepsisters`;
+const linkedEventId = () => {
+  try {
+    return new URLSearchParams(location.search).get('event') || '';
+  } catch {
+    return '';
+  }
+};
+
 function EventItem({ row }: { row: EventRow }) {
-  const [open, setOpen] = useState(false);
+  const deepLinked = linkedEventId() === row.id;
+  const [open, setOpen] = useState(deepLinked);
+  const [copied, setCopied] = useState(false);
+  const itemRef = React.useRef<HTMLLIElement>(null);
   const d = new Date(`${row.date}T00:00`);
-  const hasDetails = !!(row.description || row.url || row.location || row.image);
+  useEffect(() => {
+    if (deepLinked) setTimeout(() => itemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, [deepLinked]);
   const toggle = () => {
     if (!open) cardClick('meetups', row.title);
     setOpen((o) => !o);
   };
-  const isWhatsApp = /whatsapp|wa\.me/.test(row.url);
+  const share = async () => {
+    const url = eventShareUrl(row.id);
+    const when = `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}${row.time ? `, ${row.time}` : ''}`;
+    ctaClick(`Share: ${row.title}`, 'meetups');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: row.title, text: `${row.title} · ${when}${row.location ? ` · ${row.location}` : ''}. Book your spot on ORIRI:`, url });
+        return;
+      }
+    } catch {
+      return; // share sheet closed
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.prompt('Copy this link', url);
+    }
+  };
+  const btn = 'inline-flex items-center gap-1.5 rounded-full border border-wb-plum px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-wb-plum hover:bg-wb-plum hover:text-white';
   return (
-    <li className="py-3">
+    <li ref={itemRef} className="scroll-mt-24 py-3">
       <div className="flex items-center gap-3.5">
         <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[14px] border border-wb-gold/60 bg-wb-shell">
           <span className="text-[14px] uppercase text-wb-taupe">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>
@@ -569,17 +605,16 @@ function EventItem({ row }: { row: EventRow }) {
           )}
         </span>
       </div>
-      {hasDetails && (
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={open}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-wb-plum px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-wb-plum hover:bg-wb-plum hover:text-white"
-        >
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={toggle} aria-expanded={open} className={btn}>
           {open ? 'Hide details' : 'See details'}
           <ChevronDown className={cx('h-4 w-4 transition-transform', open && 'rotate-180')} strokeWidth={1.8} />
         </button>
-      )}
+        <button type="button" onClick={share} className={btn}>
+          <Share2 className="h-4 w-4" strokeWidth={1.8} />
+          {copied ? 'Link copied' : 'Share'}
+        </button>
+      </div>
       {open && (
         <div className="mt-3 rounded-[14px] bg-wb-stone px-5 py-5 text-left">
           {row.image && <img src={row.image} alt="" loading="lazy" className="mb-4 aspect-[4/3] w-full rounded-[10px] object-cover" />}
@@ -600,19 +635,78 @@ function EventItem({ row }: { row: EventRow }) {
             </a>
           )}
           {row.description && <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-wb-soft">{row.description.trim().replace(/\n{3,}/g, "\n\n")}</p>}
-          {row.url &&
-            (row.url.startsWith('/') ? (
-              <Link to={withUtm(row.url)} onClick={() => ctaClick(row.title, 'meetups')} className="mt-5 inline-flex rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
-                Join
-              </Link>
-            ) : (
-              <a href={row.url} target="_blank" rel="noopener noreferrer" onClick={() => ctaClick(row.title, 'meetups')} className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
-                {isWhatsApp ? 'Join the WhatsApp group' : 'Book your spot'}
-                <ArrowUpRight className="h-4 w-4" strokeWidth={1.8} />
-              </a>
-            ))}
+          <BookingForm row={row} />
         </div>
       )}
     </li>
+  );
+}
+
+function BookingForm({ row }: { row: EventRow }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [guests, setGuests] = useState(1);
+  const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle');
+  const [error, setError] = useState('');
+  const [link, setLink] = useState('');
+  const [again, setAgain] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (name.trim().length < 2) return setError('Please add your name.');
+    const chk = checkEmail(email);
+    if (!chk.ok) return setError(chk.error || 'Please check your email address.');
+    setState('sending');
+    const res = await wellnessApi.bookEvent({ ref: row.id, name: name.trim(), email: chk.email, phone: phone.trim(), guests, wb_source: sourceLabel() });
+    if (!res.ok || !res.data) {
+      setState('idle');
+      return setError(res.error || 'Something went wrong. Please try again.');
+    }
+    ctaClick(`Booked: ${row.title}`, 'meetups');
+    setLink(res.data.link);
+    setAgain(res.data.alreadyBooked);
+    setState('done');
+  }
+
+  if (state === 'done') {
+    const isWhatsApp = /whatsapp|wa\.me/.test(link);
+    return (
+      <div className="mt-5 rounded-[12px] bg-wb-shell px-4 py-4">
+        <p className="font-wb-serif text-[20px] text-wb-plum">{again ? "You're already on the list" : "You're booked!"}</p>
+        <p className="mt-1 text-[15px] leading-relaxed text-wb-soft">We'll be in touch with the details before the day. Tell a friend with the Share button.</p>
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
+            {isWhatsApp ? 'Join the WhatsApp group' : 'Event page'}
+            <ArrowUpRight className="h-4 w-4" strokeWidth={1.8} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const field = 'w-full rounded-[10px] border border-wb-sand bg-wb-shell px-3.5 py-3 text-[16px] text-wb-ink placeholder:text-wb-taupe/70 focus:border-wb-plum focus:outline-none';
+  return (
+    <form onSubmit={submit} className="mt-5 space-y-2.5 border-t border-wb-sand/70 pt-5" noValidate>
+      <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">Book your spot</p>
+      <input className={field} placeholder="Your name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className={field} placeholder="Email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <input className={field} placeholder="WhatsApp number (optional)" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <label className="flex items-center justify-between gap-3 text-[15px] text-wb-soft">
+        Spots
+        <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="rounded-[10px] border border-wb-sand bg-wb-shell px-3 py-2 text-[16px] text-wb-ink">
+          {[1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? 'Just me' : `${n} people`}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error && <p className="text-[14px] text-[#A2453B]">{error}</p>}
+      <button type="submit" disabled={state === 'sending'} className="w-full rounded-full bg-wb-plum px-5 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-white disabled:opacity-60">
+        {state === 'sending' ? 'Booking…' : 'Book my spot'}
+      </button>
+    </form>
   );
 }

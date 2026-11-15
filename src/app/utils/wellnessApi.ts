@@ -255,3 +255,21 @@ export const saveEarnings = (token: string | undefined, row: Omit<EarningsRow, '
   request<EarningsRow>(`/wellness/earnings/${row.month}/${row.program}`, token, { method: 'PUT', body: JSON.stringify(row) });
 export const deleteEarnings = (token: string | undefined, month: string, program: EarnProgram) =>
   request<void>(`/wellness/earnings/${month}/${program}`, token, { method: 'DELETE' });
+
+// ── Event bookings ───────────────────────────────────────────────────────────
+export interface Rsvp {
+  ref: string; // e-<event id> or m-<moment id>
+  email: string;
+  name: string;
+  phone?: string;
+  guests: number;
+  eventTitle: string;
+  eventDate: string;
+  wb_source?: string;
+  bookedAt: string;
+}
+export const bookEvent = (body: { ref: string; name: string; email: string; phone?: string; guests?: number; wb_source?: string }) =>
+  request<{ alreadyBooked: boolean; link: string }>('/wellness/rsvp', undefined, { method: 'POST', body: JSON.stringify(body) });
+export const getRsvps = (token: string | undefined) => request<Rsvp[]>('/wellness/rsvps', token, { cache: 'no-store' });
+export const deleteRsvp = (token: string | undefined, ref: string, email: string) =>
+  request<void>(`/wellness/rsvps/${ref}/${encodeURIComponent(email)}`, token, { method: 'DELETE' });
