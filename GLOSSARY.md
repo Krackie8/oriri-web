@@ -12,7 +12,7 @@ _Avoid_: "the old site", "AppLayout".
 
 **Relay**: the same-origin path `/api/fn/*` (`.htaccess` → `public/api/fn.php`) that proxies calls to the edge function, because iPhone Safari drops some cross-site requests after preflight. Falls back to a direct call when broken.
 
-**Free day**: the one free Bestie day a visitor claims with an email. Claims that fail to send are queued locally and retried on the next visit, so the plan still unlocks.
+**Free day**: legacy term for the free Bestie day a visitor claims with an email; it is becoming simply joining Oriri (free daily Bestie). Claims that fail to send are queued locally and retried on the next visit, so the plan still unlocks.
 
 **Bestie**: Oriri's recommendation engine and the heart of the product. From a member's Check-in it suggests one thing per Pillar for her current city, then learns from what she accepts, skips and completes.
 _Avoid_: "the AI", "the algorithm".
@@ -53,5 +53,8 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 **Shape**: the part of a Status that says where a Member is strongest: one Pillar, a pair of Pillars, or Balanced.
 
 **Tier**: the part of a Status that says how far a Member has grown overall, from her total Levels.
+
+**Membership**: the paid tier on top of free daily Bestie (AED 30 a month). It lets a Member see and steer what Bestie has learned, plan her week ahead, keep her full history and use partner perks.
+_Avoid_: "premium", "VIP" (VIP belongs to the Legacy app).
 
 **City**: where Suggestions come from, taken from the Member's current location. Dubai only for now.
