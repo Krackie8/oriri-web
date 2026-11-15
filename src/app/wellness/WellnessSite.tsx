@@ -15,7 +15,7 @@ import GuestProfilePage from './pages/GuestProfilePage';
 import WeeklyRecap from './bestie/WeeklyRecap';
 import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
-import { flushPendingFreeDay } from './api';
+import { functionClient } from './functionClient';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
 import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
@@ -89,7 +89,7 @@ export default function WellnessSite() {
   useEffect(() => {
     captureAttribution();
     installOutboundTracking(); // outbound_click on every external link
-    flushPendingFreeDay(); // re-send a free-day email saved while offline
+    void functionClient.freeDay.retryPending(); // re-send a Free day claim queued on an earlier visit
     loadTrackers(); // no-op unless the visitor has already accepted
     return onConsentChange((c) => {
       setConsentState(c);

@@ -9,7 +9,7 @@ import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, typ
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked } from './state';
-import { submitFreeDay } from '../api';
+import { functionClient } from '../functionClient';
 import { NO_MAIL_ERROR, checkEmail, domainAcceptsMail } from '../../utils/emailCheck';
 import { ctaClick, formSubmit, track } from '../analytics/track';
 import { getUtm, withUtm } from '../analytics/utm';
@@ -625,23 +625,26 @@ function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked:
       setSending(false);
       return setError(NO_MAIL_ERROR);
     }
-    const r = await submitFreeDay({
+    const r = await functionClient.freeDay.claim({
       email: em,
       consent: true,
       inputs: { energy: inputs?.energy || '', goals: inputs?.goals || [], minutes: inputs?.minutes || 0, budget: inputs?.budget || 0, area: inputs?.area || '' },
       plan: plan.map((p) => ({ time: `${p.minutes} min`, label: p.label, title: p.title, venue: p.venue, cost: p.priceLabel, url: p.links[0]?.url || '' })),
     });
     setSending(false);
-    if (r.used && r.today) {
+    if (!r.ok) return setError(r.error.message || 'Something went wrong. Please try again.');
+    const claim = r.data;
+    if (claim.outcome === 'alreadyUsed' && claim.today) {
       // Same email, same day (e.g. back on another phone): it's still their free day
       markEmailUsed(em);
       return onUnlocked(em);
     }
-    if (r.used) {
+    if (claim.outcome === 'alreadyUsed') {
       markEmailUsed(em);
       return onUsed(em);
     }
-    if (!r.ok) return setError(r.error || 'Something went wrong. Please try again.');
+    if (claim.outcome === 'invalid') return setError(claim.message);
+    // claimed, or queued to re-send on the next visit: the plan unlocks either way
     markEmailUsed(em);
     formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
     formSubmit('pilot_application', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
