@@ -10,9 +10,18 @@ import { projectId } from './supabase/info';
 const FN_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-a278ea32/`;
 const RELAY = '/api/fn/';
 
+let unpatched: typeof fetch | undefined;
+
+/**
+ * The browser's own fetch, from before this patch. The Wellness site's Function
+ * client uses it, so it does its own Relay routing and never depends on the patch.
+ */
+export const nativeFetch: typeof fetch = (input, init) => (unpatched ?? window.fetch.bind(window))(input, init);
+
 export function installSameOriginFetch() {
   if (typeof window === 'undefined' || !/(^|\.)oriri\.me$/i.test(window.location.hostname)) return;
   const direct = window.fetch.bind(window);
+  unpatched = direct;
   let relayBroken = false;
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
