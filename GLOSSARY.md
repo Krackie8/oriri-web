@@ -32,6 +32,12 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 
 **Proof**: what backs up a Completion. How strict it must be depends on what the Completion unlocks: a light check (tick, optional photo, sanity limits) for Levels; strong evidence (venue location, QR code at a Meet up, health data) where a real reward is at stake.
 
+**Reflection**: the one line a Member writes to complete a Mindset Suggestion. It is what earns the Completion, not the watching or listening.
+
+**Journal**: a Member's private record of her Completions, photos and Reflections.
+
+**Met at Oriri**: the badge a Member earns by scanning the QR code at an Oriri or partner Meet up. It is the only trust mark other Members see by default.
+
 **Profile**: a Member's growth across the four Pillars, shown as a spider chart.
 
 **Level**: a Member's standing in one Pillar, earned through Completions.
