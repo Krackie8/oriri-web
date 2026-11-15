@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE: Bestie daily loop</title>
+<style>
+  :root{--paper:#FAF8F5;--ink:#2B2522;--soft:#5E524A;--taupe:#7D6D61;--gold:#B8A291;--goldsoft:#EFE9E3;--line:#E4DCD4;--ok:#4F7A5A;--warn:#A0522D}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 Georgia,'Times New Roman',serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-weight:400;font-size:28px;margin:0}
+  h2{font-weight:400;font-size:18px;margin:0 0 10px;color:var(--soft)}
+  .tag{display:inline-block;font:12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);padding:4px 8px;border-radius:99px}
+  .q{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:14px 0 20px;color:var(--soft);font-size:14px}
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:20px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px}
+  .sys{font-family:system-ui,sans-serif;font-size:13px}
+  button{font:13px system-ui,sans-serif;border:1px solid var(--gold);background:#fff;color:var(--ink);border-radius:99px;padding:7px 12px;margin:3px 3px 3px 0;cursor:pointer}
+  button:hover{background:var(--goldsoft)}
+  button.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  button:disabled{opacity:.35;cursor:default}
+  select{font:13px system-ui,sans-serif;padding:5px;border-radius:8px;border:1px solid var(--line)}
+  .sugg{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0}
+  .sugg .p{font:11px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--taupe)}
+  .sugg.done{background:#F2F6F1;border-color:#C9D9C9}
+  .sugg.gone{opacity:.45}
+  .why{color:var(--soft);font-size:13px;font-style:italic}
+  .msg{font:13px system-ui,sans-serif;padding:8px 10px;border-radius:10px;margin:6px 0;background:var(--goldsoft)}
+  .msg.bad{background:#F8E9E2;color:var(--warn)}
+  .msg.good{background:#E8F1E8;color:var(--ok)}
+  .moment{border:2px solid var(--gold);border-radius:14px;padding:12px;text-align:center;margin:8px 0;background:#FFFCF7}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:4px 10px;font:13px system-ui,sans-serif}
+  .kv b{color:var(--taupe);font-weight:500}
+  .tabs button.on{background:var(--ink);color:var(--paper)}
+  .steps button{display:block;width:100%;text-align:left;border-radius:10px}
+  .steps button.next{border-width:2px;border-color:var(--ink)}
+  .changed{animation:none;background:#FFF5D6}
+  svg text{font:11px system-ui,sans-serif;fill:var(--soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">Prototype · throwaway · not production</span>
+  <h1 style="margin-top:10px">Bestie's daily loop</h1>
+  <div class="q"><b>The question this answers:</b> do the rules we agreed for the Bestie loop feel right once you live through a day? Those rules: Check-in → one Day plan with four Suggestions, swap and skip, Completion with Proof and a time gate, points → Levels → Status, Streak with a rest day, and quiet flags. Play freely on the left, or use the walkthroughs on the right to replay the awkward cases. The clock is simulated: use "+30 min" and "Next day". Nothing is saved.</div>
+
+  <div class="grid">
+    <div>
+      <div class="card" id="phone"></div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>Walkthroughs</h2>
+        <div class="tabs" id="tabs"></div>
+        <p class="sys" id="scDesc" style="color:var(--soft)"></p>
+        <div class="steps" id="steps"></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>Her Profile</h2>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+          <div id="chart"></div>
+          <div class="kv" id="profile" style="flex:1;min-width:220px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>What Bestie recorded (the learning log)</h2>
+        <div class="sys" id="log" style="max-height:260px;overflow:auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====================================================================
+ * PURE MODULE: the Bestie loop rules. No DOM in here. This part could be
+ * lifted into the real engine; the page below is throwaway.
+ * ==================================================================== */
+const BestieLoop = (() => {
+  const PILLARS = ['move','meal','mindset','meetup'];
+  const PILLAR_NAME = {move:'Move',meal:'Meal',mindset:'Mindset',meetup:'Meet up'};
+  // Tiny curated catalogue (Ren's picks, Dubai). fit = energies it suits.
+  const CATALOGUE = [
+    {id:'kite-walk', pillars:['move'], title:'Sunset walk at Kite Beach', min:30, cost:0, fit:['Low','Steady'], light:false},
+    {id:'reformer', pillars:['move'], title:'Reformer Pilates, JLT', min:50, cost:120, fit:['Steady','High'], light:false},
+    {id:'run-club', pillars:['move','meetup'], title:'Women\'s run club, Safa Park', min:60, cost:0, fit:['Steady','High'], light:false, qr:true},
+    {id:'stretch5', pillars:['move'], title:'5-minute stretch at home', min:5, cost:0, fit:['Low','Steady','High'], light:true},
+    {id:'acai', pillars:['meal'], title:'Acai bowl at a Jumeirah cafe', min:30, cost:55, fit:['Low','Steady','High'], light:false},
+    {id:'poke', pillars:['meal'], title:'Poke bowl lunch near the office', min:40, cost:65, fit:['Steady','High'], light:false},
+    {id:'brunch', pillars:['meal','meetup'], title:'Stepsisters brunch, Al Serkal', min:90, cost:140, fit:['Low','Steady','High'], light:false, qr:true},
+    {id:'smoothie', pillars:['meal'], title:'Berry smoothie at home', min:10, cost:0, fit:['Low','Steady','High'], light:true},
+    {id:'pod', pillars:['mindset'], title:'Oriri podcast: "Rest is productive"', min:25, cost:0, fit:['Low','Steady','High'], light:false},
+    {id:'journal', pillars:['mindset'], title:'Morning pages, 15 minutes', min:15, cost:0, fit:['Low','Steady'], light:false},
+    {id:'listen5', pillars:['mindset'], title:'5-minute calm listen', min:5, cost:0, fit:['Low','Steady','High'], light:true},
+    {id:'event', pillars:['meetup'], title:'Oriri candle-making evening', min:90, cost:90, fit:['Low','Steady','High'], light:false, qr:true},
+    {id:'reach', pillars:['meetup'], title:'Message a Stepsister you haven\'t seen', min:5, cost:0, fit:['Low','Steady','High'], light:true, reachOut:true},
+  ];
+  const LEVEL_AT = [0,30,80,160,280,450,700,1000,1400,1900]; // points to reach L1..L10
+  const TIERS = ['Rising','Glowing','Radiant','Iconic']; // placeholder names
+  const SHAPE_SINGLE = {move:'Mover',meal:'Clean Eater',mindset:'Calm Mind',meetup:'Connector'};
+  const PAIR = (a,b) => ({'move+meetup':'Social Mover','meal+meetup':'Table Setter','move+meal':'Fuelled Mover','mindset+move':'Mindful Mover','meal+mindset':'Nourished Mind','meetup+mindset':'Kind Connector'})[[a,b].sort().join('+')];
+
+  const levelOf = pts => { let l=1; LEVEL_AT.forEach((t,i)=>{ if(pts>=t) l=i+1; }); return l; };
+  const levels = st => Object.fromEntries(PILLARS.map(p => [p, levelOf(st.points[p])]));
+  function statusOf(st){
+    const L = levels(st); const sorted = PILLARS.slice().sort((a,b)=>L[b]-L[a]);
+    const [a,b,c] = sorted; let shape;
+    if (L[a]-L[sorted[3]] <= 1) shape = 'Balanced';
+    else if (L[a]-L[b] >= 2) shape = SHAPE_SINGLE[a];
+    else if (L[b]-L[c] >= 1) shape = PAIR(a,b);
+    else shape = SHAPE_SINGLE[a];
+    const total = PILLARS.reduce((s,p)=>s+L[p],0); // 4..40
+    const tier = TIERS[total>=28?3:total>=18?2:total>=9?1:0];
+    return tier + ' ' + shape;
+  }
+
+  const initial = () => ({
+    day:1, clock:8*60, // minutes since midnight
+    plan:null, planId:0, seenYesterday:[],
+    points:{move:0,meal:0,mindset:0,meetup:0},
+    streak:0, restUsedThisWeek:false, completedToday:false,
+    log:[], messages:[], moments:[], status:'Rising Balanced', flagged:0, reachOutsToday:0,
+  });
+  const say = (st, text, kind='') => st.messages.push({text,kind});
+  const rec = (st, what) => st.log.unshift(`Day ${st.day} ${fmt(st.clock)} · ${what}`);
+  const fmt = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+  function fits(item, ci){ return item.fit.includes(ci.energy) && item.cost <= ci.budget; }
+  function buildPlan(st, ci){
+    // One Day plan: one Suggestion per Pillar, fitting time AND budget together.
+    // A two-Pillar item may fill two slots. What doesn't fit becomes a light version.
+    let timeLeft = ci.minutes, moneyLeft = ci.budget; const slots = {}; const used = new Set();
+    const goalWantsMeetup = ci.goal === 'Connect';
+    const order = goalWantsMeetup ? ['meetup','move','meal','mindset'] : ['move','meal','mindset','meetup'];
+    for (const p of order){
+      if (slots[p]) continue;
+      const pool = CATALOGUE.filter(i => i.pillars.includes(p) && !i.light && !used.has(i.id)
+        && fits(i,{...ci,budget:moneyLeft}) && i.min <= timeLeft && !st.seenYesterday.includes(i.id)
+        && i.pillars.every(q => !slots[q]));
+      pool.sort((a,b)=> (b.pillars.length - a.pillars.length) || (b.min - a.min));
+      const pick = pool[0];
+      if (pick){ pick.pillars.forEach(q => slots[q] = pick); used.add(pick.id); timeLeft -= pick.min; moneyLeft -= pick.cost; }
+    }
+    for (const p of PILLARS) if (!slots[p]) slots[p] = CATALOGUE.find(i => i.light && i.pillars.includes(p));
+    const seen = new Set(); const sugg = [];
+    for (const p of PILLARS){ const it = slots[p]; if (seen.has(it.id)) continue; seen.add(it.id);
+      sugg.push({id:it.id, item:it, pillars:it.pillars, status:'shown', shownAt:st.clock, completedAt:null, proof:null,
+        why: why(it, ci)}); }
+    return {checkIn:ci, suggestions:sugg, createdAt:st.clock};
+  }
+  function why(it, ci){
+    if (it.light) return 'Short on time today, so here is a light version. It still counts.';
+    if (it.pillars.length>1) return `Counts for ${it.pillars.map(p=>PILLAR_NAME[p]).join(' + ')}, and it saves time.`;
+    if (ci.energy==='Low') return 'You said low energy, so this one is gentle.';
+    return `Fits your ${ci.minutes} minutes and AED ${ci.budget}.`;
+  }
+
+  function award(st, s, sign){
+    const pts = s.item.light || s.item.reachOut ? 5 : (s.proof==='qr' && s.pillars.includes('meetup') ? 15 : 10);
+    for (const p of s.pillars) st.points[p] = Math.max(0, st.points[p] + sign*pts);
+    return pts;
+  }
+  function checkStatus(st){
+    const now = statusOf(st);
+    if (now !== st.status){ st.moments.push(`You're now a ${now}`); rec(st, `Status moment: ${st.status} → ${now}`); st.status = now; }
+  }
+
+  function reduce(prev, a){
+    const st = structuredClone(prev); st.messages = [];
+    switch(a.type){
+      case 'checkIn': {
+        if (st.plan){ st.plan.suggestions.forEach(s => { if (s.status==='shown'||s.status==='accepted'){ s.status='replaced'; } });
+          rec(st, 'Checked in again: unfinished Suggestions recorded as REPLACED, Completions kept');
+          say(st, 'New Day plan. The old one\'s unfinished Suggestions were marked replaced. Anything you already completed stays.'); }
+        const done = st.plan ? st.plan.suggestions.filter(s=>s.status==='completed') : [];
+        st.plan = buildPlan(st, a.ci); st.planId++;
+        st.plan.suggestions = [...done, ...st.plan.suggestions.filter(s => !done.some(d=>d.id===s.id))];
+        rec(st, `Check-in: ${a.ci.energy} energy, ${a.ci.minutes} min, AED ${a.ci.budget}${a.ci.goal?', goal '+a.ci.goal:''} → ${st.plan.suggestions.length} Suggestions shown`);
+        break; }
+      case 'swap': {
+        const s = st.plan?.suggestions.find(x=>x.id===a.id); if (!s || s.status==='completed') break;
+        const alt = CATALOGUE.find(i => i.id!==s.id && s.pillars.every(p=>i.pillars.includes(p)) && i.pillars.length===s.pillars.length
+          && fits(i, st.plan.checkIn) && !st.plan.suggestions.some(x=>x.id===i.id));
+        if (!alt){ say(st,'Nothing else fits your time and budget for this one.','bad'); break; }
+        s.status='swapped'; rec(st, `Swapped "${s.item.title}" (recorded as SWAPPED: a learning signal)`);
+        st.plan.suggestions.push({id:alt.id,item:alt,pillars:alt.pillars,status:'shown',shownAt:st.clock,why:'Swapped in for you.',replaces:s.id});
+        break; }
+      case 'skip': { const s = st.plan?.suggestions.find(x=>x.id===a.id); if (!s||s.status==='completed') break;
+        s.status='skipped'; rec(st, `Skipped "${s.item.title}" (Bestie will suggest it less)`); break; }
+      case 'complete': {
+        const s = st.plan?.suggestions.find(x=>x.id===a.id);
+        if (!s || !['shown','accepted'].includes(s.status)){ say(st,'Only today\'s Suggestions from Bestie can be completed.','bad'); break; }
+        const elapsed = st.clock - st.plan.createdAt;
+        if (elapsed < s.item.min){ say(st, `Too soon: "${s.item.title}" takes ${s.item.min} min, and it's only been ${elapsed} min since you checked in.`, 'bad'); rec(st, `Blocked an early Completion (time gate)`); break; }
+        if (s.pillars.includes('mindset') && !a.reflection){ say(st,'Mindset needs a one-line Reflection: "What stayed with you?"','bad'); break; }
+        if (s.item.reachOut && st.reachOutsToday>=1){ say(st,'One reach-out a day counts. Try an event for Meet up.','bad'); break; }
+        s.status='completed'; s.completedAt=st.clock; s.proof = a.proof || 'tick'; s.reflection=a.reflection;
+        if (s.item.reachOut) st.reachOutsToday++;
+        const pts = award(st, s, +1);
+        if (!st.completedToday){ st.completedToday = true; st.streak++; }
+        say(st, `Done! +${pts} ${s.pillars.map(p=>PILLAR_NAME[p]).join(' & ')}${s.proof==='qr'?' · Met at Oriri badge earned':''}${s.proof==='photo'?' · photo saved to your Journal (no extra points)':''}`, 'good');
+        rec(st, `Completed "${s.item.title}" with ${s.proof} Proof, +${pts} to ${s.pillars.join(' & ')}`);
+        const quick = st.plan.suggestions.filter(x=>x.status==='completed');
+        const live = st.plan.suggestions.filter(x=>['shown','accepted','completed'].includes(x.status));
+        if (quick.length>=3 && quick.length===live.length && quick[quick.length-1].completedAt - quick[0].completedAt <= 10){
+          st.flagged++; rec(st,'Quietly FLAGGED: everything ticked within minutes. Still counts for Levels; can\'t unlock real rewards.'); }
+        checkStatus(st); break; }
+      case 'undo': { const s = st.plan?.suggestions.find(x=>x.id===a.id); if (!s||s.status!=='completed') break;
+        award(st, s, -1); s.status='shown'; s.completedAt=null; if (s.item.reachOut) st.reachOutsToday--;
+        if (!st.plan.suggestions.some(x=>x.status==='completed')){ st.completedToday=false; st.streak=Math.max(0,st.streak-1); }
+        rec(st, `Undid "${s.item.title}" (same day)`); checkStatus(st); break; }
+      case 'tick': st.clock += a.minutes; break;
+      case 'nextDay': {
+        if (st.plan) st.plan.suggestions.forEach(s => { if (s.status==='shown') s.status='expired'; });
+        if (!st.completedToday){
+          if (!st.restUsedThisWeek && st.streak>0){ st.restUsedThisWeek = true; rec(st,'No Completion today: used the free rest day, streak kept'); }
+          else if (st.streak>0){ rec(st, `No Completion today: streak reset from ${st.streak}. Levels untouched.`); st.streak = 0; }
+        }
+        st.seenYesterday = st.plan ? st.plan.suggestions.map(s=>s.id) : [];
+        st.day++; st.clock = 8*60; st.plan = null; st.completedToday=false; st.reachOutsToday=0;
+        if ((st.day-1)%7===0) st.restUsedThisWeek=false;
+        rec(st, 'A new day: Morning with Bestie'); break; }
+      case 'grant': { // walkthrough helper: jump ahead weeks of history
+        for (const [p,v] of Object.entries(a.points)) st.points[p]+=v; rec(st, `(Fast-forward: weeks of past Completions added)`); checkStatus(st); break; }
+    }
+    return st;
+  }
+  return { reduce, initial, levels, statusOf, PILLARS, PILLAR_NAME, LEVEL_AT, fmt };
+})();
+
+/* ====================================================================
+ * THROWAWAY PAGE SHELL
+ * ==================================================================== */
+const B = BestieLoop;
+let S = B.initial(); let lastMsgs = [];
+let ci = {energy:'Steady', minutes:120, budget:250, goal:''};
+const DAILY_LINES = ['"Small and steady still counts." · Ren','"Rest is part of the plan." · Ren','"Say yes to one new thing today." · Ren'];
+function act(a){ S = B.reduce(S, a); lastMsgs = S.messages; render(); }
+
+function phone(){
+  const p = S.plan;
+  let h = `<div class="sys" style="display:flex;justify-content:space-between;color:var(--taupe)"><span>Day ${S.day}</span><span>${B.fmt(S.clock)}</span></div>`;
+  h += `<div style="margin:8px 0 12px"><div class="sys" style="letter-spacing:.08em;text-transform:uppercase;color:var(--taupe)">Morning with Bestie</div>
+        <div style="font-size:19px;margin:4px 0">${DAILY_LINES[(S.day-1)%3]}</div>
+        <div class="sys" style="color:var(--soft)">Hot until 5pm, sunset 5:41pm · This week: candle-making Thursday</div></div>`;
+  h += `<div class="sys" style="border-top:1px solid var(--line);padding-top:10px">
+    Energy <select id="e">${['Low','Steady','High'].map(x=>`<option ${x===ci.energy?'selected':''}>${x}</option>`).join('')}</select>
+    Time <select id="m">${[30,60,120,240].map(x=>`<option value="${x}" ${x==ci.minutes?'selected':''}>${x<60?x+' min':x/60+' h'}</option>`).join('')}</select>
+    Budget <select id="b">${[0,100,250,500].map(x=>`<option value="${x}" ${x==ci.budget?'selected':''}>${x?'AED '+x:'Free'}</option>`).join('')}</select>
+    Goal <select id="g">${['','Recharge','Focus','Glow','Connect','Unwind'].map(x=>`<option value="${x}" ${x===ci.goal?'selected':''}>${x||'(none)'}</option>`).join('')}</select>
+    <div style="margin-top:6px"><button class="primary" onclick="doCheckIn()">${p?'Check in again':'Check in'}</button></div></div>`;
+  for (const m of lastMsgs) h += `<div class="msg ${m.kind}">${m.text}</div>`;
+  for (const m of S.moments.slice(-1)) h += `<div class="moment"><div class="sys" style="color:var(--taupe)">STATUS MOMENT</div><div style="font-size:20px">${m}</div><button onclick="S.moments=[];render()">Save to Journal / share</button></div>`;
+  if (p){
+    for (const s of p.suggestions){
+      const live = ['shown','accepted'].includes(s.status);
+      h += `<div class="sugg ${s.status==='completed'?'done':''} ${['swapped','skipped','replaced','expired'].includes(s.status)?'gone':''}">
+        <div class="p">${s.pillars.map(x=>B.PILLAR_NAME[x]).join(' + ')}${s.item.light?' · light':''} · ${s.item.min} min · ${s.item.cost?'AED '+s.item.cost:'Free'} · <b>${s.status}</b></div>
+        <div>${s.item.title}</div><div class="why">${s.why}</div>
+        ${live?`<button onclick="act({type:'complete',id:'${s.id}',proof:'tick',reflection:${s.pillars.includes('mindset')?"prompt('What stayed with you?')||''":"''"}})">Done ✓</button>
+               <button onclick="act({type:'complete',id:'${s.id}',proof:'photo',reflection:${s.pillars.includes('mindset')?"prompt('What stayed with you?')||''":"''"}})">Done + photo</button>
+               ${s.item.qr?`<button onclick="act({type:'complete',id:'${s.id}',proof:'qr'})">Scan event QR</button>`:''}
+               <button onclick="act({type:'swap',id:'${s.id}'})">Swap</button><button onclick="act({type:'skip',id:'${s.id}'})">Skip</button>`:''}
+        ${s.status==='completed'?`<button onclick="act({type:'undo',id:'${s.id}'})">Undo</button>`:''}
+      </div>`;
+    }
+  }
+  h += `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px"><button onclick="act({type:'tick',minutes:30})">+30 min</button><button onclick="act({type:'tick',minutes:120})">+2 h</button><button onclick="act({type:'nextDay'})">Next day (Wrap-up)</button><button onclick="S=B.initial();lastMsgs=[];render()">Reset</button></div>`;
+  return h;
+}
+function doCheckIn(){ ci = {energy:val('e'), minutes:+val('m'), budget:+val('b'), goal:val('g')}; act({type:'checkIn', ci}); }
+const val = id => document.getElementById(id).value;
+
+function chart(){
+  const L = B.levels(S), P = B.PILLARS, cx=90, cy=90, R=70;
+  const pt = (i,v) => { const ang = -Math.PI/2 + i*Math.PI/2; const r = R*v/10; return [cx+r*Math.cos(ang), cy+r*Math.sin(ang)]; };
+  const poly = vals => vals.map((v,i)=>pt(i,v).join(',')).join(' ');
+  let s = `<svg width="180" height="190" viewBox="0 0 180 190">`;
+  [2,4,6,8,10].forEach(v=> s+=`<polygon points="${poly([v,v,v,v])}" fill="none" stroke="#E4DCD4"/>`);
+  s += `<polygon points="${poly(P.map(p=>L[p]))}" fill="rgba(184,162,145,.35)" stroke="#B8A291"/>`;
+  P.forEach((p,i)=>{ const [x,y]=pt(i,11.8); s+=`<text x="${x}" y="${y+4}" text-anchor="middle">${B.PILLAR_NAME[p]} L${L[p]}</text>`; });
+  return s+`</svg><div class="sys" style="color:var(--taupe);text-align:center">lifetime Levels (the last-30-days layer is not shown here)</div>`;
+}
+function profile(){
+  const L = B.levels(S);
+  return `<b>Status</b><span style="font-size:16px">${S.status}</span>
+    ${B.PILLARS.map(p=>`<b>${B.PILLAR_NAME[p]}</b><span>Level ${L[p]} · ${S.points[p]} pts (next at ${B.LEVEL_AT[L[p]]??'max'})</span>`).join('')}
+    <b>Streak</b><span>${S.streak} day${S.streak===1?'':'s'} ${S.restUsedThisWeek?'· rest day used this week':'· rest day available'}</span>
+    <b>Quiet flags</b><span>${S.flagged} ${S.flagged?'(no real rewards for those)':''}</span>
+    <b>Public to others</b><span>only the Met at Oriri badge (Levels and Status are private)</span>`;
+}
+
+const SCENARIOS = [
+  {name:'A good day', desc:'Steady energy, 2 hours, AED 250. Watch how the four Suggestions fit her time and budget together, then complete them as the clock moves.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Steady',minutes:120,budget:250,goal:''};}],
+          ['Check in (Steady, 2 h, AED 250)',()=>act({type:'checkIn',ci})],
+          ['Wait 1 hour',()=>act({type:'tick',minutes:60})],
+          ['Complete the first Suggestion',()=>{const s=S.plan.suggestions.find(x=>x.status==='shown');act({type:'complete',id:s.id,proof:'tick',reflection:'x'});}],
+          ['Wait 1 more hour, then complete everything else',()=>{act({type:'tick',minutes:60});S.plan.suggestions.filter(x=>x.status==='shown').forEach(s=>act({type:'complete',id:s.id,proof:'tick',reflection:'Rest is part of it'}));}]]},
+  {name:'Only 30 minutes', desc:'Low energy, 30 min, free. Not everything fits, so she gets light versions and still touches all four Pillars. Light versions earn 5 points instead of 10.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Low',minutes:30,budget:0,goal:''};}],
+          ['Check in (Low, 30 min, free)',()=>act({type:'checkIn',ci})],
+          ['Wait 30 min and complete all',()=>{act({type:'tick',minutes:30});S.plan.suggestions.filter(x=>x.status==='shown').forEach(s=>act({type:'complete',id:s.id,proof:'tick',reflection:'Breathe'}));}]]},
+  {name:'Trying to game it', desc:'She checks in and immediately ticks everything. The time gate blocks it. Then she waits just long enough and ticks all four within a few minutes, which gets quietly flagged.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Low',minutes:30,budget:0,goal:''};}],
+          ['Check in',()=>act({type:'checkIn',ci})],
+          ['Tick the Move right away',()=>{const s=S.plan.suggestions.find(x=>x.pillars.includes('move'));act({type:'complete',id:s.id,proof:'tick'});}],
+          ['Wait 30 min, tick all four within minutes',()=>{act({type:'tick',minutes:30});S.plan.suggestions.filter(x=>x.status==='shown').forEach(s=>act({type:'complete',id:s.id,proof:'tick',reflection:'ok'}));}],
+          ['Try a second reach-out today (re-check-in)',()=>{act({type:'checkIn',ci});act({type:'tick',minutes:30});const s=S.plan.suggestions.find(x=>x.item.reachOut&&x.status==='shown');if(s)act({type:'complete',id:s.id,proof:'tick'});}]]},
+  {name:'Connect goal + Meet up QR', desc:'The goal is Connect with a good budget, so Bestie leans to Meet up. A two-Pillar item (brunch: Meal + Meet up) earns full points in both, and scanning the event QR gives 15 points and the Met at Oriri badge.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Steady',minutes:240,budget:500,goal:'Connect'};}],
+          ['Check in (Steady, half day, AED 500, Connect)',()=>act({type:'checkIn',ci})],
+          ['Wait 2 hours, scan the QR at the Meet up',()=>{act({type:'tick',minutes:120});const s=S.plan.suggestions.find(x=>x.item.qr&&x.status==='shown');act({type:'complete',id:s.id,proof:'qr'});}]]},
+  {name:'Check in twice', desc:'She completes one thing, then checks in again with different inputs. The new plan replaces the old one, the unfinished Suggestions are recorded as replaced, and her Completion stays.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Steady',minutes:120,budget:250,goal:''};}],
+          ['Check in',()=>act({type:'checkIn',ci})],
+          ['Wait 1 h, complete one',()=>{act({type:'tick',minutes:60});const s=S.plan.suggestions.find(x=>x.item.min<=60&&x.status==='shown');act({type:'complete',id:s.id,proof:'tick',reflection:'x'});}],
+          ['Check in again (High, 1 h, AED 100)',()=>{ci={energy:'High',minutes:60,budget:100,goal:''};act({type:'checkIn',ci});}]]},
+  {name:'Streak and the rest day', desc:'She completes something on day 1 and day 2, misses day 3 (the free rest day keeps her streak), and misses day 4 (the streak resets, but her Levels never drop).',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];ci={energy:'Low',minutes:30,budget:0,goal:''};}],
+          ['Day 1: check in, complete',()=>{act({type:'checkIn',ci});act({type:'tick',minutes:30});const s=S.plan.suggestions.find(x=>x.status==='shown');act({type:'complete',id:s.id,proof:'tick',reflection:'x'});}],
+          ['Day 2: check in, complete',()=>{act({type:'nextDay'});act({type:'checkIn',ci});act({type:'tick',minutes:30});const s=S.plan.suggestions.find(x=>x.status==='shown');act({type:'complete',id:s.id,proof:'tick',reflection:'x'});}],
+          ['Day 3: does nothing',()=>{act({type:'nextDay'});}],
+          ['Day 4: does nothing',()=>{act({type:'nextDay'});act({type:'nextDay'});}]]},
+  {name:'Status changes', desc:'Fast-forward through weeks of Completions to see the shape and the tier change: Balanced, then Clean Eater, then a pair.',
+   steps:[['Reset',()=>{S=B.initial();lastMsgs=[];}],
+          ['Weeks of Meal Completions',()=>act({type:'grant',points:{meal:300,move:40,mindset:30,meetup:10}})],
+          ['Then lots of Meet ups',()=>act({type:'grant',points:{meetup:300,move:20}})],
+          ['A year of everything',()=>act({type:'grant',points:{move:1500,meal:1300,mindset:1500,meetup:1300}})]]},
+];
+let sc = 0, stepAt = 0;
+function tabs(){ return SCENARIOS.map((s,i)=>`<button class="${i===sc?'on':''}" onclick="sc=${i};stepAt=0;render()">${s.name}</button>`).join(''); }
+function steps(){ return SCENARIOS[sc].steps.map((st,i)=>`<button class="${i===stepAt?'next':''}" ${i>stepAt?'disabled':''} onclick="runStep(${i})">${i+1}. ${st[0]}</button>`).join(''); }
+function runStep(i){ SCENARIOS[sc].steps[i][1](); stepAt = i+1; render(); }
+
+function render(){
+  document.getElementById('phone').innerHTML = phone();
+  document.getElementById('tabs').innerHTML = tabs();
+  document.getElementById('scDesc').textContent = SCENARIOS[sc].desc;
+  document.getElementById('steps').innerHTML = steps();
+  document.getElementById('chart').innerHTML = chart();
+  document.getElementById('profile').innerHTML = profile();
+  document.getElementById('log').innerHTML = S.log.map(l=>`<div style="padding:3px 0;border-bottom:1px solid #F1ECE6">${l}</div>`).join('') || '<i>Nothing yet. Check in to start.</i>';
+}
+render();
+</script>
+</body>
+</html>
