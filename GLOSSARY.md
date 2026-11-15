@@ -13,3 +13,27 @@ _Avoid_: "the old site", "AppLayout".
 **Relay**: the same-origin path `/api/fn/*` (`.htaccess` → `public/api/fn.php`) that proxies calls to the edge function, because iPhone Safari drops some cross-site requests after preflight. Falls back to a direct call when broken.
 
 **Free day**: the one free Bestie day a visitor claims with an email. Claims that fail to send are queued locally and retried on the next visit, so the plan still unlocks.
+
+**Bestie**: Oriri's recommendation engine and the heart of the product. From a member's Check-in it suggests one thing per Pillar for her current city, then learns from what she accepts, skips and completes.
+_Avoid_: "the AI", "the algorithm".
+
+**Member**: a woman with an Oriri account. Her Free day is the first day of her membership history, not a separate lead.
+_Avoid_: "user" in product copy, "lead" once she has an account.
+
+**Check-in**: what a Member tells Bestie before it suggests: her energy (mood), the time she has and her budget.
+
+**Pillar**: one of the four areas Bestie suggests in and a Member grows in: **Move** (activity), **Meal** (a place to eat or something to eat), **Mindset** (a video or podcast to watch or listen to), **Meet up** (a social or community connection).
+
+**Suggestion**: one thing Bestie offers for one Pillar after a Check-in. A Member accepts, swaps or skips it.
+
+**Completion**: a Member marking a Suggestion as done, with Proof. Only Completions grow her Profile.
+
+**Proof**: what backs up a Completion. How strict it must be depends on what the Completion unlocks: a light check (tick, optional photo, sanity limits) for Levels; strong evidence (venue location, QR code at a Meet up, health data) where a real reward is at stake.
+
+**Profile**: a Member's growth across the four Pillars, shown as a spider chart.
+
+**Level**: a Member's standing in one Pillar, earned through Completions.
+
+**Status**: the title a Member's combination of Levels gives her (e.g. "Clean Eater"). Names to be decided.
+
+**City**: where Suggestions come from, taken from the Member's current location. Dubai only for now.
