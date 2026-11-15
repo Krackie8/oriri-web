@@ -1,7 +1,7 @@
 /** 1 · Homepage: Ren's four pillars (small, free), then Bestie the app. */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Award, Brain, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
+import { ArrowUpRight, Award, Brain, ChevronDown, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { WellnessGuide } from '../../utils/wellnessApi';
 import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
@@ -515,7 +515,7 @@ function PlumBand() {
   );
 }
 
-type EventRow = { id: string; date: string; title: string; meta: string; tag: string; url: string };
+type EventRow = { id: string; date: string; title: string; meta: string; tag: string; url: string; time?: string; location?: string; description?: string; image?: string };
 
 /** Upcoming Stepsisters meetups (by ORIRI) and wellness events, from the admin calendar. */
 function useUpcoming(): EventRow[] | null {
@@ -529,10 +529,10 @@ function useUpcoming(): EventRow[] | null {
         t ? new Date(`2000-01-01T${t}`).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase() : '';
       const moments: EventRow[] = (m.data || [])
         .filter((x) => x.type !== 'recap' && x.date && x.date >= today)
-        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '/bestie#stepsisters' }));
+        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '', time: fmtTime(x.startTime), location: x.location, description: x.description, image: x.photos?.[0] }));
       const events: EventRow[] = (e.data || [])
         .filter((x) => x.date >= today)
-        .map((x) => ({ id: `e-${x.id}`, date: x.date, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: x.partner || x.category || 'Wellness event', url: x.link || '' }));
+        .map((x) => ({ id: `e-${x.id}`, date: x.date, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: x.partner || x.category || 'Wellness event', url: x.link || '', time: fmtTime(x.startTime), location: x.location, description: x.description, image: x.image }));
       setRows([...moments, ...events].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4));
     });
     return () => {
@@ -543,39 +543,75 @@ function useUpcoming(): EventRow[] | null {
 }
 
 function EventItem({ row }: { row: EventRow }) {
+  const [open, setOpen] = useState(false);
   const d = new Date(`${row.date}T00:00`);
-  const inner = (
-    <>
-      <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[14px] border border-wb-gold/60 bg-wb-shell">
-        <span className="text-[14px] uppercase text-wb-taupe">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>
-        <span className="font-wb-serif text-[20px] leading-none text-wb-plum">{d.getDate()}</span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] text-wb-taupe">{row.tag}</span>
-        <span className="block truncate text-[16px] font-medium text-wb-ink">{row.title}</span>
-        {row.meta && (
-          <span className="mt-0.5 flex items-center gap-1 truncate text-[14px] text-wb-soft">
-            <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
-            <span className="truncate">{row.meta}</span>
-          </span>
-        )}
-      </span>
-      {row.url && <ArrowUpRight className="h-4 w-4 shrink-0 text-wb-taupe" strokeWidth={1.6} />}
-    </>
-  );
-  const cls = 'flex items-center gap-3.5 py-3';
-  const onClick = () => cardClick('meetups', row.title);
-  if (!row.url) return <li className={cls}>{inner}</li>;
+  const hasDetails = !!(row.description || row.url || row.location || row.image);
+  const toggle = () => {
+    if (!open) cardClick('meetups', row.title);
+    setOpen((o) => !o);
+  };
+  const isWhatsApp = /whatsapp|wa\.me/.test(row.url);
   return (
-    <li>
-      {row.url.startsWith('/') ? (
-        <Link to={withUtm(row.url)} onClick={onClick} className={cls}>
-          {inner}
-        </Link>
-      ) : (
-        <a href={row.url} target="_blank" rel="noopener noreferrer" onClick={onClick} className={cls}>
-          {inner}
-        </a>
+    <li className="py-3">
+      <div className="flex items-center gap-3.5">
+        <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[14px] border border-wb-gold/60 bg-wb-shell">
+          <span className="text-[14px] uppercase text-wb-taupe">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>
+          <span className="font-wb-serif text-[20px] leading-none text-wb-plum">{d.getDate()}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] text-wb-taupe">{row.tag}</span>
+          <span className="block truncate text-[16px] font-medium text-wb-ink">{row.title}</span>
+          {row.meta && (
+            <span className="mt-0.5 flex items-center gap-1 truncate text-[14px] text-wb-soft">
+              <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
+              <span className="truncate">{row.meta}</span>
+            </span>
+          )}
+        </span>
+      </div>
+      {hasDetails && (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-wb-plum px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-wb-plum hover:bg-wb-plum hover:text-white"
+        >
+          {open ? 'Hide details' : 'See details'}
+          <ChevronDown className={cx('h-4 w-4 transition-transform', open && 'rotate-180')} strokeWidth={1.8} />
+        </button>
+      )}
+      {open && (
+        <div className="mt-3 rounded-[14px] bg-wb-stone px-5 py-5 text-left">
+          {row.image && <img src={row.image} alt="" loading="lazy" className="mb-4 aspect-[4/3] w-full rounded-[10px] object-cover" />}
+          <p className="text-[15px] font-medium text-wb-ink">
+            {d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {row.time ? ` · ${row.time}` : ''}
+          </p>
+          {row.location && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${row.location}, Dubai`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => countPlaceClick(`meetup-map:${row.title}`)}
+              className="mt-1 inline-flex items-center gap-1 text-[15px] text-wb-soft underline underline-offset-2"
+            >
+              <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.6} />
+              {row.location} · Open in Maps
+            </a>
+          )}
+          {row.description && <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-wb-soft">{row.description.trim().replace(/\n{3,}/g, "\n\n")}</p>}
+          {row.url &&
+            (row.url.startsWith('/') ? (
+              <Link to={withUtm(row.url)} onClick={() => ctaClick(row.title, 'meetups')} className="mt-5 inline-flex rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
+                Join
+              </Link>
+            ) : (
+              <a href={row.url} target="_blank" rel="noopener noreferrer" onClick={() => ctaClick(row.title, 'meetups')} className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
+                {isWhatsApp ? 'Join the WhatsApp group' : 'Book your spot'}
+                <ArrowUpRight className="h-4 w-4" strokeWidth={1.8} />
+              </a>
+            ))}
+        </div>
       )}
     </li>
   );
