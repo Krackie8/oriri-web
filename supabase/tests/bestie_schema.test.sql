@@ -97,10 +97,31 @@ set local role anon;
 select pg_temp.raises($q$select * from bestie.members$q$, 'anon cannot read members');
 rollback;
 
--- 7. Deleting an account removes her personal rows and anonymises the learning log.
+select pg_temp.raises($q$truncate bestie.points$q$, 'points cannot be truncated');
+do $$ begin
+  begin truncate bestie.points; exception when others then
+    if sqlerrm not like '%append-only%' then raise exception 'FAIL: truncate refused for the wrong reason: %', sqlerrm; end if;
+  end;
+end $$;
+
+-- 4b. A completion can be undone and the Suggestion completed again.
+insert into bestie.completions (id, member_id, suggestion_id, proof_kind, undone_at)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000f2', 'tick', now());
+insert into bestie.completions (id, member_id, suggestion_id, proof_kind)
+  values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000f2', 'tick');
+select pg_temp.check(true, 'a Suggestion can be completed again after an undo');
+select pg_temp.raises(
+  $q$insert into bestie.completions (member_id, suggestion_id, proof_kind) values ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000f2', 'tick')$q$,
+  'only one live completion per Suggestion');
+insert into bestie.points (member_id, pillar, amount, reason, completion_id)
+  values ('00000000-0000-0000-0000-00000000000b', 'move', 10, 'completion', '00000000-0000-0000-0000-0000000000a2');
+
+-- 7. Deleting an account removes her personal rows and anonymises the learning log
+--    (B now has a completion with points tied to it).
 delete from auth.users where id = '00000000-0000-0000-0000-00000000000b';
 select pg_temp.check(not exists (select 1 from bestie.members where id = '00000000-0000-0000-0000-00000000000b'), 'deleted Member row is gone');
 select pg_temp.check(not exists (select 1 from bestie.points where member_id = '00000000-0000-0000-0000-00000000000b'), 'deleted Member points are gone');
+select pg_temp.check(not exists (select 1 from bestie.completions where member_id = '00000000-0000-0000-0000-00000000000b'), 'deleted Member completions are gone');
 select pg_temp.check(exists (select 1 from bestie.suggestions where id = '00000000-0000-0000-0000-0000000000f2' and member_id is null), 'her suggestion survives, anonymised');
 select pg_temp.check(exists (select 1 from bestie.check_ins where id = '00000000-0000-0000-0000-0000000000e2' and member_id is null), 'her check-in survives, anonymised');
 

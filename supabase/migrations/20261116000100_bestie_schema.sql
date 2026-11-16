@@ -122,7 +122,7 @@ create index suggestions_catalogue_idx on bestie.suggestions (catalogue_item_id)
 create table bestie.completions (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references bestie.members(id) on delete cascade,
-  suggestion_id uuid not null unique references bestie.suggestions(id) on delete cascade,
+  suggestion_id uuid not null references bestie.suggestions(id) on delete cascade,
   proof_kind text not null check (proof_kind in ('tick', 'reflection', 'qr', 'reach_out', 'location')),
   reflection text,
   photo_path text,
@@ -131,6 +131,8 @@ create table bestie.completions (
   completed_at timestamptz not null default now(),
   undone_at timestamptz
 );
+-- One live Completion per Suggestion; an undone one stays as history.
+create unique index completions_one_live_per_suggestion on bestie.completions (suggestion_id) where undone_at is null;
 create index completions_member_idx on bestie.completions (member_id, completed_at desc);
 
 -- Append-only points ledger. Levels are calculated from it.
@@ -140,7 +142,10 @@ create table bestie.points (
   pillar bestie.pillar not null,
   amount integer not null,
   reason text not null,
-  completion_id uuid references bestie.completions(id) on delete set null,
+  -- No action (not set null): setting null is an UPDATE the ledger refuses. An undo is a
+  -- negative entry, so a completion with points is never deleted on its own; on account
+  -- deletion both go in the same cascade.
+  completion_id uuid references bestie.completions(id),
   created_at timestamptz not null default now()
 );
 create index points_member_idx on bestie.points (member_id, pillar);
@@ -186,8 +191,10 @@ create table bestie.daily_lines (
 create function bestie.points_append_only() returns trigger
   language plpgsql set search_path = '' as $$
 begin
-  if tg_op = 'DELETE' and not exists (select 1 from bestie.members m where m.id = old.member_id) then
-    return old;
+  if tg_op = 'DELETE' then
+    if not exists (select 1 from bestie.members m where m.id = old.member_id) then
+      return old;
+    end if;
   end if;
   raise exception 'bestie.points is append-only (% refused)', tg_op;
 end $$;
