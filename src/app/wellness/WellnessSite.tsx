@@ -5,6 +5,7 @@ import BottomTabBar from '../components/BottomTabBar';
 import HomeScreen from './bestie/HomeScreen';
 import InputScreen from './bestie/InputScreen';
 import DayScreen from './bestie/DayScreen';
+import JoinScreen from './join/JoinScreen';
 import MembershipScreen from './bestie/MembershipScreen';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
@@ -21,7 +22,7 @@ import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
 /** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
-export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast', '/community'];
+export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/join', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast', '/community'];
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
 type SeoPage = { title: string; description: string; index: boolean };
@@ -134,6 +135,7 @@ export default function WellnessSite() {
           <Route path="/plan" element={<Navigate to="/plan/inputs" replace />} />
           <Route path="/plan/inputs" element={<InputScreen />} />
           <Route path="/plan/day" element={<DayScreen />} />
+          <Route path="/join" element={<JoinScreen />} />
           <Route path="/membership" element={<MembershipScreen />} />
           <Route path="/bestie" element={<BestiePage />} />
           <Route path="/pilot" element={<JoinRedirect />} />

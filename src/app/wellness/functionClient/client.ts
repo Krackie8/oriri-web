@@ -7,6 +7,7 @@
  */
 import { createCore, type GetToken } from './core'
 import { createFreeDay, type FreeDayEnv } from './freeDay'
+import { createMember } from './member'
 import type { Transport } from './types'
 
 export type FunctionClientEnv = FreeDayEnv
@@ -22,6 +23,7 @@ export function createFunctionClient({ transport, getToken, env }: FunctionClien
   const core = createCore(transport, getToken)
   return {
     freeDay: createFreeDay(core, env),
+    member: createMember(core),
   }
 }
 

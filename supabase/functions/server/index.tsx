@@ -5,6 +5,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as kv from './kv_store.tsx'
 import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
+import postgres from 'npm:postgres@3.4.5'
+import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
 
 const app = new Hono()
 
@@ -8417,6 +8419,73 @@ app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
 
 
 // ── Event bookings: visitors book a meetup / calendar event on the site.
+// ── Join (#69): a signed-in woman becomes a Member. The bestie schema is not exposed
+// to the API (ADR-0002), so this talks to Postgres directly and drops to service_role
+// for every statement, so bestie's grants and RLS still apply.
+let bestieSql: ReturnType<typeof postgres> | null = null;
+const bestieDb = () => (bestieSql ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }));
+
+const postgresJoinStore: JoinStore = {
+  async getMember(id) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select id, city, home_area, instagram_handle, adult_confirmed_at::text
+                from bestie.members where id = ${id}`;
+    });
+    return (rows[0] as any) ?? null;
+  },
+  async createMember(m, consents) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      const inserted = await tx`
+        insert into bestie.members (id, city, home_area, instagram_handle, adult_confirmed_at)
+        values (${m.id}, ${m.city}, ${m.home_area}, ${m.instagram_handle}, ${m.adult_confirmed_at})
+        on conflict (id) do nothing returning id`;
+      if (inserted.length === 0) return false;
+      await tx`insert into bestie.consents ${tx(consents, 'member_id', 'purpose', 'version', 'granted', 'recorded_at')}`;
+      return true;
+    });
+  },
+  async markFreeDayLeadJoined(email, memberId, joinedAt) {
+    const key = `bestie:freeday:${email}`;
+    const lead: any = await kv.get(key);
+    if (!lead) return;
+    await kv.set(key, { ...lead, joined: 'yes', member_id: memberId, joined_at: joinedAt });
+  },
+};
+
+const joiningUser = async (c: any) => {
+  const token = c.req.header('Authorization')?.split(' ')[1];
+  if (!token) return null;
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  return user && !error ? user : null;
+};
+
+app.get('/make-server-a278ea32/bestie/member', async (c) => {
+  try {
+    const user = await joiningUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    return c.json({ success: true, member: await memberOf(postgresJoinStore, user.id) });
+  } catch (e) {
+    console.log(`bestie/member failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your account.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/join', async (c) => {
+  try {
+    const user = await joiningUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const r = await joinOriri(postgresJoinStore, { id: user.id, email: user.email }, body, new Date());
+    if (r.outcome === 'invalid') return c.json({ success: false, error: r.message }, 400);
+    return c.json({ success: true, outcome: r.outcome, member: r.member });
+  } catch (e) {
+    console.log(`bestie/join failed: ${e}`);
+    return c.json({ success: false, error: 'Could not join right now. Please try again.' }, 500);
+  }
+});
+
 // kv rsvp:<ref>:<email> where ref = e-<event id> (calendar) or m-<moment id> (Stepsisters).
 async function rsvpEvent(ref: string): Promise<any | null> {
   const m = /^(e|m)-([A-Za-z0-9-]{6,64})$/.exec(ref);
