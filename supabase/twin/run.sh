@@ -13,5 +13,4 @@ sleep 1
 run() { MSYS_NO_PATHCONV=1 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -X -1 -f - < "$1"; }
 for f in supabase/twin/00_*.sql supabase/twin/01_*.sql; do echo "twin: $f"; run "$f"; done
 for f in supabase/migrations/*.sql; do [ -e "$f" ] || continue; echo "migration: $f"; run "$f"; done
-echo "tests: supabase/tests/bestie_schema.test.sql"
-MSYS_NO_PATHCONV=1 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -X -f - < supabase/tests/bestie_schema.test.sql
+for t in supabase/tests/*.test.sql; do echo "tests: $t"; MSYS_NO_PATHCONV=1 docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -X -f - < "$t"; done

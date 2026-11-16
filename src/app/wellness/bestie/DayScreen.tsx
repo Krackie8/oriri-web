@@ -1,4 +1,4 @@
-/** 4 · Free trial day: email first (one free day per email), then the whole day shows here. */
+/** 4 · The day: she joins Oriri free first (or already has), then the whole day shows here. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
@@ -8,11 +8,11 @@ import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, W
 import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, type PlanLink } from './engine';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
-import { getUnlocked, loadInputs, markEmailUsed, normEmail, setUnlocked } from './state';
+import { getUnlocked, loadInputs } from './state';
 import { functionClient } from '../functionClient';
-import { NO_MAIL_ERROR, checkEmail, domainAcceptsMail } from '../../utils/emailCheck';
-import { ctaClick, formSubmit, track } from '../analytics/track';
-import { getUtm, withUtm } from '../analytics/utm';
+import { supabase } from '../../utils/supabase/client';
+import { ctaClick, track } from '../analytics/track';
+import { withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
 
 export default function DayScreen() {
@@ -43,8 +43,22 @@ export default function DayScreen() {
     setDone(Object.fromEntries(ids.map((id) => [id, true])));
   }, [plan, inputs]);
   const [unlockedFor, setUnlockedFor] = useState<string | null>(() => getUnlocked());
-  const [gate, setGate] = useState<'form' | 'used'>('form');
-  const [usedEmail, setUsedEmail] = useState('');
+  // A Member (signed in and joined) always sees her plan.
+  useEffect(() => {
+    if (unlockedFor) return;
+    let live = true;
+    // Only ask the edge function when she is signed in: a signed-out visitor can't be a Member.
+    supabase.auth
+      .getSession()
+      .then(({ data }) => (data.session ? functionClient.member.me() : null))
+      .then((r) => {
+        if (live && r?.ok && r.data.outcome === 'member') setUnlockedFor('member');
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [unlockedFor]);
   // Admins (Ren) can preview any plan without using up a free day
   const { isAdmin } = useAdmin();
 
@@ -90,36 +104,11 @@ export default function DayScreen() {
           back="/plan/inputs"
           step={2}
           total={2}
-          title={gate === 'used' ? 'You’ve had your free day.' : 'Almost there.'}
-          sub={gate === 'used' ? `${usedEmail || 'This email'} has already used its free day.` : `${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`}
+          title="Almost there."
+          sub={`${plan.items.length} picks · ${describeTime(plan.minutes)} · ${plan.totalLabel}`}
         />
         {chipRow}
-        {gate === 'used' ? (
-          <>
-            <MembershipPrompt />
-            <button
-              type="button"
-              onClick={() => setGate('form')}
-              className="mt-4 flex h-11 w-full items-center justify-center text-[15px] text-wb-plum underline underline-offset-4"
-            >
-              Use a different email
-            </button>
-          </>
-        ) : (
-          <EmailGate
-            plan={plan.items}
-            onUnlocked={(email) => {
-              setUnlocked(email, inputs);
-              setUnlockedFor(email);
-              window.scrollTo({ top: 0 });
-            }}
-            onUsed={(email) => {
-              setUsedEmail(email);
-              setGate('used');
-              track('membership_prompt_view', { reason: 'second_free_day' });
-            }}
-          />
-        )}
+        <JoinGate />
         <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
       </Screen>
     );
@@ -175,7 +164,7 @@ export default function DayScreen() {
       <Noticed trial />
       <BestieSwipe />
 
-      <MembershipPrompt after />
+      {unlockedFor === 'member' ? null : <MembershipPrompt after />}
 
       <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
     </Screen>
@@ -594,136 +583,16 @@ function PlanRow({
   );
 }
 
-/** The one sign-up: email + consent joins the waitlist and opens the free day. Other details are asked later, at account set-up. */
-function EmailGate({ plan, onUnlocked, onUsed }: { plan: PlanItem[]; onUnlocked: (email: string) => void; onUsed: (email: string) => void }) {
-  const [email, setEmail] = useState('');
-  const [consent, setConsent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
-  const [suggestion, setSuggestion] = useState('');
-  const [warnedFor, setWarnedFor] = useState('');
-  const utm = getUtm();
-  const inputs = loadInputs();
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const em = normEmail(email);
-    const c = checkEmail(em);
-    setSuggestion('');
-    if (!c.ok && !(c.suggestion && warnedFor === em)) {
-      if (c.suggestion) {
-        setSuggestion(c.suggestion);
-        setWarnedFor(em);
-      }
-      return setError(c.error || 'Please check your email address.');
-    }
-    if (!consent) return setError('Please tick the box to join and see your day.');
-    setError('');
-
-    setSending(true);
-    if (!(await domainAcceptsMail(em))) {
-      setSending(false);
-      return setError(NO_MAIL_ERROR);
-    }
-    const r = await functionClient.freeDay.claim({
-      email: em,
-      consent: true,
-      inputs: { energy: inputs?.energy || '', goals: inputs?.goals || [], minutes: inputs?.minutes || 0, budget: inputs?.budget || 0, area: inputs?.area || '' },
-      plan: plan.map((p) => ({ time: `${p.minutes} min`, label: p.label, title: p.title, venue: p.venue, cost: p.priceLabel, url: p.links[0]?.url || '' })),
-    });
-    setSending(false);
-    if (!r.ok) return setError(r.error.message || 'Something went wrong. Please try again.');
-    const claim = r.data;
-    if (claim.outcome === 'alreadyUsed' && claim.today) {
-      // Same email, same day (e.g. back on another phone): it's still their free day
-      markEmailUsed(em);
-      return onUnlocked(em);
-    }
-    if (claim.outcome === 'alreadyUsed') {
-      markEmailUsed(em);
-      return onUsed(em);
-    }
-    if (claim.outcome === 'invalid') return setError(claim.message);
-    // claimed, or queued to re-send on the next visit: the plan unlocks either way
-    markEmailUsed(em);
-    formSubmit('free_day', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
-    formSubmit('pilot_application', { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign });
-    onUnlocked(em);
-  };
-
-  const field =
-    'mt-2 h-14 w-full rounded-full border border-wb-sand bg-wb-paper px-5 text-[16px] text-wb-ink outline-none transition-colors placeholder:text-wb-taupe/70 focus:border-wb-plum';
-
+/** The Free day sign-up is now Join (#69): her plan stays on this phone and shows again once she has joined. */
+function JoinGate() {
   return (
     <Card as="section" className="mt-6 p-6">
       <Sparkles className="h-5 w-5 text-wb-gold" strokeWidth={1.4} />
-      <h2 className="mt-3 text-[26px]">Your wellness 1 day trial is ready</h2>
-      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Pop in your email and join our waitlist to access Wellness Bestie.</p>
-      <form onSubmit={submit} noValidate className="mt-5">
-        <input type="hidden" name="utm_source" value={utm.utm_source || ''} />
-        <input type="hidden" name="utm_medium" value={utm.utm_medium || ''} />
-        <input type="hidden" name="utm_campaign" value={utm.utm_campaign || ''} />
-        <label htmlFor="free-day-email" className="text-[14px] text-wb-taupe">
-          Email address
-        </label>
-        <input
-          id="free-day-email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          maxLength={160}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@email.com"
-          aria-invalid={!!error && !checkEmail(email).ok}
-          aria-describedby={error ? 'free-day-error' : undefined}
-          className={field}
-        />
-
-        <label className="mt-4 flex cursor-pointer items-start gap-3">
-          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="peer sr-only" />
-          <span
-            aria-hidden
-            className={cx(
-              'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-wb-gold',
-              consent ? 'border-wb-plum bg-wb-plum text-wb-paper' : 'border-wb-plum/30 bg-wb-shell',
-            )}
-          >
-            {consent && <Check className="h-4 w-4" strokeWidth={2.2} />}
-          </span>
-          <span className="text-[14px] leading-relaxed text-wb-soft">
-            I’m happy for ORIRI to store my answers and email me about Wellness Bestie. Unsubscribe any time.{' '}
-            <Link to={withUtm('/privacy')} className="underline underline-offset-4">
-              Privacy
-            </Link>
-          </span>
-        </label>
-        {error && (
-          <p id="free-day-error" role="alert" className="mt-3 text-[14px] text-[#9A3F45]">
-            {error}
-            {suggestion && (
-              <>
-                {' '}
-                <button
-                  type="button"
-                  className="font-medium underline underline-offset-4"
-                  onClick={() => {
-                    setEmail(suggestion);
-                    setSuggestion('');
-                    setError('');
-                  }}
-                >
-                  Use it
-                </button>
-              </>
-            )}
-          </p>
-        )}
-        <PillButton type="submit" className="mt-5 w-full" disabled={sending} arrow={!sending}>
-          {sending ? 'Opening…' : 'Join & see my day'}
-        </PillButton>
-        <p className="mt-3 text-center text-[14px] text-wb-taupe">One free day per email.</p>
-      </form>
+      <h2 className="mt-3 text-[26px]">Your day is ready</h2>
+      <p className="mt-2 text-[16px] leading-relaxed text-wb-soft">Join Oriri free to keep your plan. Bestie plans a new one every day.</p>
+      <PillLink to="/join" className="mt-5 w-full" arrow onClick={() => ctaClick('Join free to keep your plan', 'free_day')}>
+        Join free to keep your plan
+      </PillLink>
     </Card>
   );
 }
