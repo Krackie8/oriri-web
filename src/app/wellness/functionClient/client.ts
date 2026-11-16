@@ -6,6 +6,7 @@
  * Add a domain by writing `<domain>.ts` on top of the core and listing it below.
  */
 import { createCore, type GetToken } from './core'
+import { createBestie } from './bestie'
 import { createFreeDay, type FreeDayEnv } from './freeDay'
 import { createMember } from './member'
 import type { Transport } from './types'
@@ -24,6 +25,7 @@ export function createFunctionClient({ transport, getToken, env }: FunctionClien
   return {
     freeDay: createFreeDay(core, env),
     member: createMember(core),
+    bestie: createBestie(core),
   }
 }
 

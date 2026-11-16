@@ -9,16 +9,61 @@ import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, typ
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs } from './state';
-import { functionClient } from '../functionClient';
+import { functionClient, type ServerDayPlan } from '../functionClient';
+import { fromServerPlan } from './serverPlan';
 import { supabase } from '../../utils/supabase/client';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
 
+/**
+ * Who is looking: a Member sees her Day plan from Bestie on the server (ADR-0003); anyone else
+ * sees the plan built in the browser. `checking` while a signed-in woman's status loads.
+ */
+type Viewer = { kind: 'checking' } | { kind: 'visitor' } | { kind: 'member'; plan: ServerDayPlan | null };
+
+function useViewer(): Viewer {
+  const [viewer, setViewer] = useState<Viewer>({ kind: 'checking' });
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const session = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
+      if (!session) return { kind: 'visitor' } as Viewer;
+      const me = await functionClient.member.me();
+      if (!me.ok || me.data.outcome !== 'member') return { kind: 'visitor' } as Viewer;
+      const today = await functionClient.bestie.today();
+      if (!today.ok) return { kind: 'visitor' } as Viewer;
+      return { kind: 'member', plan: today.data.outcome === 'planned' ? today.data.plan : null } as Viewer;
+    })()
+      .catch(() => ({ kind: 'visitor' }) as Viewer)
+      .then((v) => live && setViewer(v));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return viewer;
+}
+
 export default function DayScreen() {
-  const inputs = useMemo(() => loadInputs(), []);
-  // The plan, plus any swaps the visitor made this session
-  const [plan, setPlan] = useState<Plan | null>(() => (inputs ? loadSwapped(inputs) || buildPlan(inputs) : null));
+  const viewer = useViewer();
+  if (viewer.kind === 'checking') return <Screen className="pb-20 pt-24 text-center text-[16px] text-wb-soft">Loading your day…</Screen>;
+  if (viewer.kind === 'member') {
+    if (!viewer.plan) return <Navigate to={withUtm('/plan/inputs')} replace />;
+    return <DayView server={viewer.plan} />;
+  }
+  return <DayView />;
+}
+
+function DayView({ server }: { server?: ServerDayPlan }) {
+  const isMember = !!server;
+  const inputs = useMemo(() => {
+    if (!server) return loadInputs();
+    const c = server.checkIn;
+    const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+    return { energy: cap(c.energy), goals: c.goal ? [cap(c.goal)] : [], minutes: c.minutes, budget: c.budgetAed, area: c.area } as ReturnType<typeof loadInputs> & object;
+  }, [server]);
+  // The plan, plus any swaps the visitor made this session. A Member's plan comes from Bestie.
+  const [plan, setPlan] = useState<Plan | null>(() => (server ? fromServerPlan(server) : inputs ? loadSwapped(inputs) || buildPlan(inputs) : null));
   const [swapNote, setSwapNote] = useState<{ id: string; text: string } | null>(null);
   const swap = (id: string) => {
     if (!inputs || !plan) return;
@@ -42,23 +87,8 @@ export default function DayScreen() {
     const ids = saveToday(plan.items, inputs.goals);
     setDone(Object.fromEntries(ids.map((id) => [id, true])));
   }, [plan, inputs]);
-  const [unlockedFor, setUnlockedFor] = useState<string | null>(() => getUnlocked());
   // A Member (signed in and joined) always sees her plan.
-  useEffect(() => {
-    if (unlockedFor) return;
-    let live = true;
-    // Only ask the edge function when she is signed in: a signed-out visitor can't be a Member.
-    supabase.auth
-      .getSession()
-      .then(({ data }) => (data.session ? functionClient.member.me() : null))
-      .then((r) => {
-        if (live && r?.ok && r.data.outcome === 'member') setUnlockedFor('member');
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [unlockedFor]);
+  const [unlockedFor] = useState<string | null>(() => (isMember ? 'member' : getUnlocked()));
   // Admins (Ren) can preview any plan without using up a free day
   const { isAdmin } = useAdmin();
 
@@ -71,7 +101,7 @@ export default function DayScreen() {
     track('plan_item_feel', { item: id, feel: f });
   };
 
-  if (!inputs || !plan || !inputs.area || !inputs.goals.length) return <Navigate to={withUtm('/plan/inputs')} replace />;
+  if (!inputs || !plan || (!isMember && (!inputs.area || !inputs.goals.length))) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
   const unlocked = !!unlockedFor || isAdmin;
   const doneCount = Object.values(done).filter(Boolean).length;
@@ -151,7 +181,7 @@ export default function DayScreen() {
             onToggle={() => toggle(item.id)}
             feel={feel[item.id]}
             onFeel={(f) => rate(item.id, f)}
-            onSwap={item.id === 'rest' ? undefined : () => swap(item.id)}
+            onSwap={isMember || item.id === 'rest' ? undefined : () => swap(item.id)}
             note={swapNote?.id === item.id ? swapNote.text : undefined}
           />
         ))}

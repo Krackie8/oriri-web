@@ -7,6 +7,7 @@ import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
 import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
+import { checkIn as bestieCheckIn, todayPlan, type BestieStore, type StoredPlan } from './bestie.ts'
 
 const app = new Hono()
 
@@ -8476,6 +8477,110 @@ app.post('/make-server-a278ea32/bestie/join', async (c) => {
   } catch (e) {
     console.log(`bestie/join failed: ${e}`);
     return c.json({ success: false, error: 'Could not join right now. Please try again.' }, 500);
+  }
+});
+
+// ── Check-in -> Day plan (#70). Same rules as Join: service_role for every statement.
+// The statements are replayed on the local twin in supabase/tests/day_plan_store.test.sql.
+const loadStoredPlan = async (tx: any, plan: any): Promise<StoredPlan> => {
+  const [checkIn] = await tx`
+    select id, member_id, energy::text, time_min, budget_aed::float8 as budget_aed, goal::text, city, area, created_at::text
+    from bestie.check_ins where id = ${plan.check_in_id}`;
+  const suggestions = await tx`
+    select id, catalogue_item_id, pillar::text, is_light, reason, outcome::text, engine_version
+    from bestie.suggestions where day_plan_id = ${plan.id} order by pillar, created_at, id`;
+  return { plan, checkIn, suggestions } as StoredPlan;
+};
+
+const postgresBestieStore: BestieStore = {
+  async getMember(id) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select id, home_area from bestie.members where id = ${id}`;
+    });
+    return (rows[0] as any) ?? null;
+  },
+  async catalogue(city) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select id, coalesce(slug, id::text) as slug, title, pillars::text[] as pillars, kind, cost_aed::float8 as cost_aed,
+               duration_min, energy_fit::text[] as energy_fit, goals::text[] as goals, is_outdoor, is_light, is_fallback
+        from bestie.catalogue_items where city = ${city} and retired_at is null order by slug`;
+    });
+    return rows.map((r: any) => ({
+      id: r.id, slug: r.slug, title: r.title, pillars: r.pillars, kind: r.kind, costAed: r.cost_aed,
+      durationMin: r.duration_min, energyFit: r.energy_fit, goals: r.goals, outdoor: r.is_outdoor,
+      light: r.is_light, fallback: r.is_fallback,
+    }));
+  },
+  async activePlan(memberId, planDate) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      const [plan] = await tx`
+        select id, member_id, check_in_id, plan_date::text, created_at::text from bestie.day_plans
+        where member_id = ${memberId} and plan_date = ${planDate} and status = 'active'`;
+      return plan ? await loadStoredPlan(tx, plan) : null;
+    });
+  },
+  async recordPlan(np) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${np.memberId} for update`;
+      await tx`
+        with old as (
+          update bestie.day_plans set status = 'replaced', replaced_at = ${np.at}
+          where member_id = ${np.memberId} and plan_date = ${np.planDate} and status = 'active'
+          returning id)
+        update bestie.suggestions set outcome = 'replaced', outcome_at = ${np.at}
+        where day_plan_id in (select id from old) and outcome in ('shown', 'accepted')`;
+      const c = np.checkIn;
+      const [ci] = await tx`
+        insert into bestie.check_ins (member_id, energy, time_min, budget_aed, goal, city, area, created_at)
+        values (${np.memberId}, ${c.energy}::bestie.energy, ${c.time_min}, ${c.budget_aed}, ${c.goal}::bestie.goal, ${c.city}, ${c.area}, ${np.at})
+        returning id`;
+      const [plan] = await tx`
+        insert into bestie.day_plans (member_id, check_in_id, plan_date, created_at)
+        values (${np.memberId}, ${ci.id}, ${np.planDate}, ${np.at})
+        returning id, member_id, check_in_id, plan_date::text, created_at::text`;
+      const rows = np.suggestions.map((s) => ({
+        member_id: np.memberId, day_plan_id: plan.id, check_in_id: ci.id, catalogue_item_id: s.catalogue_item_id,
+        pillar: s.pillar, is_light: s.is_light, reason: s.reason, engine_version: s.engine_version, created_at: np.at,
+      }));
+      await tx`
+        insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, reason, engine_version, created_at)
+        select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, reason, engine_version, created_at
+        from jsonb_to_recordset(${tx.json(rows)}::jsonb)
+          as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean,
+               reason text, engine_version text, created_at timestamptz)`;
+      return await loadStoredPlan(tx, plan);
+    });
+  },
+};
+
+app.post('/make-server-a278ea32/bestie/check-in', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const r = await bestieCheckIn(postgresBestieStore, { id: user.id }, body, new Date());
+    if (r.outcome === 'invalid') return c.json({ success: false, error: r.message }, 400);
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+    return c.json({ success: true, plan: r.plan });
+  } catch (e) {
+    console.log(`bestie/check-in failed: ${e}`);
+    return c.json({ success: false, error: 'Bestie could not plan your day right now. Please try again.' }, 500);
+  }
+});
+
+app.get('/make-server-a278ea32/bestie/plan/today', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    return c.json({ success: true, plan: await todayPlan(postgresBestieStore, { id: user.id }, new Date()) });
+  } catch (e) {
+    console.log(`bestie/plan/today failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your Day plan.' }, 500);
   }
 });
 

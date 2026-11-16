@@ -159,6 +159,9 @@ const OPTIONS: Option[] = [
     links: () => [{ label: 'See upcoming events', url: '/bestie#stepsisters' }] },
 ];
 
+/** Every option's key: the Catalogue's slugs come from these (supabase/functions/server/catalogueSeed.ts). */
+export const OPTION_KEYS: string[] = OPTIONS.map((o) => o.key);
+
 const costOf = (o: Option) => (o.range ? Math.round((o.range[0] + o.range[1]) / 2) : 0);
 /** Budget checks use the top of the range, so the plan never runs over. */
 const maxOf = (o: Option) => o.range?.[1] || 0;
@@ -241,27 +244,44 @@ function reasonFor(o: Option, i: PlanInputs, ren: boolean): string {
   return [energyLine[o.kind], goalLine, money_, ren ? 'One of Ren’s picks.' : ''].filter(Boolean).join(' ');
 }
 
-function toItem(o: Option, dur: number, i: PlanInputs): PlanItem {
-  const v = pickVenue(o.key, i.area, hash(i.area + o.key));
-  const label = o.kind === 'recovery' ? 'Recover' : o.kind === 'treat' ? 'Treat' : o.kind === 'meetup' ? 'Meetup' : o.kind === 'meal' || o.kind === 'snack' ? 'Meal' : o.kind === 'mindset' ? 'Mindset' : 'Move';
-  const pillar: PlanPillar = o.kind === 'meal' || o.kind === 'snack' ? 'meal' : o.kind === 'mindset' || o.kind === 'treat' ? 'mindset' : o.kind === 'meetup' ? 'meetup' : 'move';
+/** Where an option happens and its follow-through links, for her area. */
+function present(o: Option, area: string): { venue: string; links: PlanLink[]; ren: boolean } {
+  const v = pickVenue(o.key, area, hash(area + o.key));
   const extra = o.links?.() || [];
-  let venue = o.place(i.area);
+  let venue = o.place(area);
   let itemLinks = extra;
   if (v) {
-    venue = v.chain ? `${v.name} · branch ${near(i.area)}` : `${v.name} · ${v.where}`;
-    const map = v.chain ? links.maps(v.name, i.area) : links.maps(`${v.name} ${v.where?.split(' · ')[0] || ''}`);
+    venue = v.chain ? `${v.name} · branch ${near(area)}` : `${v.name} · ${v.where}`;
+    const map = v.chain ? links.maps(v.name, area) : links.maps(`${v.name} ${v.where?.split(' · ')[0] || ''}`);
     itemLinks = [{ label: 'Open in Maps', url: map }, ...extra]; // Maps only, no business websites (Ren's rule)
   } else if (o.search) {
-    itemLinks = [{ label: o.range ? 'Find & book nearby' : 'Find one nearby', url: links.maps(o.search, i.area) }, ...extra];
+    itemLinks = [{ label: o.range ? 'Find & book nearby' : 'Find one nearby', url: links.maps(o.search, area) }, ...extra];
   }
+  return { venue, links: itemLinks, ren: !!v?.ren };
+}
+
+/**
+ * The place, links, steps and price label for an option by its key (a Catalogue slug), or null
+ * when the key has no option in code (an item Ren added in Admin).
+ */
+export function presentOption(key: string, area: string): { venue: string; links: PlanLink[]; steps?: string[]; priceLabel: string } | null {
+  const o = OPTIONS.find((x) => x.key === key);
+  if (!o) return null;
+  const { venue, links: l } = present(o, area);
+  return { venue, links: l, steps: o.steps, priceLabel: rangeLabel(o.range) };
+}
+
+function toItem(o: Option, dur: number, i: PlanInputs): PlanItem {
+  const label = o.kind === 'recovery' ? 'Recover' : o.kind === 'treat' ? 'Treat' : o.kind === 'meetup' ? 'Meetup' : o.kind === 'meal' || o.kind === 'snack' ? 'Meal' : o.kind === 'mindset' ? 'Mindset' : 'Move';
+  const pillar: PlanPillar = o.kind === 'meal' || o.kind === 'snack' ? 'meal' : o.kind === 'mindset' || o.kind === 'treat' ? 'mindset' : o.kind === 'meetup' ? 'meetup' : 'move';
+  const { venue, links: itemLinks, ren } = present(o, i.area);
   return {
     id: o.key,
     pillar,
     label,
     title: o.title,
     venue,
-    reason: reasonFor(o, i, !!v?.ren),
+    reason: reasonFor(o, i, ren),
     cost: costOf(o),
     priceLabel: rangeLabel(o.range),
     minutes: dur,

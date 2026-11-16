@@ -8,6 +8,9 @@ import { DEFAULT_INPUTS, loadInputs, saveInputs } from './state';
 import { LOCALE, money } from './config';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
+import { functionClient } from '../functionClient';
+import { supabase } from '../../utils/supabase/client';
+import { toServerCheckIn } from './serverPlan';
 
 function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
@@ -32,8 +35,11 @@ export default function InputScreen() {
   const toggleGoal = (g: Goal) => set({ goals: v.goals.includes(g) ? v.goals.filter((x) => x !== g) : [...v.goals, g] });
 
   const [missing, setMissing] = useState<{ goals?: boolean; area?: boolean }>({});
-  const submit = (e: React.FormEvent) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     // Everything is needed to curate a day that makes sense
     const miss = { goals: !v.goals.length, area: !v.area };
     if (miss.goals || miss.area) {
@@ -44,6 +50,17 @@ export default function InputScreen() {
     saveInputs(v);
     ctaClick('Curate my day', 'input');
     track('plan_inputs_done', { energy: v.energy, goals: v.goals.join(','), minutes: v.minutes, budget: v.budget, area: v.area || 'unset' });
+    // A Member checks in with Bestie on the server, which records it (ADR-0003). A visitor's plan
+    // is built in her browser, so a signed-out or not-yet-joined answer just carries on.
+    setError('');
+    const session = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
+    if (session) {
+      setBusy(true);
+      const r = await functionClient.bestie.checkIn(toServerCheckIn(v));
+      setBusy(false);
+      if (!r.ok) return setError('Bestie could not plan your day right now. Please try again.');
+      if (r.data.outcome === 'invalid') return setError(r.data.message);
+    }
     navigate(withUtm('/plan/day'));
   };
 
@@ -155,8 +172,13 @@ export default function InputScreen() {
       {/* Sticky CTA */}
       <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-wb-paper via-wb-paper/95 to-transparent pb-[max(env(safe-area-inset-bottom),16px)] pt-8">
         <Screen>
-          <PillButton type="submit" className="w-full" arrow>
-            Curate my day
+          {error && (
+            <p className="mb-3 text-center text-[14px] text-wb-plum" role="alert">
+              {error}
+            </p>
+          )}
+          <PillButton type="submit" className="w-full" arrow disabled={busy}>
+            {busy ? 'Bestie is planning…' : 'Curate my day'}
           </PillButton>
         </Screen>
       </div>

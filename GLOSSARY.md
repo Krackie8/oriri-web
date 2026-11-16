@@ -32,6 +32,12 @@ _Avoid_: "user" in product copy, "lead" once she has an account.
 
 **Day plan**: the four Suggestions Bestie makes from one Check-in, fitted together into her time and budget. A Member has one active Day plan per day; checking in again replaces it.
 
+**Catalogue**: Ren's list of things Bestie can suggest, each tagged with its Pillar(s), cost, duration, energy fit and goals. Bestie suggests only from the Catalogue.
+
+**Light version**: a short, free Suggestion (a 5-minute listen, messaging a Stepsister) that Bestie offers for a Pillar when nothing fuller fits her time or budget. It earns fewer points.
+
+**Engine version**: the name of the set of rules Bestie used to build a Day plan, recorded with every Suggestion so Suggestions made by the same rules can be compared. It changes when the rules change, not when the Catalogue does.
+
 **Suggestion**: one thing Bestie offers for one Pillar after a Check-in. A Member accepts, swaps or skips it.
 
 **Completion**: a Member marking a Suggestion as done, with Proof. Only Completions grow her Profile.
