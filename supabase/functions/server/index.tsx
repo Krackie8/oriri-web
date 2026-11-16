@@ -8454,16 +8454,9 @@ const postgresJoinStore: JoinStore = {
   },
 };
 
-const joiningUser = async (c: any) => {
-  const token = c.req.header('Authorization')?.split(' ')[1];
-  if (!token) return null;
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  return user && !error ? user : null;
-};
-
 app.get('/make-server-a278ea32/bestie/member', async (c) => {
   try {
-    const user = await joiningUser(c);
+    const user = await socialUser(c);
     if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
     return c.json({ success: true, member: await memberOf(postgresJoinStore, user.id) });
   } catch (e) {
@@ -8474,7 +8467,7 @@ app.get('/make-server-a278ea32/bestie/member', async (c) => {
 
 app.post('/make-server-a278ea32/bestie/join', async (c) => {
   try {
-    const user = await joiningUser(c);
+    const user = await socialUser(c);
     if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
     const body = await c.req.json().catch(() => ({}));
     const r = await joinOriri(postgresJoinStore, { id: user.id, email: user.email }, body, new Date());

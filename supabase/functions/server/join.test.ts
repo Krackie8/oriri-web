@@ -73,6 +73,10 @@ describe('join', () => {
     const store = createMemoryJoinStore()
     expect(await join(store, ME, { ...valid, instagram: 'bad handle!' }, NOW)).toMatchObject({ outcome: 'invalid' })
     expect(await join(store, ME, { ...valid, instagram: 'a'.repeat(31) }, NOW)).toMatchObject({ outcome: 'invalid' })
+    for (const bad of ['.ren', 'ren.', 'ren..oriri']) {
+      expect(await join(store, ME, { ...valid, instagram: bad }, NOW)).toMatchObject({ outcome: 'invalid' })
+    }
+    expect(store.members.size).toBe(0)
   })
 
   it('joining twice changes nothing', async () => {

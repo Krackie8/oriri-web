@@ -10,6 +10,7 @@ import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs } from './state';
 import { functionClient } from '../functionClient';
+import { supabase } from '../../utils/supabase/client';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
@@ -46,9 +47,14 @@ export default function DayScreen() {
   useEffect(() => {
     if (unlockedFor) return;
     let live = true;
-    functionClient.member.me().then((r) => {
-      if (live && r.ok && r.data.outcome === 'member') setUnlockedFor('member');
-    });
+    // Only ask the edge function when she is signed in: a signed-out visitor can't be a Member.
+    supabase.auth
+      .getSession()
+      .then(({ data }) => (data.session ? functionClient.member.me() : null))
+      .then((r) => {
+        if (live && r?.ok && r.data.outcome === 'member') setUnlockedFor('member');
+      })
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -158,7 +164,7 @@ export default function DayScreen() {
       <Noticed trial />
       <BestieSwipe />
 
-      <MembershipPrompt after />
+      {unlockedFor === 'member' ? null : <MembershipPrompt after />}
 
       <p className="mt-8 text-center text-[14px] leading-relaxed text-wb-taupe">Suggestions based on your answers, not medical advice.</p>
     </Screen>

@@ -91,7 +91,8 @@ export type JoinOutcome =
   | { outcome: 'alreadyJoined'; member: MemberView }
   | { outcome: 'invalid'; message: string }
 
-const HANDLE = /^[a-z0-9._]{1,30}$/i
+// Instagram: letters, numbers, . and _, up to 30; no dot at either end, no two dots in a row.
+const HANDLE = /^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$/i
 
 const view = (m: MemberRow): MemberView => ({ city: m.city, homeArea: m.home_area, instagram: m.instagram_handle })
 
