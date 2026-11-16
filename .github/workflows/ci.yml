@@ -23,3 +23,8 @@ jobs:
           name: dist
           path: dist
           retention-days: 14
+  db-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash supabase/twin/run.sh
