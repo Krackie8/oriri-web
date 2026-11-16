@@ -11,3 +11,4 @@ Bestie records every Check-in and Suggestion so it can learn. A signed-out visit
 
 - Two plan builders exist for a while: the browser engine for visitors and Bestie on the server for Members. They must not be merged into one recorded path by accident.
 - A Member's swap is hidden until it can be recorded on the server.
+- A Member's Check-in (energy, time, budget, Goal, area) is recorded under the Terms she accepted to Join, because the Day plan is the service itself. The optional "wellness signals" Consent is kept for health-type data (e.g. Apple Health later), not for the Check-in. (Decided by Claude on 2026-11-16 while Khairul was away; review it with the consent wording and Ren.)

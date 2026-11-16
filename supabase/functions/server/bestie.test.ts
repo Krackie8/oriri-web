@@ -17,7 +17,8 @@ async function plan(store: ReturnType<typeof setup>, input: unknown, now = NOV):
 }
 
 const pillarsOf = (p: DayPlan) => p.suggestions.flatMap((s) => s.pillars).sort()
-const fullMinutes = (p: DayPlan) => p.suggestions.filter((s) => !s.light).reduce((t, s) => t + s.minutes, 0)
+// Light versions count too: the whole plan fits her time.
+const fullMinutes = (p: DayPlan) => p.suggestions.reduce((t, s) => t + s.minutes, 0)
 const totalCost = (p: DayPlan) => p.suggestions.reduce((t, s) => t + s.costAed, 0)
 
 describe('A good day (Steady, 2 hours, AED 250)', () => {
@@ -107,9 +108,9 @@ describe('Dubai heat and sunset', () => {
   })
 
   it('in the hot months an indoor Move beats an outdoor one that fits as well', async () => {
-    const cool = await plan(setup(), { energy: 'high', minutes: 60, budgetAed: 0, goal: 'connect' })
+    const cool = await plan(setup(), { energy: 'high', minutes: 120, budgetAed: 0, goal: 'connect' })
     expect(cool.suggestions.find((s) => s.pillars.includes('move'))?.outdoor).toBe(true)
-    const hot = await plan(setup(), { energy: 'high', minutes: 60, budgetAed: 0, goal: 'connect' }, JULY)
+    const hot = await plan(setup(), { energy: 'high', minutes: 120, budgetAed: 0, goal: 'connect' }, JULY)
     expect(hot.suggestions.find((s) => s.pillars.includes('move'))?.outdoor).toBe(false)
   })
 })
@@ -150,6 +151,7 @@ describe('the Check-in itself', () => {
       {},
       { energy: 'tired', minutes: 30, budgetAed: 0 },
       { energy: 'low', minutes: 0, budgetAed: 0 },
+      { energy: 'low', minutes: 25, budgetAed: 0 }, // under 30 minutes, not every Pillar fits
       { energy: 'low', minutes: 30.5, budgetAed: 0 },
       { energy: 'low', minutes: 30, budgetAed: -1 },
       { energy: 'low', minutes: 30, budgetAed: 0, goal: 'win' },
@@ -162,5 +164,20 @@ describe('the Check-in itself', () => {
   it('a signed-in woman who has not joined gets no plan', async () => {
     const r = await checkIn(setup(), { id: 'stranger' }, { energy: 'low', minutes: 30, budgetAed: 0 }, NOV)
     expect(r.outcome).toBe('notJoined')
+  })
+})
+
+describe('the why line of a light version', () => {
+  it('does not blame her time when she has plenty of it', async () => {
+    const p = await plan(setup(), { energy: 'low', minutes: 240, budgetAed: 0 })
+    const light = p.suggestions.find((s) => s.light)!
+    expect(light).toBeTruthy()
+    expect(light.why).not.toMatch(/short on time/i)
+    expect(light.why).toMatch(/light version/i)
+  })
+
+  it('names her time when time is what ran out', async () => {
+    const p = await plan(setup(), { energy: 'low', minutes: 30, budgetAed: 0 })
+    expect(p.suggestions.filter((s) => s.light).some((s) => /short on time/i.test(s.why))).toBe(true)
   })
 })

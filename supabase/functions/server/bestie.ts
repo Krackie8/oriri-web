@@ -119,6 +119,8 @@ const dubaiDate = (now: Date) => dubai(now).toISOString().slice(0, 10)
 /** Approximate sunset by month (0 = January). */
 const SUNSET = ['6:00pm', '6:20pm', '6:30pm', '6:40pm', '6:55pm', '7:10pm', '7:10pm', '6:55pm', '6:30pm', '6:00pm', '5:35pm', '5:35pm']
 const HOT_MONTHS = [4, 5, 6, 7, 8, 9] // May to October
+/** The shortest Check-in: enough for a light version in every Pillar, which count against her time too. */
+export const MIN_MINUTES = 30
 
 interface Input {
   energy: Energy
@@ -132,7 +134,7 @@ function parse(raw: unknown, homeArea: string | null): Input | string {
   const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   if (!ENERGIES.includes(b.energy as Energy)) return 'Please pick your energy.'
   const minutes = b.minutes
-  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 5 || minutes > 720) return 'Please pick how much time you have.'
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < MIN_MINUTES || minutes > 720) return `Bestie needs at least ${MIN_MINUTES} minutes to fit something from every Pillar.`
   const budget = b.budgetAed
   if (typeof budget !== 'number' || !Number.isFinite(budget) || budget < 0 || budget > 10000) return 'Please pick a budget.'
   const goal = b.goal ?? null
@@ -146,11 +148,13 @@ function parse(raw: unknown, homeArea: string | null): Input | string {
 const offered = (i: CatalogueItem, input: Input) =>
   i.energyFit.includes(input.energy) && !(i.goals.length === 1 && i.goals[0] === 'connect' && input.goal !== 'connect')
 
-function fit(catalogue: CatalogueItem[], input: Input, hot: boolean): CatalogueItem[] {
+/** The fitted items, and the light versions given because a fuller pick for that Pillar did not fit her time. */
+function fit(catalogue: CatalogueItem[], input: Input, hot: boolean): { items: CatalogueItem[]; shortOnTime: Set<string> } {
   let timeLeft = input.minutes
   let moneyLeft = input.budgetAed
   const filled = new Set<Pillar>()
   const picked: CatalogueItem[] = []
+  const shortOnTime = new Set<string>()
   const order: Pillar[] = input.goal === 'connect' ? ['meet_up', 'move', 'meal', 'mindset'] : PILLARS
   const rank = (i: CatalogueItem) => [
     hot && i.outdoor ? 0 : 1, // in the heat, indoor first
@@ -164,11 +168,18 @@ function fit(catalogue: CatalogueItem[], input: Input, hot: boolean): CatalogueI
     for (let k = 0; k < ra.length; k++) if (ra[k] !== rb[k]) return rb[k] - ra[k]
     return a.slug < b.slug ? -1 : 1
   }
+  const lightFor = (p: Pillar) =>
+    catalogue
+      .filter((i) => i.light && i.fallback && i.pillars.length === 1 && i.pillars[0] === p && i.energyFit.includes(input.energy))
+      .sort((a, b) => a.durationMin - b.durationMin || (a.slug < b.slug ? -1 : 1))[0]
+  // Time held back for the light versions of Pillars still open, so the whole plan fits.
+  const reserveAfter = (covers: Pillar[]) =>
+    PILLARS.filter((q) => !filled.has(q) && !covers.includes(q)).reduce((t, q) => t + (lightFor(q)?.durationMin ?? 0), 0)
   for (const p of order) {
     if (filled.has(p)) continue
     const pick = catalogue
       .filter((i) => !i.light && i.pillars.includes(p) && i.pillars.every((q) => !filled.has(q)) && offered(i, input)
-        && i.durationMin <= timeLeft && i.costAed <= moneyLeft)
+        && i.durationMin + reserveAfter(i.pillars) <= timeLeft && i.costAed <= moneyLeft)
       .sort(better)[0]
     if (!pick) continue
     picked.push(pick)
@@ -178,14 +189,15 @@ function fit(catalogue: CatalogueItem[], input: Input, hot: boolean): CatalogueI
   }
   for (const p of PILLARS) {
     if (filled.has(p)) continue
-    const fallback = catalogue
-      .filter((i) => i.light && i.fallback && i.pillars.length === 1 && i.pillars[0] === p && i.energyFit.includes(input.energy))
-      .sort((a, b) => a.slug < b.slug ? -1 : 1)[0]
+    const fallback = lightFor(p)
     if (!fallback) throw new Error(`catalogue has no light fallback for ${p}`)
+    const fullerButTooLong = catalogue.some((i) => !i.light && i.pillars.includes(p) && offered(i, input) && i.costAed <= moneyLeft)
+    if (fullerButTooLong) shortOnTime.add(fallback.id)
     picked.push(fallback)
     filled.add(p)
+    timeLeft -= fallback.durationMin
   }
-  return picked.sort((a, b) => PILLARS.indexOf(a.pillars[0]) - PILLARS.indexOf(b.pillars[0]))
+  return { items: picked.sort((a, b) => PILLARS.indexOf(a.pillars[0]) - PILLARS.indexOf(b.pillars[0])), shortOnTime }
 }
 
 const GOAL_LINE: Record<Goal, string> = {
@@ -193,9 +205,9 @@ const GOAL_LINE: Record<Goal, string> = {
   connect: 'Easy to do with a friend.', unwind: 'It helps you unwind.',
 }
 
-function why(i: CatalogueItem, input: Input, month: number): string {
+function why(i: CatalogueItem, input: Input, month: number, shortOnTime: boolean): string {
   const parts: string[] = []
-  if (i.light) parts.push('Short on time today, so here is a light version. It still counts.')
+  if (i.light) parts.push(shortOnTime ? 'Short on time today, so here is a light version. It still counts.' : 'A light version for today. It still counts.')
   else if (i.pillars.length > 1) parts.push(`Counts for ${i.pillars.map((p) => PILLAR_NAME[p]).join(' + ')}, and it saves time.`)
   else if (input.energy === 'low') parts.push('You said low energy, so this one is gentle.')
   else if (input.goal && i.goals.includes(input.goal)) parts.push(GOAL_LINE[input.goal])
@@ -232,14 +244,14 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
 
   const month = dubai(now).getUTCMonth()
   const catalogue = await store.catalogue('dubai')
-  const items = fit(catalogue, input, HOT_MONTHS.includes(month))
+  const { items, shortOnTime } = fit(catalogue, input, HOT_MONTHS.includes(month))
   const stored = await store.recordPlan({
     memberId: member.id,
     planDate: dubaiDate(now),
     at: now.toISOString(),
     checkIn: { energy: input.energy, time_min: input.minutes, budget_aed: input.budgetAed, goal: input.goal, city: 'dubai', area: input.area },
     suggestions: items.map((i) => ({
-      catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, reason: why(i, input, month), engine_version: BESTIE_ENGINE_VERSION,
+      catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, reason: why(i, input, month, shortOnTime.has(i.id)), engine_version: BESTIE_ENGINE_VERSION,
     })),
   })
   return { outcome: 'planned', plan: view(stored, new Map(catalogue.map((i) => [i.id, i]))) }
