@@ -1,6 +1,6 @@
 /**
  * /join: how a woman becomes a Member (GLOSSARY.md: Join).
- * Step 1, sign in: email magic link, Google or Apple. Every option returns her to /join.
+ * Step 1, sign in: email magic link or Google (Apple waits for an Apple Developer account). Every option returns her to /join.
  * Step 2, once signed in: 18+, Home area, an optional Instagram handle and her Consents.
  * Joining goes through the Function client only; this screen never touches the database.
  */
@@ -80,7 +80,7 @@ function SignIn() {
     setSent(true);
   };
 
-  const oauth = async (provider: 'google' | 'apple') => {
+  const oauth = async (provider: 'google') => {
     setError('');
     const { error: err } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
     if (err) setError('Could not open sign-in. Please try again.');
@@ -97,10 +97,7 @@ function SignIn() {
 
   return (
     <Card as="section" className="mt-6 p-6">
-      <PillButton type="button" className="w-full" onClick={() => oauth('apple')}>
-        Continue with Apple
-      </PillButton>
-      <PillButton type="button" tone="outline" className="mt-3 w-full" onClick={() => oauth('google')}>
+      <PillButton type="button" className="w-full" onClick={() => oauth('google')}>
         Continue with Google
       </PillButton>
       <form onSubmit={magicLink} noValidate className="mt-6">

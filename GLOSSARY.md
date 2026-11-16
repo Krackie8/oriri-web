@@ -14,7 +14,7 @@ _Avoid_: "the old site", "AppLayout".
 
 **Free day**: legacy term for the free Bestie day a visitor claims with an email; it is becoming simply joining Oriri (free daily Bestie). A Free day claim never creates an account. When the same email later Joins, her Free day lead is marked joined and stops being treated as a lead.
 
-**Join**: how a woman becomes a Member: she signs in (email magic link, Google or Apple), confirms she is 18 or older, picks her Home area and gives her Consents. Joining twice changes nothing.
+**Join**: how a woman becomes a Member: she signs in (email magic link or Google), confirms she is 18 or older, picks her Home area and gives her Consents. Joining twice changes nothing.
 
 **Home area**: the part of Dubai a Member picks when she Joins, from the same list of areas the Check-in uses. Suggestions use it when location is off.
 
