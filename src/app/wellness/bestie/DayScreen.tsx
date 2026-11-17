@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
+import { dayCopy } from './dayCopy';
 import { BestieSwipe, Noticed, greeting, week } from './MembershipScreen';
 import { saveToday, setDone as saveDone, stats as trackerStats } from './tracker';
 import { Card, GoldRule, PillButton, PillLink, PillarIcon, Screen, StepHeader, WaitlistLink, cx } from './kit';
@@ -196,8 +197,8 @@ function DayView({ server }: { server?: ServerDayPlan }) {
 
   return (
     <Screen className="pb-20">
-      <PlannerHeader />
-      <LearnsYou inputs={inputs} />
+      <PlannerHeader isMember={isMember} />
+      <LearnsYou inputs={inputs} isMember={isMember} />
       {chipRow}
       {isAdmin && !unlockedFor && <p className="mt-3 rounded-[12px] bg-wb-gold-soft/60 px-4 py-2 text-[14px] text-wb-soft">Admin preview: no email needed, nothing is saved.</p>}
 
@@ -242,7 +243,7 @@ function DayView({ server }: { server?: ServerDayPlan }) {
         ))}
       </ul>
 
-      <Tracker items={plan.items} done={done} />
+      <Tracker items={plan.items} done={done} isMember={isMember} />
 
       {event && <TodayEvent event={event} />}
 
@@ -257,7 +258,8 @@ function DayView({ server }: { server?: ServerDayPlan }) {
 }
 
 /** The member planner look (greeting, week strip, today's list), open for today only on the free trial. */
-function PlannerHeader() {
+function PlannerHeader({ isMember }: { isMember: boolean }) {
+  const copy = dayCopy(isMember);
   const days = useMemo(week, []);
   const todayIdx = (new Date().getDay() + 6) % 7;
   const [day, setDay] = useState(todayIdx);
@@ -265,7 +267,7 @@ function PlannerHeader() {
   return (
     <div className="pt-24">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-wb-gold/70 px-3 py-1 text-[14px] text-wb-plum">
-        <Sparkles className="h-3.5 w-3.5 text-wb-gold" strokeWidth={1.5} /> Free trial · today only
+        <Sparkles className="h-3.5 w-3.5 text-wb-gold" strokeWidth={1.5} /> {copy.badge}
       </span>
       <h1 className="mt-5 text-[36px] leading-[1.08] text-wb-ink">{greeting()}.</h1>
       <p className="mt-2 text-[16px] text-wb-soft">Here's your day, planned around you.</p>
@@ -302,10 +304,10 @@ function PlannerHeader() {
       {locked ? (
         <Card className="mt-4 p-5 text-center">
           <Lock className="mx-auto h-5 w-5 text-wb-gold" strokeWidth={1.5} />
-          <p className="mt-2 font-wb-serif text-[20px] text-wb-ink">{days[day].toLocaleDateString('en-GB', { weekday: 'long' })} is for members</p>
-          <p className="mt-1 text-[15px] text-wb-soft">Your free trial plans today. Members get every day planned, and Bestie learns what works for you.</p>
+          <p className="mt-2 font-wb-serif text-[20px] text-wb-ink">{copy.lockedTitle(days[day].toLocaleDateString('en-GB', { weekday: 'long' }))}</p>
+          <p className="mt-1 text-[15px] text-wb-soft">{copy.lockedBody}</p>
           <div className="mt-4 flex flex-col items-center gap-1">
-            <WaitlistLink source="trial_locked_day" className="w-full" />
+            {copy.showWaitlist && <WaitlistLink source="trial_locked_day" className="w-full" />}
             <button type="button" onClick={() => setDay(todayIdx)} className="flex h-11 items-center text-[15px] text-wb-plum underline underline-offset-4">
               Back to today
             </button>
@@ -361,7 +363,7 @@ function Ring({ pct, size, stroke = 4, children, label }: { pct: number; size: n
 }
 
 /** Tap & track: rings for today and each pillar, plus this week's totals (saved on this device). */
-function Tracker({ items, done }: { items: PlanItem[]; done: Record<string, boolean> }) {
+function Tracker({ items, done, isMember }: { items: PlanItem[]; done: Record<string, boolean>; isMember: boolean }) {
   const doneCount = items.filter((i) => done[i.id]).length;
   const s = useMemo(() => trackerStats(), [doneCount]);
   const pct = items.length ? doneCount / items.length : 0;
@@ -403,7 +405,7 @@ function Tracker({ items, done }: { items: PlanItem[]; done: Record<string, bool
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[14px] leading-relaxed text-wb-taupe">Saved on this device. With membership, Bestie learns from it to plan better.</p>
+      <p className="mt-3 text-[14px] leading-relaxed text-wb-taupe">{dayCopy(isMember).tracker}</p>
     </Card>
   );
 }
@@ -515,7 +517,7 @@ function saveFeel(v: Record<string, Feel>) {
 }
 
 /** What a member's Bestie learns over the first weeks, starting from today's answers. */
-function LearnsYou({ inputs }: { inputs: { energy: string; goals: string[]; minutes: number; area: string } }) {
+function LearnsYou({ inputs, isMember }: { inputs: { energy: string; goals: string[]; minutes: number; area: string }; isMember: boolean }) {
   const goal = (inputs.goals[0] || 'feel good').toLowerCase();
   const steps = [
     { day: 'Today', text: `Planned around your ${inputs.energy.toLowerCase()} energy, ${describeTime(inputs.minutes)} and wanting to ${goal}.` },
@@ -529,7 +531,7 @@ function LearnsYou({ inputs }: { inputs: { energy: string; goals: string[]; minu
         <Sparkles className="h-4 w-4 text-wb-gold" strokeWidth={1.5} /> A planner that learns you
       </p>
       <p id="learns-title" className="mt-2 font-wb-serif text-[20px] leading-snug text-wb-ink">
-        This is day 1. As a member, every tick teaches Bestie what works for you.
+        {dayCopy(isMember).learnsIntro}
       </p>
       <ol className="mt-4 space-y-3">
         {steps.map((s, i) => (

@@ -1,13 +1,18 @@
-/** Profile for visitors who aren't signed in: sign in, or see what membership gives you. */
-import React, { useState } from 'react';
+/**
+ * Profile on the Bestie side. A visitor signs in the same way she joins (magic link or Google, on /join);
+ * once signed in, /join sends a Member to her Day plan (or Check-in) and asks anyone else for her details.
+ */
+import React, { useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { CircleUserRound } from 'lucide-react';
-import { Eyebrow, GoldRule, PillButton, Screen } from '../bestie/kit';
+import { useAuth } from '../../hooks/useAuth';
+import { Eyebrow, GoldRule, PillLink, Screen } from '../bestie/kit';
 import { MembershipCard } from '../bestie/OptionsScreen';
-import SignInSheet from '../components/SignInSheet';
-
+import { JOIN_PATH } from '../join/redirect';
 
 export default function GuestProfilePage() {
-  const [showLogin, setShowLogin] = useState(false);
+  const { isLoggedIn } = useAuth();
+  if (isLoggedIn) return <Navigate to={JOIN_PATH} replace />;
 
   return (
     <Screen className="pb-16">
@@ -19,19 +24,17 @@ export default function GuestProfilePage() {
         <h1 className="mt-3 text-[40px] leading-[1.05]">This is where your Bestie lives.</h1>
         <GoldRule className="mt-5" />
         <p className="mt-5 text-[17px] leading-relaxed text-wb-soft">
-          Sign in to see your plans, or join the waitlist for membership.
+          Sign in to see your plans, or join free in a minute.
         </p>
       </div>
 
       <div className="mt-8 flex flex-col gap-3">
-        <PillButton onClick={() => setShowLogin(true)} className="w-full">
+        <PillLink to={JOIN_PATH} className="w-full">
           Sign in
-        </PillButton>
+        </PillLink>
       </div>
 
       <MembershipCard source="profile" className="mt-10" />
-
-      {showLogin && <SignInSheet source="profile" onClose={() => setShowLogin(false)} />}
     </Screen>
   );
 }

@@ -2,12 +2,12 @@
  * Bestie tab: your profile + the community. Joining and browsing are free;
  * the weekly planner and Swipe for a bestie are for paying members.
  */
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { JOIN_PATH } from '../join/redirect';
 import { CalendarHeart, HeartHandshake, Lock, MapPin, Sparkles } from 'lucide-react';
 import { Eyebrow, Photo, PillLink, Screen, WaitlistLink } from '../bestie/kit';
 import { PROFILES } from '../bestie/MembershipScreen';
-import SignInSheet from '../components/SignInSheet';
 import { MeetupEvents } from '../bestie/HomeScreen';
 import { useAuth } from '../../hooks/useAuth';
 import { ctaClick } from '../analytics/track';
@@ -56,10 +56,11 @@ function YourProfile({ onJoin }: { onJoin: (mode: 'login') => void }) {
 }
 
 export default function BestiePage() {
-  const [showLogin, setShowLogin] = useState(false);
+  const navigate = useNavigate();
+  // Same sign-in as Join (magic link or Google); /join then sends a Member on to her plan.
   const join = () => {
     ctaClick('Log in', 'bestie_tab');
-    setShowLogin(true);
+    navigate(JOIN_PATH);
   };
 
   return (
@@ -136,7 +137,6 @@ export default function BestiePage() {
         </p>
       </section>
 
-      {showLogin && <SignInSheet source="bestie_tab" onClose={() => setShowLogin(false)} />}
     </Screen>
   );
 }
