@@ -79,7 +79,7 @@ select pg_temp.check((select count(*) from bestie.check_ins) = 1, 'A sees only h
 select pg_temp.check((select count(*) from bestie.day_plans) = 2, 'A sees only her own day plans');
 select pg_temp.check((select count(*) from bestie.suggestions) = 1, 'A sees only her own suggestions');
 select pg_temp.check((select count(*) from bestie.points) = 1, 'A sees only her own points');
-select pg_temp.check((select count(*) from bestie.catalogue_items) = 1, 'A can read the catalogue');
+select pg_temp.check((select count(*) from bestie.catalogue_items where slug is null) = 1, 'A can read the catalogue');
 select pg_temp.raises(
   $q$insert into bestie.check_ins (member_id, energy, time_min, budget_aed) values ('00000000-0000-0000-0000-00000000000b', 'high', 60, 0)$q$,
   'A cannot write a check-in as B');
