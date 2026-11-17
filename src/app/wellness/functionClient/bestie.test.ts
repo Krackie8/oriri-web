@@ -9,7 +9,7 @@ const plan: DayPlan = {
   id: 'p1', date: '2026-11-16', engineVersion: 'bestie-1',
   checkIn: { energy: 'steady', minutes: 120, budgetAed: 250, goal: null, area: 'Dubai Marina' },
   suggestions: [{ id: 's1', slug: 'runclub', title: 'Community run club', pillars: ['move', 'meet_up'], minutes: 45, costAed: 0,
-    light: false, outdoor: true, energyFit: ['steady', 'high'], why: 'Counts for Move + Meet up, and it saves time.' }],
+    light: false, outdoor: true, energyFit: ['steady', 'high'], why: 'Counts for Move + Meet up, and it saves time.', newForYou: false }],
 }
 const client = (routes: Record<string, FakeHandler>) => {
   const fake = createFakeTransport(routes)
@@ -51,5 +51,31 @@ describe('bestie.today', () => {
       .toEqual({ ok: true, data: { outcome: 'none' } })
     expect(await client({ 'GET /bestie/plan/today': reply(401, { success: false }) }).fc.bestie.today())
       .toEqual({ ok: true, data: { outcome: 'signedOut' } })
+  })
+})
+
+describe('bestie.options, swap and skip (#71)', () => {
+  const opt = { catalogueItemId: 'c2', slug: 'yoga', title: 'Yoga class', pillars: ['move'], minutes: 60, costAed: 120, light: false, outdoor: false, why: 'x' }
+  it('options: up to three choices, or gone when the Suggestion is no longer open', async () => {
+    const { fc, fake } = client({ 'GET /bestie/suggestions/s1/options': reply(200, { success: true, options: [opt] }) })
+    expect(await fc.bestie.options('s1')).toEqual({ ok: true, data: { outcome: 'options', options: [opt] } })
+    expect(fake.calls[0]).toMatchObject({ method: 'GET', path: '/bestie/suggestions/s1/options', token: 'user-token' })
+    expect(await client({ 'GET /bestie/suggestions/s1/options': reply(404, { success: false }) }).fc.bestie.options('s1'))
+      .toEqual({ ok: true, data: { outcome: 'gone' } })
+  })
+  it('swap: sends her pick and returns the new plan; a stale pick is notOffered', async () => {
+    const { fc, fake } = client({ 'POST /bestie/suggestions/s1/swap': reply(200, { success: true, plan }) })
+    expect(await fc.bestie.swap('s1', 'c2')).toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/suggestions/s1/swap', body: { catalogueItemId: 'c2' } })
+    expect(await client({ 'POST /bestie/suggestions/s1/swap': reply(400, { success: false }) }).fc.bestie.swap('s1', 'c9'))
+      .toEqual({ ok: true, data: { outcome: 'notOffered' } })
+  })
+  it('skip: returns the plan without it; signedOut, notJoined and gone are outcomes; a 500 stays an error', async () => {
+    expect(await client({ 'POST /bestie/suggestions/s1/skip': reply(200, { success: true, plan }) }).fc.bestie.skip('s1'))
+      .toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(await client({ 'POST /bestie/suggestions/s1/skip': reply(401, {}) }).fc.bestie.skip('s1')).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+    expect(await client({ 'POST /bestie/suggestions/s1/skip': reply(409, {}) }).fc.bestie.skip('s1')).toEqual({ ok: true, data: { outcome: 'notJoined' } })
+    expect(await client({ 'POST /bestie/suggestions/s1/skip': reply(404, {}) }).fc.bestie.skip('s1')).toEqual({ ok: true, data: { outcome: 'gone' } })
+    expect((await client({ 'POST /bestie/suggestions/s1/skip': reply(500, {}) }).fc.bestie.skip('s1')).ok).toBe(false)
   })
 })

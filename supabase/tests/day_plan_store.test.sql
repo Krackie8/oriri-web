@@ -44,16 +44,18 @@ begin
   returning id into ci;
   insert into bestie.day_plans (member_id, check_in_id, plan_date, created_at)
   values ('00000000-0000-0000-0000-0000000000a1', ci, '2026-11-16', at) returning id into dp;
-  insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, reason, engine_version, created_at)
-  select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, reason, engine_version, created_at
+  insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, is_new_for_you, reason,
+                                  outcome, engine_version, replaces_id, created_at)
+  select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, is_new_for_you, reason,
+         outcome::bestie.suggestion_outcome, engine_version, replaces_id, created_at
   from jsonb_to_recordset((
     -- the JSON array the store sends, one object per Suggestion
     select jsonb_agg(jsonb_build_object('member_id', '00000000-0000-0000-0000-0000000000a1', 'day_plan_id', dp, 'check_in_id', ci,
-      'catalogue_item_id', c.id, 'pillar', c.pillars[1], 'is_light', c.is_light, 'reason', 'because',
-      'engine_version', 'bestie-1', 'created_at', at))
+      'catalogue_item_id', c.id, 'pillar', c.pillars[1], 'is_light', c.is_light, 'is_new_for_you', c.slug = slugs[1], 'reason', 'because',
+      'outcome', 'shown', 'engine_version', 'bestie-1', 'replaces_id', null, 'created_at', at))
     from bestie.catalogue_items c where c.slug = any(slugs)))
-    as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean,
-         reason text, engine_version text, created_at timestamptz);
+    as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean, is_new_for_you boolean,
+         reason text, outcome text, engine_version text, replaces_id uuid, created_at timestamptz);
   return dp;
 end $$;
 
@@ -90,6 +92,61 @@ select pg_temp.check((select array_agg(pillar::text order by pillar, created_at,
 select pg_temp.check((select budget_aed::float8 from bestie.check_ins c join bestie.day_plans d on d.check_in_id = c.id
   where d.id = (select id from p2keep)) = 0, 'the Check-in comes back with its budget');
 rollback;
+
+-- 6. #71 swap, skip and history, as service_role, on the second (active) plan.
+create or replace function pg_temp.swap(old_slug text, pick text, passed text[], at timestamptz) returns uuid language plpgsql as $$
+declare o record; m constant uuid := '00000000-0000-0000-0000-0000000000a1';
+begin
+  perform 1 from bestie.members where id = m for update;
+  update bestie.suggestions set outcome = 'swapped', outcome_at = at
+  where id = (select s.id from bestie.suggestions s join bestie.catalogue_items c on c.id = s.catalogue_item_id
+              where s.day_plan_id = (select id from p2keep) and c.slug = old_slug)
+    and member_id = m and day_plan_id = (select id from p2keep) and outcome in ('shown', 'accepted')
+  returning id, check_in_id into o;
+  if o.id is null then return null; end if;
+  insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, is_new_for_you, reason,
+                                  outcome, engine_version, replaces_id, created_at)
+  select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, is_new_for_you, reason,
+         outcome::bestie.suggestion_outcome, engine_version, replaces_id, created_at
+  from jsonb_to_recordset((
+    select jsonb_agg(jsonb_build_object('member_id', m, 'day_plan_id', (select id from p2keep), 'check_in_id', o.check_in_id,
+      'catalogue_item_id', c.id, 'pillar', c.pillars[1], 'is_light', c.is_light, 'is_new_for_you', false, 'reason', 'swapped in',
+      'outcome', case when c.slug = pick then 'shown' else 'not_picked' end, 'engine_version', 'bestie-2', 'replaces_id', o.id, 'created_at', at))
+    from bestie.catalogue_items c where c.slug = pick or c.slug = any(passed)))
+    as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean, is_new_for_you boolean,
+         reason text, outcome text, engine_version text, replaces_id uuid, created_at timestamptz);
+  return o.id;
+end $$;
+
+begin;
+set local role service_role;
+create temp table sw on commit drop as select pg_temp.swap('walk', 'yoga', array['swim', 'stretch'], '2026-11-16T07:00:00Z') as id;
+select pg_temp.check((select outcome::text from bestie.suggestions where id = (select id from sw)) = 'swapped', 'a swap marks the old Suggestion swapped');
+select pg_temp.check((select count(*) from bestie.suggestions where replaces_id = (select id from sw) and outcome = 'shown') = 1, 'her pick is shown and points to it');
+select pg_temp.check((select count(*) from bestie.suggestions where replaces_id = (select id from sw) and outcome = 'not_picked') = 2, 'the two she passed on are not picked');
+select pg_temp.check(pg_temp.swap('walk', 'yoga', array[]::text[], '2026-11-16T07:05:00Z') is null, 'a Suggestion already swapped cannot be swapped again');
+commit;
+
+begin;
+set local role service_role;
+-- setOutcome: skip
+create temp table skipped on commit drop as select 0 as n;
+with u as (
+  update bestie.suggestions set outcome = 'skipped'::bestie.suggestion_outcome, outcome_at = now()
+  where id = (select s.id from bestie.suggestions s join bestie.catalogue_items c on c.id = s.catalogue_item_id
+              where s.day_plan_id = (select id from p2keep) and c.slug = 'fridge')
+    and member_id = '00000000-0000-0000-0000-0000000000a1' and outcome::text = any(array['shown', 'accepted'])
+  returning id)
+update skipped set n = (select count(*) from u);
+select pg_temp.check((select n from skipped) = 1, 'a skip records skipped');
+-- history and everShown
+select pg_temp.check((select count(*) from bestie.suggestions s join bestie.day_plans d on d.id = s.day_plan_id
+  where s.member_id = '00000000-0000-0000-0000-0000000000a1' and d.plan_date >= '2026-10-17' and s.catalogue_item_id is not null) = 10,
+  'history reads every Suggestion on her plans since a date');
+select pg_temp.check((select count(distinct catalogue_item_id) from bestie.suggestions
+  where member_id = '00000000-0000-0000-0000-0000000000a1' and catalogue_item_id is not null) = 10, 'everShown lists each item once');
+select pg_temp.check((select count(*) from bestie.suggestions where is_new_for_you) = 2, 'new for you is recorded');
+commit;
 
 -- 4. A second active plan for the same day is refused by the table itself.
 do $$ begin

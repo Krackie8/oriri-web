@@ -7,7 +7,7 @@ import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
 import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
-import { checkIn as bestieCheckIn, todayPlan, type BestieStore, type StoredPlan } from './bestie.ts'
+import { checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, type BestieStore, type StoredPlan, type ChangeOutcome } from './bestie.ts'
 
 const app = new Hono()
 
@@ -8487,7 +8487,7 @@ const loadStoredPlan = async (tx: any, plan: any): Promise<StoredPlan> => {
     select id, member_id, energy::text, time_min, budget_aed::float8 as budget_aed, goal::text, city, area, created_at::text
     from bestie.check_ins where id = ${plan.check_in_id}`;
   const suggestions = await tx`
-    select id, catalogue_item_id, pillar::text, is_light, reason, outcome::text, engine_version
+    select id, catalogue_item_id, pillar::text, is_light, is_new_for_you, reason, outcome::text, engine_version, replaces_id
     from bestie.suggestions where day_plan_id = ${plan.id} order by pillar, created_at, id`;
   return { plan, checkIn, suggestions } as StoredPlan;
 };
@@ -8543,20 +8543,120 @@ const postgresBestieStore: BestieStore = {
         insert into bestie.day_plans (member_id, check_in_id, plan_date, created_at)
         values (${np.memberId}, ${ci.id}, ${np.planDate}, ${np.at})
         returning id, member_id, check_in_id, plan_date::text, created_at::text`;
-      const rows = np.suggestions.map((s) => ({
-        member_id: np.memberId, day_plan_id: plan.id, check_in_id: ci.id, catalogue_item_id: s.catalogue_item_id,
-        pillar: s.pillar, is_light: s.is_light, reason: s.reason, engine_version: s.engine_version, created_at: np.at,
-      }));
-      await tx`
-        insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, reason, engine_version, created_at)
-        select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, reason, engine_version, created_at
-        from jsonb_to_recordset(${tx.json(rows)}::jsonb)
-          as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean,
-               reason text, engine_version text, created_at timestamptz)`;
+      await insertSuggestions(tx, np.suggestions.map((s) => ({
+        ...s, member_id: np.memberId, day_plan_id: plan.id, check_in_id: ci.id, outcome: 'shown', replaces_id: null, created_at: np.at,
+      })));
+      return await loadStoredPlan(tx, plan);
+    });
+  },
+  async history(memberId, sinceDate) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select s.catalogue_item_id, s.pillar::text, s.outcome::text, d.plan_date::text
+        from bestie.suggestions s join bestie.day_plans d on d.id = s.day_plan_id
+        where s.member_id = ${memberId} and d.plan_date >= ${sinceDate} and s.catalogue_item_id is not null`;
+    });
+  },
+  async everShown(memberId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select distinct catalogue_item_id from bestie.suggestions where member_id = ${memberId} and catalogue_item_id is not null`;
+    });
+    return rows.map((r: any) => r.catalogue_item_id);
+  },
+  async setOutcome(memberId, suggestionId, from, to, at) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        update bestie.suggestions set outcome = ${to}::bestie.suggestion_outcome, outcome_at = ${at}
+        where id = ${suggestionId} and member_id = ${memberId} and outcome::text = any(${from})
+        returning id`;
+    });
+    return rows.length === 1;
+  },
+  async recordSwap(sw) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${sw.memberId} for update`;
+      const [old] = await tx`
+        update bestie.suggestions set outcome = 'swapped', outcome_at = ${sw.at}
+        where id = ${sw.oldId} and member_id = ${sw.memberId} and day_plan_id = ${sw.planId} and outcome in ('shown', 'accepted')
+        returning id, check_in_id`;
+      if (!old) return null;
+      const base = { member_id: sw.memberId, day_plan_id: sw.planId, check_in_id: old.check_in_id, replaces_id: old.id, created_at: sw.at };
+      await insertSuggestions(tx, [
+        { ...sw.picked, ...base, outcome: 'shown' },
+        ...sw.passedOn.map((s) => ({ ...s, ...base, outcome: 'not_picked' })),
+      ]);
+      const [plan] = await tx`select id, member_id, check_in_id, plan_date::text, created_at::text from bestie.day_plans where id = ${sw.planId}`;
       return await loadStoredPlan(tx, plan);
     });
   },
 };
+
+/** One insert for a set of Suggestions, sent as a JSON array (replayed in day_plan_store.test.sql). */
+const insertSuggestions = async (tx: any, rows: Record<string, unknown>[]) => {
+  await tx`
+    insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, is_new_for_you, reason,
+                                    outcome, engine_version, replaces_id, created_at)
+    select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, is_new_for_you, reason,
+           outcome::bestie.suggestion_outcome, engine_version, replaces_id, created_at
+    from jsonb_to_recordset(${tx.json(rows)}::jsonb)
+      as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean, is_new_for_you boolean,
+           reason text, outcome text, engine_version text, replaces_id uuid, created_at timestamptz)`;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const changeReply = (c: any, r: ChangeOutcome) => {
+  if (r.outcome === 'planned') return c.json({ success: true, plan: r.plan });
+  if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+  if (r.outcome === 'notOffered') return c.json({ success: false, error: 'That one is not among your choices any more.' }, 400);
+  return c.json({ success: false, error: 'That Suggestion is no longer in your plan.' }, 404);
+};
+
+// #71: swap (pick from three) and skip. Ids that are not UUIDs are simply not found.
+app.get('/make-server-a278ea32/bestie/suggestions/:id/options', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const r = UUID.test(id) ? await swapOptions(postgresBestieStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' as const };
+    if (r.outcome === 'options') return c.json({ success: true, options: r.options });
+    return changeReply(c, r);
+  } catch (e) {
+    console.log(`bestie/options failed: ${e}`);
+    return c.json({ success: false, error: 'Could not find other choices right now.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/suggestions/:id/swap', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const pick = typeof body.catalogueItemId === 'string' ? body.catalogueItemId : '';
+    const r = UUID.test(id) && UUID.test(pick) ? await swapSuggestion(postgresBestieStore, { id: user.id }, id, pick, new Date())
+      : { outcome: UUID.test(id) ? 'notOffered' as const : 'notFound' as const };
+    return changeReply(c, r);
+  } catch (e) {
+    console.log(`bestie/swap failed: ${e}`);
+    return c.json({ success: false, error: 'Could not swap right now. Please try again.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/suggestions/:id/skip', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    return changeReply(c, UUID.test(id) ? await skipSuggestion(postgresBestieStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' });
+  } catch (e) {
+    console.log(`bestie/skip failed: ${e}`);
+    return c.json({ success: false, error: 'Could not skip right now. Please try again.' }, 500);
+  }
+});
 
 app.post('/make-server-a278ea32/bestie/check-in', async (c) => {
   try {

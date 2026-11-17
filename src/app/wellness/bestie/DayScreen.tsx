@@ -9,7 +9,7 @@ import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, typ
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs } from './state';
-import { functionClient, type ServerDayPlan } from '../functionClient';
+import { functionClient, type ServerDayPlan, type SuggestionChange, type SwapOption } from '../functionClient';
 import { fromServerPlan } from './serverPlan';
 import { supabase } from '../../utils/supabase/client';
 import { ctaClick, track } from '../analytics/track';
@@ -79,6 +79,56 @@ function DayView({ server }: { server?: ServerDayPlan }) {
     const added = next.items.find((x) => !plan.items.some((y) => y.id === x.id) && x.id !== 'rest');
     setSwapNote(added ? { id: added.id, text: 'Swapped. As a member, Bestie remembers what you swap out.' } : null);
     track('plan_item_swap', { from: id, to: added?.id || '' });
+  };
+  // A Member swaps by picking from up to three that still fit, or skips; Bestie records both (#71).
+  const [choices, setChoices] = useState<{ id: string; options: SwapOption[] } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const tryAgain = (id: string, what: string) => setSwapNote({ id, text: `Bestie could not ${what} right now. Please try again.` });
+  const changed = (id: string) => setSwapNote({ id, text: 'This one has changed. Reload the page to see your latest plan.' });
+  const openChoices = async (id: string) => {
+    setSwapNote(null);
+    setChoices(null);
+    setBusy(id);
+    const r = await functionClient.bestie.options(id);
+    setBusy(null);
+    if (!r.ok) return tryAgain(id, 'find other choices');
+    if (r.data.outcome !== 'options') return changed(id);
+    if (!r.data.options.length) return setSwapNote({ id, text: 'Nothing else fits your time and budget today.' });
+    setChoices({ id, options: r.data.options });
+    track('plan_item_swap_open', { from: id, choices: r.data.options.length });
+  };
+  const applied = (id: string, r: Awaited<ReturnType<typeof functionClient.bestie.skip>>, what: string): Plan | null => {
+    if (!r.ok) {
+      tryAgain(id, what);
+      return null;
+    }
+    const d: SuggestionChange = r.data;
+    if (d.outcome !== 'planned') {
+      changed(id);
+      return null;
+    }
+    const next = fromServerPlan(d.plan);
+    setPlan(next);
+    return next;
+  };
+  const pick = async (id: string, o: SwapOption) => {
+    setBusy(id);
+    const r = await functionClient.bestie.swap(id, o.catalogueItemId);
+    setBusy(null);
+    setChoices(null);
+    const next = applied(id, r, 'swap');
+    if (!next) return;
+    const added = next.items.find((x) => !plan?.items.some((y) => y.id === x.id));
+    setSwapNote(added ? { id: added.id, text: 'Swapped. Bestie will remember what you passed on.' } : null);
+    track('plan_item_swap', { from: id, to: o.slug });
+  };
+  const skip = async (id: string) => {
+    setSwapNote(null);
+    setChoices(null);
+    setBusy(id);
+    const r = await functionClient.bestie.skip(id);
+    setBusy(null);
+    if (applied(id, r, 'skip')) track('plan_item_skip', { item: id });
   };
   const [done, setDone] = useState<Record<string, boolean>>({});
   // Restore today's ticks (Tap & track keeps progress on this device)
@@ -181,7 +231,12 @@ function DayView({ server }: { server?: ServerDayPlan }) {
             onToggle={() => toggle(item.id)}
             feel={feel[item.id]}
             onFeel={(f) => rate(item.id, f)}
-            onSwap={isMember || item.id === 'rest' ? undefined : () => swap(item.id)}
+            onSwap={item.id === 'rest' ? undefined : isMember ? () => openChoices(item.id) : () => swap(item.id)}
+            onSkip={isMember ? () => skip(item.id) : undefined}
+            busy={busy === item.id}
+            choices={
+              choices?.id === item.id ? <SwapChoices options={choices.options} onPick={(o) => pick(item.id, o)} onKeep={() => setChoices(null)} /> : undefined
+            }
             note={swapNote?.id === item.id ? swapNote.text : undefined}
           />
         ))}
@@ -498,6 +553,9 @@ function PlanRow({
   feel,
   onFeel,
   onSwap,
+  onSkip,
+  busy,
+  choices,
   note,
 }: {
   item: PlanItem;
@@ -506,6 +564,9 @@ function PlanRow({
   feel?: Feel;
   onFeel: (f: Feel) => void;
   onSwap?: () => void;
+  onSkip?: () => void;
+  busy?: boolean;
+  choices?: React.ReactNode;
   note?: string;
 }) {
   return (
@@ -593,15 +654,31 @@ function PlanRow({
               ))}
             </div>
           )}
-          {onSwap && !done && (
-            <button
-              type="button"
-              onClick={onSwap}
-              className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-full px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold"
-            >
-              <Shuffle className="h-4 w-4" strokeWidth={1.6} /> Not feeling it? Swap
-            </button>
+          {(onSwap || onSkip) && !done && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4">
+              {onSwap && (
+                <button
+                  type="button"
+                  onClick={onSwap}
+                  disabled={busy}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold disabled:opacity-50"
+                >
+                  <Shuffle className="h-4 w-4" strokeWidth={1.6} /> Not feeling it? Swap
+                </button>
+              )}
+              {onSkip && (
+                <button
+                  type="button"
+                  onClick={onSkip}
+                  disabled={busy}
+                  className="inline-flex h-10 items-center rounded-full px-1 text-[14px] text-wb-taupe underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold disabled:opacity-50"
+                >
+                  Skip today
+                </button>
+              )}
+            </div>
           )}
+          {choices}
           {note && (
             <p className="mt-1 text-[13px] text-wb-taupe" role="status">
               {note}
@@ -610,6 +687,37 @@ function PlanRow({
         </div>
       </div>
     </Card>
+  );
+}
+
+/** Up to three things she could do instead; picking one swaps it in (#71). */
+function SwapChoices({ options, onPick, onKeep }: { options: SwapOption[]; onPick: (o: SwapOption) => void; onKeep: () => void }) {
+  return (
+    <div className="mt-3 rounded-[14px] bg-wb-paper px-3 py-3" role="group" aria-label="Pick something else">
+      <p className="text-[14px] text-wb-soft">Pick one instead. Each still fits your day.</p>
+      <ul className="mt-2 space-y-2">
+        {options.map((o) => (
+          <li key={o.catalogueItemId}>
+            <button
+              type="button"
+              onClick={() => onPick(o)}
+              className="w-full rounded-[12px] border border-wb-plum/20 bg-wb-shell px-3.5 py-3 text-left transition-colors hover:border-wb-plum/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold"
+            >
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="font-wb-serif text-[17px] leading-snug text-wb-ink">{o.title}</span>
+                <span className="shrink-0 text-[14px] text-wb-ink">{money(o.costAed)}</span>
+              </span>
+              <span className="mt-1 block text-[13px] text-wb-soft">
+                {o.minutes} min{o.light ? ' · light' : ''} · {o.why}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button type="button" onClick={onKeep} className="mt-2 h-10 px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline">
+        Keep this one
+      </button>
+    </div>
   );
 }
 

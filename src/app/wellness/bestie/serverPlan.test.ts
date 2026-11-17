@@ -7,13 +7,13 @@ const plan: ServerDayPlan = {
   checkIn: { energy: 'steady', minutes: 120, budgetAed: 250, goal: 'connect', area: 'Dubai Marina' },
   suggestions: [
     { id: 's1', slug: 'runclub', title: 'Community run club', pillars: ['move', 'meet_up'], minutes: 45, costAed: 0, light: false, outdoor: true,
-      energyFit: ['steady', 'high'], why: 'Counts for Move + Meet up, and it saves time. Sunset is around 5:35pm.' },
+      energyFit: ['steady', 'high'], why: 'Counts for Move + Meet up, and it saves time. Sunset is around 5:35pm.', newForYou: false },
     { id: 's2', slug: 'brunch', title: 'Slow brunch', pillars: ['meal'], minutes: 60, costAed: 140, light: false, outdoor: false,
-      energyFit: ['low', 'steady', 'high'], why: 'Easy to do with a friend.' },
+      energyFit: ['low', 'steady', 'high'], why: 'New for you. Easy to do with a friend.', newForYou: true },
     { id: 's3', slug: 'reachout', title: "Message a Stepsister you haven't seen", pillars: ['meet_up'], minutes: 5, costAed: 0, light: true, outdoor: false,
-      energyFit: ['low', 'steady', 'high'], why: 'Short on time today, so here is a light version. It still counts.' },
+      energyFit: ['low', 'steady', 'high'], why: 'Short on time today, so here is a light version. It still counts.', newForYou: false },
     { id: 's4', slug: 'not-in-code', title: "Ren's new pick", pillars: ['mindset'], minutes: 20, costAed: 0, light: false, outdoor: false,
-      energyFit: ['low'], why: 'You said low energy, so this one is gentle.' },
+      energyFit: ['low'], why: 'You said low energy, so this one is gentle.', newForYou: false },
   ],
 }
 
@@ -27,6 +27,7 @@ describe('fromServerPlan', () => {
     expect(run.venue).toMatch(/Dubai Marina/)
     expect(run.links[0]?.url).toMatch(/maps/i)
     expect(p.items[1].priceLabel).toMatch(/AED/)
+    expect(p.items[1].label).toBe('Meal · new for you')
     expect(p.items[2].label).toBe('Meet up · light')
   })
 
