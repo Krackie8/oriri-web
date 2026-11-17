@@ -20,6 +20,8 @@ import './utils/vipTestConsole';
 
 import { useAuthHandlers } from './hooks/useAuthHandlers';
 import { useAuth } from './hooks/useAuth';
+import { useAdmin } from './hooks/useAdmin';
+import { profileView } from './wellness/profile/profileView';
 import OririLoader from './components/OririLoader';
 
 console.log('[App] Starting App component...');
@@ -32,7 +34,11 @@ function AppContent() {
   const { handleLogin, handleGuestMode, handleLogout } = useAuthHandlers();
   const location = useLocation();
   const { isLoggedIn, loading: authLoading } = useAuth();
+  const { isAdmin, isInitialized: adminChecked, loading: adminLoading } = useAdmin();
   const isProfilePath = (location.pathname.replace(/\/+$/, '') || '/') === '/profile';
+  const profile = isProfilePath
+    ? profileView({ authLoading, isLoggedIn, adminChecked: adminChecked && !adminLoading, isAdmin })
+    : null;
 
   useEffect(() => {
     const initializeApp = () => {
@@ -79,13 +85,14 @@ function AppContent() {
 
   // Wellness Bestie marketing site (/, /pilot, /about, /privacy): standalone,
   // no splash, onboarding or podcast chrome — visitors arrive from Instagram.
-  // Guests on /profile get the Bestie sign-in / membership screen instead of a redirect home.
-  if (isProfilePath && authLoading) {
+  // /profile: visitors and Members get the Bestie screen (sign in via Join, then on to her plan);
+  // only admins get the old admin profile.
+  if (profile === 'loading') {
     return (
       <OririLoader variant="screen" />
     );
   }
-  if (isWellnessPath(location.pathname) || (isProfilePath && !isLoggedIn)) {
+  if (isWellnessPath(location.pathname) || profile === 'wellness') {
     return (
       <ErrorBoundary onError={handleGlobalError}>
         <WellnessSite />
