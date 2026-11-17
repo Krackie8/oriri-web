@@ -42,7 +42,7 @@ describe('A good day (Steady, 2 hours, AED 250)', () => {
       expect(s.engine_version).toBe(BESTIE_ENGINE_VERSION)
       expect(s.reason).toBeTruthy()
     }
-    expect(BESTIE_ENGINE_VERSION).toBe('bestie-1')
+    expect(BESTIE_ENGINE_VERSION).toBe('bestie-2')
   })
 })
 

@@ -36,6 +36,8 @@ describe('the Catalogue seed', () => {
 /** The plan for every energy x time x budget x goal, hashed. A change here means the rules changed. */
 const FINGERPRINTS: Record<string, string> = {
   'bestie-1': '609acfbfb55bd3e4',
+  'bestie-2': 'e9bb10937b625553', // #71: weighting, no repeats, new for you
+
 }
 
 describe('the engine version', () => {

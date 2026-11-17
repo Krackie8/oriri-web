@@ -27,7 +27,7 @@ export function toServerCheckIn(i: PlanInputs): CheckInInput {
 export function fromServerPlan(p: ServerDayPlan): Plan {
   const items: PlanItem[] = p.suggestions.map((s) => {
     const shown = presentOption(s.slug, p.checkIn.area);
-    const label = s.pillars.map((x) => PILLAR[x].name).join(' + ') + (s.light ? ' · light' : '');
+    const label = s.pillars.map((x) => PILLAR[x].name).join(' + ') + (s.light ? ' · light' : '') + (s.newForYou ? ' · new for you' : '');
     return {
       id: s.id,
       pillar: PILLAR[s.pillars[0]].key,
