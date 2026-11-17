@@ -17,9 +17,10 @@ import { formSubmit } from '../analytics/track';
 import { getUtm } from '../analytics/utm';
 import { CONSENT_LINES } from './consents';
 import { joinRedirectUrl } from './redirect';
+import { afterJoin as landing } from './afterJoin';
 
-/** Back to her plan if she made one, otherwise to the Check-in. Never a path taken from the URL. */
-const afterJoin = () => (loadInputs() ? '/plan/day' : '/plan/inputs');
+/** Her Day plan if the server has one for today (or this browser saved answers), otherwise the Check-in. */
+const afterJoin = () => landing(() => functionClient.bestie.today(), () => !!loadInputs());
 
 export default function JoinScreen() {
   const { user, loading } = useAuth();
@@ -30,10 +31,12 @@ export default function JoinScreen() {
     if (loading || !user) return;
     let live = true;
     setState('checking');
-    functionClient.member.me().then((r) => {
+    functionClient.member.me().then(async (r) => {
       if (!live) return;
-      if (r.ok && r.data.outcome === 'member') navigate(afterJoin(), { replace: true });
-      else setState(r.ok ? 'details' : 'error');
+      if (r.ok && r.data.outcome === 'member') {
+        const to = await afterJoin();
+        if (live) navigate(to, { replace: true });
+      } else setState(r.ok ? 'details' : 'error');
     });
     return () => {
       live = false;
@@ -46,7 +49,7 @@ export default function JoinScreen() {
       {loading ? null : !user ? (
         <SignIn />
       ) : state === 'details' ? (
-        <Details onJoined={() => navigate(afterJoin(), { replace: true })} />
+        <Details onJoined={() => afterJoin().then((to) => navigate(to, { replace: true }))} />
       ) : state === 'error' ? (
         <p role="alert" className="mt-6 text-[15px] text-[#9A3F45]">
           Could not reach Oriri. Check your connection and refresh.
