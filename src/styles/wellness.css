@@ -93,3 +93,55 @@ html.wb-site body {
   .wb-rise { animation: none; }
   html.wb-site { scroll-behavior: auto; }
 }
+
+/* ── ORIRI loader ─────────────────────────────────────────────
+   One loading look everywhere (matches #oriri-splash in index.html):
+   cream ground, the espresso Bodoni O grows from small and rises into
+   place (ORIRI = to rise), then breathes gently while we wait. */
+.oriri-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: #FAF8F5;
+  color: #8A6E5C;
+}
+.oriri-loader--screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.oriri-loader--page {
+  min-height: 100vh;
+  width: 100%;
+}
+.oriri-loader--inline {
+  background: transparent;
+  padding: 32px 0;
+  gap: 12px;
+}
+.oriri-loader__o {
+  animation:
+    oriri-rise 1.3s cubic-bezier(0.22, 1, 0.36, 1) both,
+    oriri-breathe 2.4s ease-in-out 1.3s infinite;
+}
+.oriri-loader__label {
+  font-family: 'Figtree', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+@keyframes oriri-rise {
+  0% { transform: translateY(28px) scale(0.3); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes oriri-breathe {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+  50% { transform: translateY(-4px) scale(1.04); opacity: 0.82; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oriri-loader__o { animation: none; }
+}

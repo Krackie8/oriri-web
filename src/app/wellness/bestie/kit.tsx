@@ -1,10 +1,12 @@
 /** Wellness Bestie UI kit: quiet-luxury editorial. Min text 14px, pill buttons, 16–20px cards. */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Coffee, Footprints, HeartHandshake, Salad, type LucideIcon } from 'lucide-react';
+import { ArrowRight, Check, Coffee, Footprints, HeartHandshake, Salad, type LucideIcon } from 'lucide-react';
 import { cx, unsplash } from '../components/ui';
 import { withUtm } from '../analytics/utm';
 import type { PillarKey } from './picks';
+import { JOIN_PATH, onWaitlist } from './state';
+import { ctaClick } from '../analytics/track';
 
 export { cx };
 
@@ -51,6 +53,25 @@ export function PillLink({ to, children, tone = 'plum', size = 'lg', className, 
       {children}
       {arrow && <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" strokeWidth={1.7} />}
     </Link>
+  );
+}
+
+/**
+ * "Join the waitlist" button. Joining happens on the free day sign-up, so it
+ * opens the planner. Once this device has signed up it shows a quiet
+ * "You're on the waitlist" instead.
+ */
+export function WaitlistLink({ source, tone = 'plum', size = 'lg', className, label = 'Join the waitlist' }: Omit<BtnProps, 'children' | 'onClick'> & { source: string; label?: string }) {
+  if (onWaitlist())
+    return (
+      <span className={cx(btn(tone, size), 'pointer-events-none opacity-80', className)}>
+        <Check className="h-4 w-4" strokeWidth={2} /> You’re on the waitlist
+      </span>
+    );
+  return (
+    <PillLink to={JOIN_PATH} tone={tone} size={size} className={className} onClick={() => ctaClick(label, source)}>
+      {label}
+    </PillLink>
   );
 }
 

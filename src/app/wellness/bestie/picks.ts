@@ -62,7 +62,7 @@ export const PILLARS: Pillar[] = [
     covers: 'Stepsisters free events · swipe for a bestie',
     image: '1536010305525-f7aa0834e2c7',
     picks: [
-      { title: 'Stepsisters sunset walk', meta: 'Free community event', image: '1491438590914-bc09fcaaf77a', url: '/community' },
+      { title: 'Stepsisters sunset walk', meta: 'Free community event', image: '1491438590914-bc09fcaaf77a', url: '/bestie#stepsisters' },
       { title: 'Swipe for a bestie', meta: 'Members · connect on Instagram', image: '1555817129-2fa6b81bd8e5', members: true },
     ],
   },

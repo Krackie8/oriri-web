@@ -192,7 +192,7 @@ export default function StepsistersManagement() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Posted ({moments.length})</CardTitle>
+          <CardTitle>ORIRI meetups posted ({moments.length})</CardTitle>
           <Button variant="outline" size="sm" onClick={load}>
             <RefreshCw className="h-4 w-4" />
           </Button>

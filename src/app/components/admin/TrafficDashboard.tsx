@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { useAuth } from '../../hooks/useAuth';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { DayStats, StatsSite } from '../../utils/wellnessApi';
+import { CITIES, PICKS } from '../../wellness/shop/catalog';
 
 const SITES: { id: StatsSite; label: string }[] = [
   { id: 'prod', label: 'Live site' },
@@ -18,6 +19,7 @@ const FORM_NAMES: Record<string, string> = {
   pilot_application: 'Waitlist form',
   bestie_waitlist: 'Bestie waitlist',
   signup: 'New account',
+  member_join: 'Joined as member',
 };
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -47,6 +49,9 @@ const PAGE_NAMES: Record<string, string> = {
   '/plan': 'Plan · options',
   '/plan/inputs': 'Plan · check-in',
   '/plan/day': 'Plan · your day',
+  '/join': 'Join',
+  '/bestie': 'Bestie',
+  '/community': 'Community',
   '/membership': 'Membership',
   '/pilot': 'Waitlist',
   '/about': 'About',
@@ -61,6 +66,15 @@ function sumMaps(days: DayStats[], key: MapKey) {
   const out: Record<string, number> = {};
   for (const d of days) for (const [k, v] of Object.entries(d[key] || {})) out[k] = (out[k] || 0) + v;
   return Object.entries(out).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+}
+
+
+/** Shop buy-button taps are stored as places named shop:<city>:<id>. */
+const isShop = (k: string) => k.startsWith('shop:');
+function shopLabel(k: string) {
+  const [, city, id] = k.split(':');
+  const name = PICKS.find((p) => p.id === id)?.name || id;
+  return `${name} · ${CITIES[city as keyof typeof CITIES]?.label || city}`;
 }
 
 function TopList({
@@ -136,6 +150,12 @@ export default function TrafficDashboard() {
       ),
     [data],
   );
+  const places = useMemo(() => (data ? sumMaps(data, 'places') : []), [data]);
+  const shopRows = places.filter(([k]) => isShop(k));
+  const shopClicks = shopRows.reduce((t, [, v]) => t + v, 0);
+  const shopByCity = (Object.keys(CITIES) as (keyof typeof CITIES)[]).map(
+    (c) => [CITIES[c].label, shopRows.filter(([k]) => k.startsWith(`shop:${c}:`)).reduce((t, [, v]) => t + v, 0)] as [string, number],
+  );
   const chart = useMemo(
     () => (data || []).map((d) => ({ day: new Date(`${d.date}T00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), Visits: d.sessions, Leads: d.leads || 0 })),
     [data],
@@ -149,7 +169,8 @@ export default function TrafficDashboard() {
       ['Opened the planner', pages['/plan'] || 0],
       ['Filled in the check-in', pages['/plan/inputs'] || 0],
       ['Saw their day', pages['/plan/day'] || 0],
-      ['Left their email (all forms)', totals.leads],
+      ['Opened Join', pages['/join'] || 0],
+      ['Signed up (all forms)', totals.leads],
     ];
     return steps;
   }, [data, totals]);
@@ -190,13 +211,14 @@ export default function TrafficDashboard() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {[
               ['Visits', totals.visits, 'Separate browsing sessions'],
               ['Page views', totals.views, 'Every page opened'],
               ['Leads', totals.leads, 'Sign-up forms completed'],
               ['Visit → lead', rate, 'Share of visits that left an email'],
-              ['Directory clicks', totals.clicks, 'Taps on Instagram, website or map'],
+              ['Directory clicks', totals.clicks - shopClicks, 'Taps on a place in the guide'],
+              ['Shop clicks', shopClicks, 'Taps on a Shop pick (opens Amazon.ae or Shopee)'],
             ].map(([title, value, desc]) => (
               <Card key={title as string}>
                 <CardHeader className="pb-1">
@@ -239,7 +261,14 @@ export default function TrafficDashboard() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <TopList title="Top pages" rows={sumMaps(data, 'pages')} label={(k) => PAGE_NAMES[k] || k} empty="No page views yet." />
-            <TopList title="Most-clicked places" rows={sumMaps(data, 'places')} empty="No directory clicks yet." />
+            <TopList title="Most-clicked places" rows={places.filter(([k]) => !isShop(k))} empty="No directory clicks yet." />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <TopList title="Shop: most-clicked picks" rows={shopRows} label={shopLabel} empty="No Shop clicks yet." />
+            </div>
+            <TopList title="Shop clicks by city" rows={shopByCity} empty="No Shop clicks yet." />
           </div>
         </>
       )}

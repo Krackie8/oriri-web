@@ -67,6 +67,7 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
+import OririLoader from './OririLoader';
 
 interface CommunityPostCardProps {
   post: any;
@@ -1128,8 +1129,7 @@ export default function CommunityDashboard() {
           ) : (
             <Card className="bg-card/50 backdrop-blur border-border/50">
               <CardContent className="text-center py-12">
-                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading your profile...</p>
+                <OririLoader variant="inline" />
               </CardContent>
             </Card>
           )}

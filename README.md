@@ -10,7 +10,18 @@ Needs Node 22 and pnpm 10.
 pnpm install
 pnpm dev      # http://localhost:5173
 pnpm build    # production files in dist/
+pnpm test     # run the tests once (Vitest)
 ```
+
+### Tests
+
+Tests sit next to the code they cover as `*.test.ts` files, for example `src/app/wellness/bestie/engine.test.ts`. They use the app's Vite config, so the `@/` alias works the same way.
+
+- `pnpm test` runs every test once.
+- `pnpm test:watch` re-runs them on save.
+- `pnpm test engine` runs only the files that match "engine".
+
+CI runs `pnpm test` before `pnpm build` on every pull request. A failing test fails the check.
 
 ## How changes go live
 

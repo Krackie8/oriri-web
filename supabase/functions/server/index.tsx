@@ -5,6 +5,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as kv from './kv_store.tsx'
 import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
+import postgres from 'npm:postgres@3.4.5'
+import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
+import { checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, type BestieStore, type StoredPlan, type ChangeOutcome } from './bestie.ts'
 
 const app = new Hono()
 
@@ -8161,6 +8164,60 @@ app.get('/make-server-a278ea32/wellness/stats', async (c) => {
   }
 });
 
+// Admin: Shop affiliate earnings, entered monthly from the Amazon / Shopee dashboards.
+// One row per month + program: kv shop:earnings:<YYYY-MM>:<program>
+const EARN_PROGRAMS = ['amazon-web', 'amazon-social', 'shopee'];
+app.get('/make-server-a278ea32/wellness/earnings', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('shop:earnings:')) || []).filter(Boolean);
+    rows.sort((a: any, b: any) => (b.month + b.program).localeCompare(a.month + a.program));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    console.error('[Earnings] read failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to load earnings' }, 500);
+  }
+});
+app.put('/make-server-a278ea32/wellness/earnings/:month/:program', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const month = c.req.param('month');
+    const program = c.req.param('program');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !EARN_PROGRAMS.includes(program)) {
+      return c.json({ success: false, error: 'Bad month or program' }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const num = (v: any) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v) * 100) / 100 : 0);
+    const row = {
+      month,
+      program,
+      clicks: Math.round(num(body.clicks)),
+      orders: Math.round(num(body.orders)),
+      earnings: num(body.earnings),
+      note: typeof body.note === 'string' ? body.note.trim().slice(0, 200) : '',
+      updatedAt: new Date().toISOString(),
+    };
+    await kv.set(`shop:earnings:${month}:${program}`, row);
+    return c.json({ success: true, data: row });
+  } catch (error: any) {
+    console.error('[Earnings] save failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to save earnings' }, 500);
+  }
+});
+app.delete('/make-server-a278ea32/wellness/earnings/:month/:program', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    await kv.del(`shop:earnings:${c.req.param('month')}:${c.req.param('program')}`);
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[Earnings] delete failed:', error?.message);
+    return c.json({ success: false, error: 'Failed to delete' }, 500);
+  }
+});
+
 // Signed-in users: join the Wellness Bestie waitlist
 app.post('/make-server-a278ea32/waitlist/bestie', async (c) => {
   try {
@@ -8272,11 +8329,62 @@ ${plan.length ? `<table style="width:100%;border-collapse:collapse;font-family:A
   }
 });
 
-// ── Wellness Bestie: free trial day. The visitor sees the plan on the site straight away;
-// we keep the lead (one free day per email) and notify the team. No email to the visitor.
+// ── Lead email check: format, throwaway inboxes, and a real mail server ──
+// Stops made-up addresses like "rrrr@g.com" (no such domain) or "x@example.com"
+// (domain takes no mail). If DNS can't answer, the lead is let through.
+const LEAD_EMAIL_FORMAT = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+const LEAD_DISPOSABLE = new Set([
+  'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'sharklasers.com', 'grr.la', '10minutemail.com', '10minutemail.net',
+  'tempmail.com', 'temp-mail.org', 'temp-mail.io', 'tempmail.net', 'tempmailo.com', 'tempr.email', 'yopmail.com', 'yopmail.net',
+  'trashmail.com', 'trashmail.de', 'getnada.com', 'nada.email', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com',
+  'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'mintemail.com', 'mailnesia.com', 'mytemp.email', 'spamgourmet.com',
+  'burnermail.io', 'moakt.com', 'tmail.ws', 'tmpmail.org', 'tmpmail.net', 'discard.email', 'inboxkitten.com', 'mailpoof.com',
+  'example.com', 'example.org', 'example.net', 'test.com', 'test.org',
+]);
+const LEAD_MAIL_OK = new Set(['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'live.com', 'me.com', 'msn.com', 'aol.com', 'protonmail.com', 'proton.me', 'googlemail.com']);
+const leadDomainCache = new Map<string, boolean>();
+
+async function leadDomainTakesMail(domain: string): Promise<boolean> {
+  if (LEAD_MAIL_OK.has(domain)) return true;
+  if (leadDomainCache.has(domain)) return leadDomainCache.get(domain)!;
+  const withTimeout = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
+  const missing = (e: any) => e?.name === 'NotFound' || /no record|not found|NXDOMAIN/i.test(String(e?.message || ''));
+  let ok = true;
+  try {
+    const mx = await withTimeout(Deno.resolveDns(domain, 'MX'));
+    // "0 ." (null MX) means the domain says it takes no mail
+    ok = mx.some((r) => r.exchange && r.exchange !== '.');
+  } catch (e) {
+    if (!missing(e)) return true; // DNS trouble: don't block a real person
+    try {
+      const a = await withTimeout(Deno.resolveDns(domain, 'A'));
+      ok = a.length > 0; // no MX record: mail goes to the domain itself
+    } catch (e2) {
+      if (!missing(e2)) return true;
+      ok = false;
+    }
+  }
+  leadDomainCache.set(domain, ok);
+  return ok;
+}
+
+/** Returns an error message for a bad lead email, or '' when it looks real. */
+async function leadEmailProblem(email: string): Promise<string> {
+  if (!email || email.length > 160 || !LEAD_EMAIL_FORMAT.test(email) || email.includes('..')) return 'Please check your email address.';
+  const domain = email.split('@')[1];
+  if (LEAD_DISPOSABLE.has(domain)) return 'Please use your own email address, not a temporary one.';
+  if (!(await leadDomainTakesMail(domain))) return 'That email address can’t receive mail. Please check it.';
+  return '';
+}
+
+// ── Wellness Bestie: free trial day = waitlist sign-up. One form (email, Instagram,
+// how they heard, consent) unlocks the free day on the site AND joins the waitlist.
+// We keep the lead (one free day per email) and notify the team. No email to the visitor.
+// New columns go at the end so the Google Sheet's existing columns don't shift.
 const FREEDAY_COLUMNS = [
   'submitted_at', 'email', 'energy', 'goals', 'minutes', 'budget', 'area', 'plan', 'wb_source',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'landing_page', 'referrer', 'page_url',
+  'instagram', 'heard_from', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign',
 ];
 
 app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
@@ -8284,11 +8392,19 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
     const email = clip(body.email, 160).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
     if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
 
     const key = `bestie:freeday:${email}`;
-    if (await kv.get(key)) return c.json({ success: false, used: true, error: 'This email has already had its free day.' }, 409);
+    const localDay = /^\d{4}-\d{2}-\d{2}$/.test(String(body.local_day || '')) ? String(body.local_day) : '';
+    const existing: any = await kv.get(key);
+    if (existing) {
+      // Same email back on the same day (new tab, another phone): it's still their free day.
+      const theirDay = existing.local_day || String(existing.received_at || '').slice(0, 10);
+      const today = !!localDay && theirDay === localDay;
+      return c.json({ success: false, used: true, today, error: 'This email has already had its free day.' }, 409);
+    }
 
     const inputs = body.inputs || {};
     const plan = (Array.isArray(body.plan) ? body.plan : []).slice(0, 6).map((r: any) => ({
@@ -8307,8 +8423,12 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
       plan: plan.map((r: any) => `${r.time} ${r.label}: ${r.title}`).join(' | '),
       consent: 'yes',
       wb_source: clip(body.wb_source, 30) || 'direct',
+      instagram: clip(body.instagram, 30).replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, ''),
+      heard_from: clip(body.heard_from, 20),
+      waitlist: 'yes',
+      local_day: localDay,
     };
-    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) record[k] = clip(body[k], 100);
+    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'first_touch_source', 'first_touch_medium', 'first_touch_campaign']) record[k] = clip(body[k], 100);
     for (const k of ['landing_page', 'referrer', 'page_url']) record[k] = clip(body[k], 400);
     await kv.set(key, record);
 
@@ -8320,7 +8440,7 @@ app.post('/make-server-a278ea32/bestie/free-day', async (c) => {
         body: JSON.stringify({ sheet: 'Free days', columns: FREEDAY_COLUMNS, row: FREEDAY_COLUMNS.map((k) => record[k] ?? ''), record }),
       }).catch((e) => console.log('Free day sheet forward failed:', e?.message));
     }
-    sendMail(SMTP.notify, `New free day: ${email} (${record.wb_source})`,
+    sendMail(SMTP.notify, `New waitlist + free day: ${email} (${record.wb_source})`,
       FREEDAY_COLUMNS.map((k) => `${k}: ${record[k] ?? ''}`).join('\n'),
       `<table style="font-family:Arial,sans-serif;font-size:14px">${FREEDAY_COLUMNS.map((k) => `<tr><td style="color:#76636D;padding:3px 12px 3px 0">${k}</td><td>${esc(record[k])}</td></tr>`).join('')}</table>`,
     ).catch((e) => console.log('Free day notify failed:', e?.message));
@@ -8345,6 +8465,370 @@ app.get('/make-server-a278ea32/bestie/free-days', async (c) => {
   }
 });
 
+
+// ── Event bookings: visitors book a meetup / calendar event on the site.
+// ── Join (#69): a signed-in woman becomes a Member. The bestie schema is not exposed
+// to the API (ADR-0002), so this talks to Postgres directly and drops to service_role
+// for every statement, so bestie's grants and RLS still apply.
+let bestieSql: ReturnType<typeof postgres> | null = null;
+const bestieDb = () => (bestieSql ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }));
+
+const postgresJoinStore: JoinStore = {
+  async getMember(id) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select id, city, home_area, instagram_handle, adult_confirmed_at::text
+                from bestie.members where id = ${id}`;
+    });
+    return (rows[0] as any) ?? null;
+  },
+  async createMember(m, consents) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      const inserted = await tx`
+        insert into bestie.members (id, city, home_area, instagram_handle, adult_confirmed_at)
+        values (${m.id}, ${m.city}, ${m.home_area}, ${m.instagram_handle}, ${m.adult_confirmed_at})
+        on conflict (id) do nothing returning id`;
+      if (inserted.length === 0) return false;
+      await tx`insert into bestie.consents ${tx(consents, 'member_id', 'purpose', 'version', 'granted', 'recorded_at')}`;
+      return true;
+    });
+  },
+  async markFreeDayLeadJoined(email, memberId, joinedAt) {
+    const key = `bestie:freeday:${email}`;
+    const lead: any = await kv.get(key);
+    if (!lead) return;
+    await kv.set(key, { ...lead, joined: 'yes', member_id: memberId, joined_at: joinedAt });
+  },
+};
+
+app.get('/make-server-a278ea32/bestie/member', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    return c.json({ success: true, member: await memberOf(postgresJoinStore, user.id) });
+  } catch (e) {
+    console.log(`bestie/member failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your account.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/join', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const r = await joinOriri(postgresJoinStore, { id: user.id, email: user.email }, body, new Date());
+    if (r.outcome === 'invalid') return c.json({ success: false, error: r.message }, 400);
+    return c.json({ success: true, outcome: r.outcome, member: r.member });
+  } catch (e) {
+    console.log(`bestie/join failed: ${e}`);
+    return c.json({ success: false, error: 'Could not join right now. Please try again.' }, 500);
+  }
+});
+
+// ── Check-in -> Day plan (#70). Same rules as Join: service_role for every statement.
+// The statements are replayed on the local twin in supabase/tests/day_plan_store.test.sql.
+const loadStoredPlan = async (tx: any, plan: any): Promise<StoredPlan> => {
+  const [checkIn] = await tx`
+    select id, member_id, energy::text, time_min, budget_aed::float8 as budget_aed, goal::text, city, area, created_at::text
+    from bestie.check_ins where id = ${plan.check_in_id}`;
+  const suggestions = await tx`
+    select id, catalogue_item_id, pillar::text, is_light, is_new_for_you, reason, outcome::text, engine_version, replaces_id
+    from bestie.suggestions where day_plan_id = ${plan.id} order by pillar, created_at, id`;
+  return { plan, checkIn, suggestions } as StoredPlan;
+};
+
+const postgresBestieStore: BestieStore = {
+  async getMember(id) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select id, home_area from bestie.members where id = ${id}`;
+    });
+    return (rows[0] as any) ?? null;
+  },
+  async catalogue(city) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select id, coalesce(slug, id::text) as slug, title, pillars::text[] as pillars, kind, cost_aed::float8 as cost_aed,
+               duration_min, energy_fit::text[] as energy_fit, goals::text[] as goals, is_outdoor, is_light, is_fallback
+        from bestie.catalogue_items where city = ${city} and retired_at is null order by slug`;
+    });
+    return rows.map((r: any) => ({
+      id: r.id, slug: r.slug, title: r.title, pillars: r.pillars, kind: r.kind, costAed: r.cost_aed,
+      durationMin: r.duration_min, energyFit: r.energy_fit, goals: r.goals, outdoor: r.is_outdoor,
+      light: r.is_light, fallback: r.is_fallback,
+    }));
+  },
+  async activePlan(memberId, planDate) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      const [plan] = await tx`
+        select id, member_id, check_in_id, plan_date::text, created_at::text from bestie.day_plans
+        where member_id = ${memberId} and plan_date = ${planDate} and status = 'active'`;
+      return plan ? await loadStoredPlan(tx, plan) : null;
+    });
+  },
+  async recordPlan(np) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${np.memberId} for update`;
+      await tx`
+        with old as (
+          update bestie.day_plans set status = 'replaced', replaced_at = ${np.at}
+          where member_id = ${np.memberId} and plan_date = ${np.planDate} and status = 'active'
+          returning id)
+        update bestie.suggestions set outcome = 'replaced', outcome_at = ${np.at}
+        where day_plan_id in (select id from old) and outcome in ('shown', 'accepted')`;
+      const c = np.checkIn;
+      const [ci] = await tx`
+        insert into bestie.check_ins (member_id, energy, time_min, budget_aed, goal, city, area, created_at)
+        values (${np.memberId}, ${c.energy}::bestie.energy, ${c.time_min}, ${c.budget_aed}, ${c.goal}::bestie.goal, ${c.city}, ${c.area}, ${np.at})
+        returning id`;
+      const [plan] = await tx`
+        insert into bestie.day_plans (member_id, check_in_id, plan_date, created_at)
+        values (${np.memberId}, ${ci.id}, ${np.planDate}, ${np.at})
+        returning id, member_id, check_in_id, plan_date::text, created_at::text`;
+      await insertSuggestions(tx, np.suggestions.map((s) => ({
+        ...s, member_id: np.memberId, day_plan_id: plan.id, check_in_id: ci.id, outcome: 'shown', replaces_id: null, created_at: np.at,
+      })));
+      return await loadStoredPlan(tx, plan);
+    });
+  },
+  async history(memberId, sinceDate) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select s.catalogue_item_id, s.pillar::text, s.outcome::text, d.plan_date::text
+        from bestie.suggestions s join bestie.day_plans d on d.id = s.day_plan_id
+        where s.member_id = ${memberId} and d.plan_date >= ${sinceDate} and s.catalogue_item_id is not null`;
+    });
+  },
+  async everShown(memberId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`select distinct catalogue_item_id from bestie.suggestions where member_id = ${memberId} and catalogue_item_id is not null`;
+    });
+    return rows.map((r: any) => r.catalogue_item_id);
+  },
+  async setOutcome(memberId, suggestionId, from, to, at) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        update bestie.suggestions set outcome = ${to}::bestie.suggestion_outcome, outcome_at = ${at}
+        where id = ${suggestionId} and member_id = ${memberId} and outcome::text = any(${from})
+        returning id`;
+    });
+    return rows.length === 1;
+  },
+  async recordSwap(sw) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${sw.memberId} for update`;
+      const [old] = await tx`
+        update bestie.suggestions set outcome = 'swapped', outcome_at = ${sw.at}
+        where id = ${sw.oldId} and member_id = ${sw.memberId} and day_plan_id = ${sw.planId} and outcome in ('shown', 'accepted')
+        returning id, check_in_id`;
+      if (!old) return null;
+      const base = { member_id: sw.memberId, day_plan_id: sw.planId, check_in_id: old.check_in_id, replaces_id: old.id, created_at: sw.at };
+      await insertSuggestions(tx, [
+        { ...sw.picked, ...base, outcome: 'shown' },
+        ...sw.passedOn.map((s) => ({ ...s, ...base, outcome: 'not_picked' })),
+      ]);
+      const [plan] = await tx`select id, member_id, check_in_id, plan_date::text, created_at::text from bestie.day_plans where id = ${sw.planId}`;
+      return await loadStoredPlan(tx, plan);
+    });
+  },
+};
+
+/** One insert for a set of Suggestions, sent as a JSON array (replayed in day_plan_store.test.sql). */
+const insertSuggestions = async (tx: any, rows: Record<string, unknown>[]) => {
+  await tx`
+    insert into bestie.suggestions (member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, is_light, is_new_for_you, reason,
+                                    outcome, engine_version, replaces_id, created_at)
+    select member_id, day_plan_id, check_in_id, catalogue_item_id, pillar::bestie.pillar, is_light, is_new_for_you, reason,
+           outcome::bestie.suggestion_outcome, engine_version, replaces_id, created_at
+    from jsonb_to_recordset(${tx.json(rows)}::jsonb)
+      as s(member_id uuid, day_plan_id uuid, check_in_id uuid, catalogue_item_id uuid, pillar text, is_light boolean, is_new_for_you boolean,
+           reason text, outcome text, engine_version text, replaces_id uuid, created_at timestamptz)`;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const changeReply = (c: any, r: ChangeOutcome) => {
+  if (r.outcome === 'planned') return c.json({ success: true, plan: r.plan });
+  if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+  if (r.outcome === 'notOffered') return c.json({ success: false, error: 'That one is not among your choices any more.' }, 400);
+  return c.json({ success: false, error: 'That Suggestion is no longer in your plan.' }, 404);
+};
+
+// #71: swap (pick from three) and skip. Ids that are not UUIDs are simply not found.
+app.get('/make-server-a278ea32/bestie/suggestions/:id/options', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const r = UUID.test(id) ? await swapOptions(postgresBestieStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' as const };
+    if (r.outcome === 'options') return c.json({ success: true, options: r.options });
+    return changeReply(c, r);
+  } catch (e) {
+    console.log(`bestie/options failed: ${e}`);
+    return c.json({ success: false, error: 'Could not find other choices right now.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/suggestions/:id/swap', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const pick = typeof body.catalogueItemId === 'string' ? body.catalogueItemId : '';
+    const r = UUID.test(id) && UUID.test(pick) ? await swapSuggestion(postgresBestieStore, { id: user.id }, id, pick, new Date())
+      : { outcome: UUID.test(id) ? 'notOffered' as const : 'notFound' as const };
+    return changeReply(c, r);
+  } catch (e) {
+    console.log(`bestie/swap failed: ${e}`);
+    return c.json({ success: false, error: 'Could not swap right now. Please try again.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/suggestions/:id/skip', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    return changeReply(c, UUID.test(id) ? await skipSuggestion(postgresBestieStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' });
+  } catch (e) {
+    console.log(`bestie/skip failed: ${e}`);
+    return c.json({ success: false, error: 'Could not skip right now. Please try again.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/check-in', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const r = await bestieCheckIn(postgresBestieStore, { id: user.id }, body, new Date());
+    if (r.outcome === 'invalid') return c.json({ success: false, error: r.message }, 400);
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+    return c.json({ success: true, plan: r.plan });
+  } catch (e) {
+    console.log(`bestie/check-in failed: ${e}`);
+    return c.json({ success: false, error: 'Bestie could not plan your day right now. Please try again.' }, 500);
+  }
+});
+
+app.get('/make-server-a278ea32/bestie/plan/today', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    return c.json({ success: true, plan: await todayPlan(postgresBestieStore, { id: user.id }, new Date()) });
+  } catch (e) {
+    console.log(`bestie/plan/today failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your Day plan.' }, 500);
+  }
+});
+
+// kv rsvp:<ref>:<email> where ref = e-<event id> (calendar) or m-<moment id> (Stepsisters).
+async function rsvpEvent(ref: string): Promise<any | null> {
+  const m = /^(e|m)-([A-Za-z0-9-]{6,64})$/.exec(ref);
+  if (!m) return null;
+  const item: any = await kv.get(`${m[1] === 'e' ? 'wellness:event:' : 'wellness:moment:'}${m[2]}`);
+  return item ? { ...item, ref } : null;
+}
+
+app.post('/make-server-a278ea32/wellness/rsvp', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
+    const ref = clip(body.ref, 80);
+    const event = await rsvpEvent(ref);
+    const today = dubaiDate();
+    if (!event || !event.date || event.date < today) return c.json({ success: false, error: 'This event is no longer taking bookings.' }, 400);
+    const name = clip(body.name, 80);
+    if (name.length < 2) return c.json({ success: false, error: 'Please add your name.' }, 400);
+    const email = clip(body.email, 160).toLowerCase();
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
+    const phone = clip(body.phone, 24).replace(/[^0-9+ ]/g, '');
+    const guests = Math.min(Math.max(Number(body.guests) || 1, 1), 6);
+    const key = `rsvp:${ref}:${email}`;
+    const existing: any = await kv.get(key);
+    const record = {
+      ref, email, name, phone, guests,
+      eventTitle: clip(event.title, 160), eventDate: event.date,
+      wb_source: clip(body.wb_source, 30) || 'direct',
+      bookedAt: existing?.bookedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await kv.set(key, record);
+    if (!existing) {
+      sendMail(SMTP.notify, `New booking: ${record.eventTitle} (${record.eventDate}) - ${name}`,
+        `Event: ${record.eventTitle} on ${record.eventDate}\nName: ${name}\nEmail: ${email}\nWhatsApp: ${phone}\nSpots: ${guests}\nSource: ${record.wb_source}`,
+        `<p style="font-family:Arial,sans-serif;font-size:14px"><b>${esc(record.eventTitle)}</b> on ${esc(record.eventDate)}<br>Name: ${esc(name)}<br>Email: ${esc(email)}<br>WhatsApp: ${esc(phone)}<br>Spots: ${guests}<br>Source: ${esc(record.wb_source)}</p>`,
+      ).catch((e) => console.log('Booking notify failed:', e?.message));
+    }
+    return c.json({ success: true, data: { alreadyBooked: !!existing, link: event.link || '' } });
+  } catch (error: any) {
+    console.log('Booking error:', error?.message);
+    return c.json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
+  }
+});
+
+// Admin: all bookings, newest first
+app.get('/make-server-a278ea32/wellness/rsvps', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('rsvp:')) || []).filter(Boolean) as any[];
+    rows.sort((a, b) => String(b.bookedAt || '').localeCompare(String(a.bookedAt || '')));
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load bookings' }, 500);
+  }
+});
+
+app.delete('/make-server-a278ea32/wellness/rsvps/:ref/:email', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    await kv.del(`rsvp:${c.req.param('ref')}:${decodeURIComponent(c.req.param('email')).toLowerCase()}`);
+    return c.json({ success: true });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to delete booking' }, 500);
+  }
+});
+
+// Admin: mark leads as tests so they drop out of the waitlist count.
+// kv bestie:leadflag:<email> = { email, test: boolean, at }. test:false = "real" (overrides auto-guess).
+app.get('/make-server-a278ea32/bestie/lead-flags', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const rows = ((await kv.getByPrefix('bestie:leadflag:')) || []).filter(Boolean);
+    return c.json({ success: true, data: rows });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to load lead flags' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/lead-flags', async (c) => {
+  try {
+    const auth = await wellnessAdmin(c);
+    if (auth.error) return auth.error;
+    const body = await c.req.json().catch(() => ({}));
+    const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+    if (!email.includes('@')) return c.json({ success: false, error: 'Missing email' }, 400);
+    const key = `bestie:leadflag:${email}`;
+    if (body.test === null) await kv.del(key);
+    else await kv.set(key, { email, test: body.test === true, at: new Date().toISOString() });
+    return c.json({ success: true });
+  } catch (error: any) {
+    return c.json({ success: false, error: 'Failed to save' }, 500);
+  }
+});
 
 // Admin: list Plan my day sign-ups
 app.get('/make-server-a278ea32/plan/signups', async (c) => {
@@ -8473,7 +8957,8 @@ app.post('/make-server-a278ea32/curate/lead', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const clip = (v: unknown, n = 120) => String(v ?? '').trim().slice(0, n);
     const email = clip(body.email, 160).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const record: Record<string, string> = { id, type: 'curate_lead', received_at: new Date().toISOString(), email };
@@ -8514,7 +8999,8 @@ app.post('/make-server-a278ea32/pilot/apply', async (c) => {
     const email = clip(body.email, 160).toLowerCase();
     const instagram = clip(body.instagram, 30).replace(/^@/, '').replace(/[^A-Za-z0-9._]/g, '');
     if (!first_name) return c.json({ success: false, error: 'Please add your first name.' }, 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ success: false, error: 'Please check your email address.' }, 400);
+    const emailProblem = await leadEmailProblem(email);
+    if (emailProblem) return c.json({ success: false, error: emailProblem }, 400);
     if (body.consent !== true) return c.json({ success: false, error: 'Please tick the consent box.' }, 400);
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

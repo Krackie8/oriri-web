@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase/client';
+import OririLoader from './OririLoader';
 
 export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
@@ -22,10 +23,7 @@ export default function AuthCallback() {
             <p className="text-muted-foreground text-sm">Redirecting you back...</p>
           </>
         ) : (
-          <>
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-muted-foreground">Completing sign-in...</p>
-          </>
+          <OririLoader variant="screen" label="Signing you in" />
         )}
       </div>
     </div>

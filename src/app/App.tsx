@@ -20,6 +20,9 @@ import './utils/vipTestConsole';
 
 import { useAuthHandlers } from './hooks/useAuthHandlers';
 import { useAuth } from './hooks/useAuth';
+import { useAdmin } from './hooks/useAdmin';
+import { profileView } from './wellness/profile/profileView';
+import OririLoader from './components/OririLoader';
 
 console.log('[App] Starting App component...');
 
@@ -31,7 +34,11 @@ function AppContent() {
   const { handleLogin, handleGuestMode, handleLogout } = useAuthHandlers();
   const location = useLocation();
   const { isLoggedIn, loading: authLoading } = useAuth();
+  const { isAdmin, isInitialized: adminChecked, loading: adminLoading } = useAdmin();
   const isProfilePath = (location.pathname.replace(/\/+$/, '') || '/') === '/profile';
+  const profile = isProfilePath
+    ? profileView({ authLoading, isLoggedIn, adminChecked: adminChecked && !adminLoading, isAdmin })
+    : null;
 
   useEffect(() => {
     const initializeApp = () => {
@@ -72,26 +79,20 @@ function AppContent() {
   if (!isReady) {
     // This should never show since isReady starts as true
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
+      <OririLoader variant="screen" />
     );
   }
 
   // Wellness Bestie marketing site (/, /pilot, /about, /privacy): standalone,
   // no splash, onboarding or podcast chrome — visitors arrive from Instagram.
-  // Guests on /profile get the Bestie sign-in / membership screen instead of a redirect home.
-  if (isProfilePath && authLoading) {
+  // /profile: visitors and Members get the Bestie screen (sign in via Join, then on to her plan);
+  // only admins get the old admin profile.
+  if (profile === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F7F3EE] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#4A2C3D] border-t-transparent rounded-full animate-spin" />
-      </div>
+      <OririLoader variant="screen" />
     );
   }
-  if (isWellnessPath(location.pathname) || (isProfilePath && !isLoggedIn)) {
+  if (isWellnessPath(location.pathname) || profile === 'wellness') {
     return (
       <ErrorBoundary onError={handleGlobalError}>
         <WellnessSite />

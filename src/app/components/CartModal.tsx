@@ -8,6 +8,7 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useCart } from '../contexts/CartContext';
 import { useModals } from '../contexts/ModalContext';
 import { toast } from 'sonner@2.0.3';
+import OririLoader from './OririLoader';
 
 export const CartModal: React.FC = () => {
   const navigate = useNavigate();
@@ -174,10 +175,7 @@ export const CartModal: React.FC = () => {
         
         <div className="flex-1 overflow-y-auto py-4">
           {isLoading ? (
-            <div className="text-center py-8">
-              <RefreshCw className="w-8 h-8 mx-auto text-muted-foreground mb-3 animate-spin" />
-              <p className="text-muted-foreground">Loading cart...</p>
-            </div>
+            <OririLoader variant="inline" />
           ) : cart.length === 0 ? (
             <div className="text-center py-8">
               <ShoppingCart className="w-12 h-12 mx-auto text-muted-foreground mb-3" />

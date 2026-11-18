@@ -11,6 +11,8 @@ const shell = readFileSync(new URL('dist/index.html', root), 'utf8');
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const abs = (p) => seo.site + p;
+// Share-image URL follows the host being deployed, so staging previews show staging's image.
+const imageUrl = (process.env.SHARE_IMAGE_ORIGIN || seo.site) + seo.image;
 const fileFor = (path) => (path === '/' ? 'index.html' : `${path.slice(1).replace(/\//g, '__')}.html`);
 
 const org = {
@@ -63,8 +65,10 @@ for (const [path, page] of Object.entries(seo.pages)) {
   html = setTag(html, /<meta name="description"[^>]*>/, `<meta name="description" content="${esc(page.description)}">`);
   html = setTag(html, /<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(page.title)}">`);
   html = setTag(html, /<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(page.description)}">`);
-  html = setTag(html, /<meta property="og:image"[^>]*>/, `<meta property="og:image" content="${abs(seo.image)}">`);
-  html = setTag(html, /<meta name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${abs(seo.image)}">`);
+  html = setTag(html, /<meta property="og:image"[^>]*>/, `<meta property="og:image" content="${imageUrl}">`);
+  html = setTag(html, /<meta property="og:image:width"[^>]*>/, `<meta property="og:image:width" content="1200">`);
+  html = setTag(html, /<meta property="og:image:height"[^>]*>/, `<meta property="og:image:height" content="630">`);
+  html = setTag(html, /<meta name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${imageUrl}">`);
   html = setTag(html, /<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${url}">`);
   html = setTag(html, /<meta property="og:type"[^>]*>/, `<meta property="og:type" content="website">`);
   html = setTag(html, /<meta property="og:site_name"[^>]*>/, `<meta property="og:site_name" content="Wellness Bestie by ORIRI">`);

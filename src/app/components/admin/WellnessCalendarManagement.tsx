@@ -124,10 +124,10 @@ export default function WellnessCalendarManagement() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CalendarHeart className="h-5 w-5" /> {editingId ? 'Edit event' : 'Add to Wellness Calendar'}
+            <CalendarHeart className="h-5 w-5" /> {editingId ? 'Edit partner event' : 'Add a partner event'}
           </CardTitle>
           <CardDescription>
-            Events you add here appear on the Home page under Wellness Calendar right away.
+            Events hosted by someone else (classes, workshops, pop-ups). They show under Coming up on the site right away, with booking and sharing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -207,7 +207,7 @@ export default function WellnessCalendarManagement() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Upcoming ({upcoming.length})</CardTitle>
+            <CardTitle>Partner events: upcoming ({upcoming.length})</CardTitle>
             <CardDescription>Past events stay listed below for reference.</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={load}>

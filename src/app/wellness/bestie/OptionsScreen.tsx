@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Check } from 'lucide-react';
-import { Card, Eyebrow, GoldRule, PillLink, Screen, StepHeader, cx } from './kit';
+import { Card, Eyebrow, GoldRule, PillLink, Screen, WaitlistLink, StepHeader, cx } from './kit';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
 
@@ -57,9 +57,7 @@ export function MembershipCard({ source, className }: { source: string; classNam
         </li>
       ))}
     </ul>
-    <PillLink to="/pilot" tone="ivory" className="mt-6 w-full" onClick={() => ctaClick('Join the waitlist', source)}>
-      Join the waitlist
-    </PillLink>
+    <WaitlistLink source={source} tone="ivory" className="mt-6 w-full" />
     <Link to={withUtm('/membership')} className="mt-3 flex h-11 items-center justify-center text-[15px] text-wb-paper/85 underline underline-offset-4 hover:text-wb-paper">
       Preview membership
     </Link>

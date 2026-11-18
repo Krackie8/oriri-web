@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><!-- figma:title --></title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#FAF8F5" />
     <style>
       html,
       body {
@@ -28,6 +30,50 @@
   </head>
   <body>
     <!-- figma:body-start -->
+    <div id="oriri-splash" aria-hidden="true">
+      <img src="/icon-512.png" alt="" width="128" height="128" />
+    </div>
+    <style>
+      #oriri-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #FAF8F5;
+        transition: opacity 0.45s ease;
+      }
+      #oriri-splash img {
+        width: 128px;
+        height: 128px;
+        animation: oriri-rise 1.3s cubic-bezier(0.22, 1, 0.36, 1) both, oriri-breathe 2.4s ease-in-out 1.3s infinite;
+      }
+      #oriri-splash.is-leaving {
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* ORIRI = to rise: the O grows from small and rises into place */
+      @keyframes oriri-rise {
+        0% { transform: translateY(28px) scale(0.3); opacity: 0; }
+        60% { opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
+      }
+      @keyframes oriri-breathe {
+        0%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+        50% { transform: translateY(-4px) scale(1.04); opacity: 0.82; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #oriri-splash img { animation: none; }
+      }
+    </style>
+    <script>
+      // Safety net: never leave the loading screen up if the app fails to start.
+      setTimeout(function () {
+        var s = document.getElementById('oriri-splash');
+        if (s) s.remove();
+      }, 8000);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- figma:body-end -->

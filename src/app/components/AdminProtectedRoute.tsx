@@ -5,6 +5,7 @@ import { useAdmin } from '../hooks/useAdmin';
 import { Alert, AlertDescription } from './ui/alert';
 import { Button } from './ui/button';
 import { Shield, AlertTriangle, Loader2 } from 'lucide-react';
+import OririLoader from './OririLoader';
 
 interface AdminProtectedRouteProps {
   children: React.ReactNode;
@@ -39,12 +40,7 @@ export default function AdminProtectedRoute({ children, onShowLogin }: AdminProt
   // Show loading state while checking authentication and admin status
   if (isLoading || !hasChecked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Verifying admin access...</p>
-        </div>
-      </div>
+      <OririLoader variant="screen" />
     );
   }
 

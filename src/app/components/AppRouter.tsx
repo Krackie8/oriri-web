@@ -22,13 +22,10 @@ import AdminDashboard from './AdminDashboard';
 import AdminProtectedRoute from './AdminProtectedRoute'; // Admin route protection
 import AuthCallback from './AuthCallback';
 import LinksScreen from './social/LinksScreen';
+import OririLoader from './OririLoader';
 
 // Loading component for Suspense fallbacks
-const LoadingFallback = () => (
-  <div className="flex items-center justify-center min-h-[200px]">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-  </div>
-);
+const LoadingFallback = () => <OririLoader variant="page" />;
 
 // Old wrapper removed - using new EpisodeDetailWrapper from separate file
 
@@ -54,18 +51,14 @@ function ProtectedRoute({
   // Don't render anything if we're still loading auth state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
+      <OririLoader variant="page" />
     );
   }
   
   // Don't render children if not logged in - the useEffect will handle redirect
   if (!isLoggedIn) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
+      <OririLoader variant="page" />
     );
   }
   

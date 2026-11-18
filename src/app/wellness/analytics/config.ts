@@ -19,7 +19,7 @@ export const SITE_CONFIG = {
    *   That tag has been removed so nothing loads before consent. Paste whichever
    *   ID you want to keep here.
    */
-  GA4_MEASUREMENT_ID: 'G-XXXXXXXXXX',
+  GA4_MEASUREMENT_ID: 'G-78GWK70520',
 
   /**
    * ▶ PLACEHOLDER — Microsoft Clarity project ID.

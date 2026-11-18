@@ -1,7 +1,7 @@
 /** 1 · Homepage: Ren's four pillars (small, free), then Bestie the app. */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Award, Brain, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
+import { ArrowUpRight, Award, Brain, ChevronDown, Share2, HeartHandshake, ListChecks, MapPin, Pin, Sparkles, Sun, Zap } from 'lucide-react';
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { WellnessGuide } from '../../utils/wellnessApi';
 import { Eyebrow, PillarIcon, PillLink, Screen, cx } from './kit';
@@ -9,7 +9,8 @@ import type { PillarKey } from './picks';
 import { cardClick, ctaClick } from '../analytics/track';
 import { countPlaceClick } from '../analytics/firstParty';
 import { MembershipCard } from './OptionsScreen';
-import { withUtm } from '../analytics/utm';
+import { sourceLabel, withUtm } from '../analytics/utm';
+import { checkEmail } from '../../utils/emailCheck';
 import { unsplash } from '../components/ui';
 import PhoneShowcase from './PhoneShowcase';
 
@@ -95,7 +96,7 @@ const PILLAR_ORDER: PillarName[] = ['Move', 'Meal', 'Mindset', 'Meetup'];
 /** Always listed: Ren's own podcast and community. */
 const BUILT_IN: Partial<Record<PillarName, Place[]>> = {
   Mindset: [{ id: 'tea-for-two', title: 'Tea for Two', category: 'Mindset', area: 'Podcast · Renee & Amanda', note: 'Our podcast: honest conversations about building a life in the UAE, growth and wellness.', internal: '/podcast', builtIn: true }],
-  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/community', builtIn: true }],
+  Meetup: [{ id: 'stepsisters', title: 'Stepsisters', category: 'Meetup', area: 'Our community · free', note: 'Free meetups by ORIRI for women in Dubai: walks, coffee, classes together. Come alone, leave with friends.', internal: '/bestie#stepsisters', builtIn: true }],
 };
 
 /** Sample places, shown only with ?demo=1 so Ren can preview the layout before adding real ones. */
@@ -197,9 +198,14 @@ const mapUrl = (place: Place) =>
   place.maps ? withHttp(place.maps) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.title} ${place.area || ''} Dubai`)}`;
 const BOX: Record<PillarKey, 'move' | 'meal' | 'mindset' | 'meetups'> = { move: 'move', meal: 'meal', mindset: 'mindset', meetup: 'meetups' };
 
-/** Where a name goes when tapped: website first, then Instagram, then the map. */
+/**
+ * Where a name goes when tapped. Places (Move, Meal, Meetup) open Google Maps only,
+ * never the business's own website or Instagram, so visitors stay with ORIRI (Ren's rule).
+ * Mindset entries are episodes to listen to, not places, so they keep their link.
+ */
+const isMap = (pillar: PillarKey) => pillar !== 'mindset';
 const placeHref = (place: Place, pillar: PillarKey) =>
-  place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : pillar === 'move' || pillar === 'meal' || place.maps ? mapUrl(place) : '';
+  isMap(pillar) ? mapUrl(place) : place.link ? withHttp(place.link) : place.instagram ? igUrl(place.instagram) : place.maps ? mapUrl(place) : '';
 
 /** True on a mouse/trackpad device, where the note shows on hover. */
 const canHover = () => {
@@ -211,7 +217,7 @@ const canHover = () => {
 };
 
 const visitLabel = (place: Place, pillar: PillarKey) =>
-  place.internal ? (pillar === 'mindset' ? 'Listen' : 'Join') : place.link ? 'Visit website' : place.instagram ? 'Open Instagram' : 'Open map';
+  place.internal ? (pillar === 'mindset' ? 'Listen' : 'Join') : isMap(pillar) ? 'Open in Maps' : place.link ? 'Listen' : place.instagram ? 'Open Instagram' : 'Open map';
 
 /**
  * One name in a pillar list. Desktop: hover shows Ren's "why I like it" note, click opens the place.
@@ -242,7 +248,11 @@ function PlaceRow({ place, pillar }: { place: Place; pillar: PillarKey }) {
         <span className="block truncate text-[16px] font-medium text-wb-ink">{place.title}</span>
         {meta && <span className="block truncate text-[14px] text-wb-taupe">{meta}</span>}
       </span>
-      <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      {!place.internal && isMap(pillar) ? (
+        <MapPin aria-label="Opens in Maps" className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      ) : (
+        <ArrowUpRight className="h-5 w-5 shrink-0 text-wb-taupe" strokeWidth={1.5} />
+      )}
     </>
   );
   const cls = 'flex w-full items-center gap-3 py-3 text-left';
@@ -386,7 +396,7 @@ function Directory() {
 }
 
 /** Inside Meet up: upcoming Stepsisters meetups and events from the admin calendar. */
-function MeetupEvents() {
+export function MeetupEvents() {
   const rows = useUpcoming();
   if (!rows || !rows.length) return <div className="pb-2" />;
   return (
@@ -449,8 +459,8 @@ function HowItWorks() {
 
 const FEATURES: { icon: typeof Sun; title: string; text: string; tag?: string }[] = [
   { icon: Sun, title: 'Daily affirmation', text: 'A few words just for you, every time you check in.' },
-  { icon: Zap, title: 'Energy check-in', text: 'Builds your daily and weekly plan, with rings to close.' },
-  { icon: ListChecks, title: 'Simple to-do list', text: 'Your day as a list. Tick it off as you go.' },
+  { icon: Zap, title: 'The Wellness Planner with tracker', text: 'Check in with your energy and Bestie builds your daily and weekly plan, with rings to close. Bestie remembers you and learns your patterns, so every plan fits you better.' },
+  { icon: ListChecks, title: 'Be well organised with a to-do list', text: 'Your whole day in one list. Tick it off as you go.' },
   { icon: Award, title: 'Badges to unlock', text: 'Little wins for showing up for yourself.', tag: 'Soon' },
   {
     icon: HeartHandshake,
@@ -506,7 +516,7 @@ function PlumBand() {
   );
 }
 
-type EventRow = { id: string; date: string; title: string; meta: string; tag: string; url: string };
+type EventRow = { id: string; date: string; title: string; meta: string; tag: string; url: string; time?: string; location?: string; description?: string; image?: string };
 
 /** Upcoming Stepsisters meetups (by ORIRI) and wellness events, from the admin calendar. */
 function useUpcoming(): EventRow[] | null {
@@ -520,10 +530,10 @@ function useUpcoming(): EventRow[] | null {
         t ? new Date(`2000-01-01T${t}`).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase() : '';
       const moments: EventRow[] = (m.data || [])
         .filter((x) => x.type !== 'recap' && x.date && x.date >= today)
-        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '/community' }));
+        .map((x) => ({ id: `m-${x.id}`, date: x.date!, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: 'Stepsisters · Free', url: x.link || '', time: fmtTime(x.startTime), location: x.location, description: x.description, image: x.photos?.[0] }));
       const events: EventRow[] = (e.data || [])
         .filter((x) => x.date >= today)
-        .map((x) => ({ id: `e-${x.id}`, date: x.date, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: x.partner || x.category || 'Wellness event', url: x.link || '' }));
+        .map((x) => ({ id: `e-${x.id}`, date: x.date, title: x.title, meta: [fmtTime(x.startTime), x.location].filter(Boolean).join(' · '), tag: x.partner || x.category || 'Wellness event', url: x.link || '', time: fmtTime(x.startTime), location: x.location, description: x.description, image: x.image }));
       setRows([...moments, ...events].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4));
     });
     return () => {
@@ -533,41 +543,170 @@ function useUpcoming(): EventRow[] | null {
   return rows;
 }
 
+/** Share link for one event; opening it scrolls to the event with its details open. */
+const eventShareUrl = (id: string) => `${location.origin}/bestie?event=${encodeURIComponent(id)}#stepsisters`;
+const linkedEventId = () => {
+  try {
+    return new URLSearchParams(location.search).get('event') || '';
+  } catch {
+    return '';
+  }
+};
+
 function EventItem({ row }: { row: EventRow }) {
+  const deepLinked = linkedEventId() === row.id;
+  const [open, setOpen] = useState(deepLinked);
+  const [copied, setCopied] = useState(false);
+  const itemRef = React.useRef<HTMLLIElement>(null);
   const d = new Date(`${row.date}T00:00`);
-  const inner = (
-    <>
-      <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[14px] border border-wb-gold/60 bg-wb-shell">
-        <span className="text-[14px] uppercase text-wb-taupe">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>
-        <span className="font-wb-serif text-[20px] leading-none text-wb-plum">{d.getDate()}</span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] text-wb-taupe">{row.tag}</span>
-        <span className="block truncate text-[16px] font-medium text-wb-ink">{row.title}</span>
-        {row.meta && (
-          <span className="mt-0.5 flex items-center gap-1 truncate text-[14px] text-wb-soft">
-            <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
-            <span className="truncate">{row.meta}</span>
-          </span>
-        )}
-      </span>
-      {row.url && <ArrowUpRight className="h-4 w-4 shrink-0 text-wb-taupe" strokeWidth={1.6} />}
-    </>
-  );
-  const cls = 'flex items-center gap-3.5 py-3';
-  const onClick = () => cardClick('meetups', row.title);
-  if (!row.url) return <li className={cls}>{inner}</li>;
+  useEffect(() => {
+    if (deepLinked) setTimeout(() => itemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, [deepLinked]);
+  const toggle = () => {
+    if (!open) cardClick('meetups', row.title);
+    setOpen((o) => !o);
+  };
+  const share = async () => {
+    const url = eventShareUrl(row.id);
+    const when = `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}${row.time ? `, ${row.time}` : ''}`;
+    ctaClick(`Share: ${row.title}`, 'meetups');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: row.title, text: `${row.title} · ${when}${row.location ? ` · ${row.location}` : ''}. Book your spot on ORIRI:`, url });
+        return;
+      }
+    } catch {
+      return; // share sheet closed
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.prompt('Copy this link', url);
+    }
+  };
+  const btn = 'inline-flex items-center gap-1.5 rounded-full border border-wb-plum px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-wb-plum hover:bg-wb-plum hover:text-white';
   return (
-    <li>
-      {row.url.startsWith('/') ? (
-        <Link to={withUtm(row.url)} onClick={onClick} className={cls}>
-          {inner}
-        </Link>
-      ) : (
-        <a href={row.url} target="_blank" rel="noopener noreferrer" onClick={onClick} className={cls}>
-          {inner}
-        </a>
+    <li ref={itemRef} className="scroll-mt-24 py-3">
+      <div className="flex items-center gap-3.5">
+        <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[14px] border border-wb-gold/60 bg-wb-shell">
+          <span className="text-[14px] uppercase text-wb-taupe">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>
+          <span className="font-wb-serif text-[20px] leading-none text-wb-plum">{d.getDate()}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] text-wb-taupe">{row.tag}</span>
+          <span className="block truncate text-[16px] font-medium text-wb-ink">{row.title}</span>
+          {row.meta && (
+            <span className="mt-0.5 flex items-center gap-1 truncate text-[14px] text-wb-soft">
+              <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.6} />
+              <span className="truncate">{row.meta}</span>
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={toggle} aria-expanded={open} className={btn}>
+          {open ? 'Hide details' : 'See details'}
+          <ChevronDown className={cx('h-4 w-4 transition-transform', open && 'rotate-180')} strokeWidth={1.8} />
+        </button>
+        <button type="button" onClick={share} className={btn}>
+          <Share2 className="h-4 w-4" strokeWidth={1.8} />
+          {copied ? 'Link copied' : 'Share'}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 rounded-[14px] bg-wb-stone px-5 py-5 text-left">
+          {row.image && <img src={row.image} alt="" loading="lazy" className="mb-4 aspect-[4/3] w-full rounded-[10px] object-cover" />}
+          <p className="text-[15px] font-medium text-wb-ink">
+            {d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {row.time ? ` · ${row.time}` : ''}
+          </p>
+          {row.location && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${row.location}, Dubai`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => countPlaceClick(`meetup-map:${row.title}`)}
+              className="mt-1 inline-flex items-center gap-1 text-[15px] text-wb-soft underline underline-offset-2"
+            >
+              <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.6} />
+              {row.location} · Open in Maps
+            </a>
+          )}
+          {row.description && <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-wb-soft">{row.description.trim().replace(/\n{3,}/g, "\n\n")}</p>}
+          <BookingForm row={row} />
+        </div>
       )}
     </li>
+  );
+}
+
+function BookingForm({ row }: { row: EventRow }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [guests, setGuests] = useState(1);
+  const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle');
+  const [error, setError] = useState('');
+  const [link, setLink] = useState('');
+  const [again, setAgain] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (name.trim().length < 2) return setError('Please add your name.');
+    const chk = checkEmail(email);
+    if (!chk.ok) return setError(chk.error || 'Please check your email address.');
+    setState('sending');
+    const res = await wellnessApi.bookEvent({ ref: row.id, name: name.trim(), email: chk.email, phone: phone.trim(), guests, wb_source: sourceLabel() });
+    if (!res.ok || !res.data) {
+      setState('idle');
+      return setError(res.error || 'Something went wrong. Please try again.');
+    }
+    ctaClick(`Booked: ${row.title}`, 'meetups');
+    setLink(res.data.link);
+    setAgain(res.data.alreadyBooked);
+    setState('done');
+  }
+
+  if (state === 'done') {
+    const isWhatsApp = /whatsapp|wa\.me/.test(link);
+    return (
+      <div className="mt-5 rounded-[12px] bg-wb-shell px-4 py-4">
+        <p className="font-wb-serif text-[20px] text-wb-plum">{again ? "You're already on the list" : "You're booked!"}</p>
+        <p className="mt-1 text-[15px] leading-relaxed text-wb-soft">We'll be in touch with the details before the day. Tell a friend with the Share button.</p>
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-wb-plum px-5 py-3 text-[13px] font-semibold uppercase tracking-[0.12em] text-white">
+            {isWhatsApp ? 'Join the WhatsApp group' : 'Event page'}
+            <ArrowUpRight className="h-4 w-4" strokeWidth={1.8} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const field = 'w-full rounded-[10px] border border-wb-sand bg-wb-shell px-3.5 py-3 text-[16px] text-wb-ink placeholder:text-wb-taupe/70 focus:border-wb-plum focus:outline-none';
+  return (
+    <form onSubmit={submit} className="mt-5 space-y-2.5 border-t border-wb-sand/70 pt-5" noValidate>
+      <p className="text-[14px] font-medium uppercase tracking-[0.16em] text-wb-taupe">Book your spot</p>
+      <input className={field} placeholder="Your name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className={field} placeholder="Email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <input className={field} placeholder="WhatsApp number (optional)" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <label className="flex items-center justify-between gap-3 text-[15px] text-wb-soft">
+        Spots
+        <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="rounded-[10px] border border-wb-sand bg-wb-shell px-3 py-2 text-[16px] text-wb-ink">
+          {[1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? 'Just me' : `${n} people`}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error && <p className="text-[14px] text-[#A2453B]">{error}</p>}
+      <button type="submit" disabled={state === 'sending'} className="w-full rounded-full bg-wb-plum px-5 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-white disabled:opacity-60">
+        {state === 'sending' ? 'Booking…' : 'Book my spot'}
+      </button>
+    </form>
   );
 }

@@ -5,29 +5,36 @@ import BottomTabBar from '../components/BottomTabBar';
 import HomeScreen from './bestie/HomeScreen';
 import InputScreen from './bestie/InputScreen';
 import DayScreen from './bestie/DayScreen';
+import JoinScreen from './join/JoinScreen';
 import MembershipScreen from './bestie/MembershipScreen';
-import PilotPage from './pages/PilotPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ShopPage from './pages/ShopPage';
 import PodcastPage from './pages/PodcastPage';
 import BestiePage from './pages/BestiePage';
 import GuestProfilePage from './pages/GuestProfilePage';
+import WeeklyRecap from './bestie/WeeklyRecap';
 import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
-import { flushPendingFreeDay } from './api';
+import { functionClient } from './functionClient';
 import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
 import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
 /** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
-export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast'];
+export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/join', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast', '/community'];
 export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
 
 type SeoPage = { title: string; description: string; index: boolean };
 const SEO_PAGES = seo.pages as Record<string, SeoPage>;
 
 /** Title, description, canonical and robots for the current page (same data the build bakes into each page's HTML). */
+/** The old waitlist form. Joining now happens on the free day sign-up, so old links (with their UTMs) open the planner. */
+function JoinRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/plan/inputs${search}`} replace />;
+}
+
 function applySeo(path: string) {
   const page = SEO_PAGES[path] || SEO_PAGES['/'];
   const canonicalPath = SEO_PAGES[path] ? path : '/';
@@ -83,7 +90,7 @@ export default function WellnessSite() {
   useEffect(() => {
     captureAttribution();
     installOutboundTracking(); // outbound_click on every external link
-    flushPendingFreeDay(); // re-send a free-day email saved while offline
+    void functionClient.freeDay.retryPending(); // re-send a Free day claim queued on an earlier visit
     loadTrackers(); // no-op unless the visitor has already accepted
     return onConsentChange((c) => {
       setConsentState(c);
@@ -100,6 +107,10 @@ export default function WellnessSite() {
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
       document.documentElement.scrollTop = 0;
+    } else {
+      // In-app links like /bestie#stepsisters: scroll to the section once it has rendered
+      const id = decodeURIComponent(location.hash.slice(1));
+      window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }), 150);
     }
     trackPageView(document.title);
     countPageView(path); // cookieless first-party count for the admin Traffic tab
@@ -110,7 +121,7 @@ export default function WellnessSite() {
 
   const bannerOpen = cookieSettingsOpen || consent === null;
   // Screens with their own pinned button hide the tab bar
-  const showTabs = !['/plan/inputs', '/pilot'].includes(location.pathname.replace(/\/+$/, ''));
+  const showTabs = !['/plan/inputs'].includes(location.pathname.replace(/\/+$/, ''));
 
   return (
     <div className="wb-root wb-grain min-h-screen bg-wb-paper text-wb-ink">
@@ -124,9 +135,12 @@ export default function WellnessSite() {
           <Route path="/plan" element={<Navigate to="/plan/inputs" replace />} />
           <Route path="/plan/inputs" element={<InputScreen />} />
           <Route path="/plan/day" element={<DayScreen />} />
+          <Route path="/join" element={<JoinScreen />} />
           <Route path="/membership" element={<MembershipScreen />} />
           <Route path="/bestie" element={<BestiePage />} />
-          <Route path="/pilot" element={<PilotPage />} />
+          <Route path="/pilot" element={<JoinRedirect />} />
+          {/* Old podcast-app community page: Stepsisters now lives on the Bestie community page */}
+          <Route path="/community" element={<Navigate to="/bestie#stepsisters" replace />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/podcast" element={<PodcastPage />} />
@@ -143,6 +157,7 @@ export default function WellnessSite() {
           <BottomTabBar />
         </>
       )}
+      <WeeklyRecap />
       <CookieBanner forceOpen={cookieSettingsOpen} onClose={() => setCookieSettingsOpen(false)} />
     </div>
   );
