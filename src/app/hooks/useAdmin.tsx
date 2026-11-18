@@ -24,6 +24,8 @@ export function useAdmin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  // The user id the last finished admin check was for. isInitialized alone goes stale when someone signs in.
+  const [checkedFor, setCheckedFor] = useState<string | null>(null);
   
   // Use refs to prevent unnecessary re-checks
   const lastCheckedUserIdRef = useRef<string | null>(null);
@@ -79,6 +81,7 @@ export function useAdmin() {
         });
         setIsInitialized(true);
         lastCheckedUserIdRef.current = user.id;
+        setCheckedFor(user.id);
         return;
       }
 
@@ -103,6 +106,7 @@ export function useAdmin() {
           });
           setIsInitialized(true);
           lastCheckedUserIdRef.current = user.id;
+        setCheckedFor(user.id);
           return;
         }
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -119,6 +123,7 @@ export function useAdmin() {
         });
         console.log('[useAdmin] Admin status checked:', data.isAdmin, data.isCreator);
         lastCheckedUserIdRef.current = user.id;
+        setCheckedFor(user.id);
       } else {
         throw new Error(data.error || 'Failed to check admin status');
       }
@@ -138,6 +143,7 @@ export function useAdmin() {
         userRole: 'user'
       });
     } finally {
+      setCheckedFor(user.id);
       setLoading(false);
       setIsInitialized(true);
       checkInProgressRef.current = false;
@@ -236,6 +242,7 @@ export function useAdmin() {
       setError(null);
       setIsInitialized(false);
       lastCheckedUserIdRef.current = null;
+      setCheckedFor(null);
     }
   }, [user?.id, checkAdminStatus, isInitialized]);
 
@@ -246,5 +253,6 @@ export function useAdmin() {
     checkAdminStatus,
     setupAdmin,
     isInitialized,
+    checkedFor,
   };
 }

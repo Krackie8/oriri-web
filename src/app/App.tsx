@@ -21,7 +21,7 @@ import './utils/vipTestConsole';
 import { useAuthHandlers } from './hooks/useAuthHandlers';
 import { useAuth } from './hooks/useAuth';
 import { useAdmin } from './hooks/useAdmin';
-import { profileView } from './wellness/profile/profileView';
+import { adminCheckDone, profileView } from './wellness/profile/profileView';
 import OririLoader from './components/OririLoader';
 
 console.log('[App] Starting App component...');
@@ -33,11 +33,11 @@ function AppContent() {
   const [isReady, setIsReady] = useState(true); // Start as ready immediately
   const { handleLogin, handleGuestMode, handleLogout } = useAuthHandlers();
   const location = useLocation();
-  const { isLoggedIn, loading: authLoading } = useAuth();
-  const { isAdmin, isInitialized: adminChecked, loading: adminLoading } = useAdmin();
+  const { user, isLoggedIn, loading: authLoading } = useAuth();
+  const { isAdmin, checkedFor: adminCheckedFor, loading: adminLoading } = useAdmin();
   const isProfilePath = (location.pathname.replace(/\/+$/, '') || '/') === '/profile';
   const profile = isProfilePath
-    ? profileView({ authLoading, isLoggedIn, adminChecked: adminChecked && !adminLoading, isAdmin })
+    ? profileView({ authLoading, isLoggedIn, adminChecked: adminCheckDone({ userId: user?.id, checkedFor: adminCheckedFor, checking: adminLoading }), isAdmin })
     : null;
 
   useEffect(() => {

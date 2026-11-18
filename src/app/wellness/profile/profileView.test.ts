@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { profileView } from './profileView'
+import { adminCheckDone, profileView } from './profileView'
 
 const base = { authLoading: false, isLoggedIn: false, adminChecked: false, isAdmin: false }
 
@@ -18,5 +18,20 @@ describe('profileView: what /profile shows', () => {
   })
   it('an admin still reaches the admin profile', () => {
     expect(profileView({ ...base, isLoggedIn: true, adminChecked: true, isAdmin: true })).toBe('admin')
+  })
+})
+
+describe('adminCheckDone: the admin check counts only for who is signed in now', () => {
+  it('a check from before sign-in does not count (Ren just signed in)', () => {
+    expect(adminCheckDone({ userId: 'ren', checkedFor: null, checking: false })).toBe(false)
+  })
+  it('a check for someone else does not count', () => {
+    expect(adminCheckDone({ userId: 'ren', checkedFor: 'other', checking: false })).toBe(false)
+  })
+  it('not done while a check is running', () => {
+    expect(adminCheckDone({ userId: 'ren', checkedFor: 'ren', checking: true })).toBe(false)
+  })
+  it('done once checked for this user', () => {
+    expect(adminCheckDone({ userId: 'ren', checkedFor: 'ren', checking: false })).toBe(true)
   })
 })

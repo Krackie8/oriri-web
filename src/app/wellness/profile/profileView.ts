@@ -11,3 +11,11 @@ export function profileView(s: { authLoading: boolean; isLoggedIn: boolean; admi
   if (!s.adminChecked) return 'loading'
   return s.isAdmin ? 'admin' : 'wellness'
 }
+
+/**
+ * Whether the admin check has finished for the user signed in now. A check left over from before
+ * sign-in (or for someone else) does not count, or an admin would be sent away from /profile.
+ */
+export function adminCheckDone(s: { userId: string | null | undefined; checkedFor: string | null; checking: boolean }): boolean {
+  return !!s.userId && s.checkedFor === s.userId && !s.checking
+}
