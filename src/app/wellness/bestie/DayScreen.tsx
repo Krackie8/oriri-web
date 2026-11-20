@@ -14,38 +14,11 @@ import { functionClient, type JournalEntry, type ServerDayPlan, type SuggestionC
 import { fromServerPlan } from './serverPlan';
 import { toCleanJpeg } from './photo';
 import { readyLabel } from './proofView';
-import { supabase } from '../../utils/supabase/client';
+import { CHECK_IN_AGAIN } from './returning';
+import { useViewer } from './viewer';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
 import { useAdmin } from '../../hooks/useAdmin';
-
-/**
- * Who is looking: a Member sees her Day plan from Bestie on the server (ADR-0003); anyone else
- * sees the plan built in the browser. `checking` while a signed-in woman's status loads.
- */
-type Viewer = { kind: 'checking' } | { kind: 'visitor' } | { kind: 'member'; plan: ServerDayPlan | null };
-
-function useViewer(): Viewer {
-  const [viewer, setViewer] = useState<Viewer>({ kind: 'checking' });
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      const session = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
-      if (!session) return { kind: 'visitor' } as Viewer;
-      const me = await functionClient.member.me();
-      if (!me.ok || me.data.outcome !== 'member') return { kind: 'visitor' } as Viewer;
-      const today = await functionClient.bestie.today();
-      if (!today.ok) return { kind: 'visitor' } as Viewer;
-      return { kind: 'member', plan: today.data.outcome === 'planned' ? today.data.plan : null } as Viewer;
-    })()
-      .catch(() => ({ kind: 'visitor' }) as Viewer)
-      .then((v) => live && setViewer(v));
-    return () => {
-      live = false;
-    };
-  }, []);
-  return viewer;
-}
 
 export default function DayScreen() {
   const viewer = useViewer();
@@ -239,8 +212,9 @@ function DayView({ server }: { server?: ServerDayPlan }) {
           {c}
         </span>
       ))}
-      <Link to={withUtm('/plan/inputs')} className="rounded-full px-2 py-1.5 text-[14px] text-wb-plum underline underline-offset-4">
-        Edit
+      {/* A Member's day is recorded: a new Check-in replaces what she hasn't done yet, so she asks for it on purpose. */}
+      <Link to={withUtm(isMember ? CHECK_IN_AGAIN : '/plan/inputs')} className="rounded-full px-2 py-1.5 text-[14px] text-wb-plum underline underline-offset-4">
+        {isMember ? 'Check in again' : 'Edit'}
       </Link>
     </div>
   );

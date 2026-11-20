@@ -1,6 +1,6 @@
 /** 3 · Input: energy + goals, time, budget + area */
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import { Chip, PillButton, Screen, StepHeader, cx } from './kit';
 import { ENERGIES, GOALS, TIME_CHIPS, type Goal, type PlanInputs } from './engine';
@@ -11,6 +11,8 @@ import { withUtm } from '../analytics/utm';
 import { functionClient } from '../functionClient';
 import { supabase } from '../../utils/supabase/client';
 import { toServerCheckIn } from './serverPlan';
+import { checkInGate, seen, wantsAgain } from './returning';
+import { useViewer } from './viewer';
 
 function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
@@ -29,6 +31,10 @@ const fieldCls =
 
 export default function InputScreen() {
   const navigate = useNavigate();
+  // A Member who already has a plan today goes back to it: checking in again would replace what she
+  // hasn't done yet and restart its timers. She checks in again only from her day ("Check in again").
+  const again = wantsAgain(useLocation().search);
+  const gate = checkInGate(seen(useViewer(again)), again);
   const [v, setV] = useState<PlanInputs>(() => loadInputs() || DEFAULT_INPUTS);
   const [customMin, setCustomMin] = useState(() => (TIME_CHIPS.some((c) => c.minutes === v.minutes) ? '' : String(v.minutes)));
   const set = (patch: Partial<PlanInputs>) => setV((s) => ({ ...s, ...patch }));
@@ -64,10 +70,18 @@ export default function InputScreen() {
     navigate(withUtm('/plan/day'));
   };
 
+  if (gate === 'day') return <Navigate to={withUtm('/plan/day')} replace />;
+  if (gate === 'wait') return <Screen className="pb-20 pt-24 text-center text-[16px] text-wb-soft">Loading your day…</Screen>;
+
   return (
     <form onSubmit={submit}>
       <Screen className="pb-36">
-        <StepHeader back="/" step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
+        <StepHeader back={again ? '/plan/day' : '/'} step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
+        {again && (
+          <p className="mt-4 rounded-[12px] bg-wb-gold-soft/60 px-4 py-3 text-[14px] leading-snug text-wb-soft" role="note">
+            A new Check-in replaces what you haven't done yet. Anything you've ticked stays.
+          </p>
+        )}
 
         <Section n={1} title="Energy now">
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Energy now">
