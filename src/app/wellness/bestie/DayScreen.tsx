@@ -1,7 +1,7 @@
 /** 4 · The day: she joins Oriri free first (or already has), then the whole day shows here. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { ArrowUpRight, CalendarHeart, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
+import { ArrowUpRight, CalendarHeart, Camera, Check, Clock, Coffee, Flame, Footprints, Lock, MapPin, Shuffle, Sparkles, Sun } from 'lucide-react';
 import { dayCopy } from './dayCopy';
 import { BestieSwipe, Noticed, greeting, week } from './MembershipScreen';
 import { saveToday, setDone as saveDone, stats as trackerStats } from './tracker';
@@ -10,8 +10,10 @@ import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, typ
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs } from './state';
-import { functionClient, type ServerDayPlan, type SuggestionChange, type SwapOption } from '../functionClient';
+import { functionClient, type JournalEntry, type ServerDayPlan, type SuggestionChange, type SwapOption } from '../functionClient';
 import { fromServerPlan } from './serverPlan';
+import { toCleanJpeg } from './photo';
+import { readyLabel } from './proofView';
 import { supabase } from '../../utils/supabase/client';
 import { ctaClick, track } from '../analytics/track';
 import { withUtm } from '../analytics/utm';
@@ -131,10 +133,75 @@ function DayView({ server }: { server?: ServerDayPlan }) {
     setBusy(null);
     if (applied(id, r, 'skip')) track('plan_item_skip', { item: id });
   };
+  // A Member completes with light Proof (#72): a tick, or a one-line Reflection for Mindset. Bestie checks
+  // the time gate and the caps on the server; refusals come back gentle, and a quiet flag never shows.
+  const [reflecting, setReflecting] = useState<{ id: string; text: string } | null>(null);
+  const [journalKey, setJournalKey] = useState(0);
+  const showServerPlan = (p: ServerDayPlan) => {
+    setPlan(fromServerPlan(p));
+    setJournalKey((k) => k + 1);
+  };
+  const completeItem = async (item: PlanItem, reflection?: string) => {
+    setSwapNote(null);
+    setChoices(null);
+    setBusy(item.id);
+    const r = await functionClient.bestie.complete(item.id, reflection);
+    setBusy(null);
+    if (!r.ok) return tryAgain(item.id, 'save that');
+    const d = r.data;
+    if (d.outcome === 'planned') {
+      setReflecting(null);
+      showServerPlan(d.plan);
+      track('plan_item_done', { item: item.id, done: true });
+      return;
+    }
+    if (d.outcome === 'refused') {
+      if (d.reason === 'reflectionNeeded') return setReflecting({ id: item.id, text: reflecting?.id === item.id ? reflecting.text : '' });
+      const ready = d.reason === 'tooSoon' ? readyLabel(d.readyAt, new Date()) : null;
+      return setSwapNote({ id: item.id, text: ready ? `${ready}. Give it the time it takes, then tick it off.` : d.message });
+    }
+    changed(item.id);
+  };
+  const undoItem = async (item: PlanItem) => {
+    const c = item.proof?.done;
+    if (!c) return;
+    setSwapNote(null);
+    setBusy(item.id);
+    const r = await functionClient.bestie.undo(c.completionId);
+    setBusy(null);
+    if (!r.ok) return tryAgain(item.id, 'undo that');
+    if (r.data.outcome === 'planned') {
+      showServerPlan(r.data.plan);
+      track('plan_item_done', { item: item.id, done: false });
+      return;
+    }
+    setSwapNote({ id: item.id, text: 'That can only be undone on the day you ticked it.' });
+  };
+  const memberTick = (item: PlanItem) => {
+    if (item.proof?.done) return undoItem(item);
+    if (item.proof?.needsReflection) return setReflecting({ id: item.id, text: reflecting?.id === item.id ? reflecting.text : '' });
+    return completeItem(item);
+  };
+  const addPhoto = async (item: PlanItem, file: File) => {
+    const c = item.proof?.done;
+    if (!c) return;
+    setSwapNote(null);
+    setBusy(item.id);
+    const jpeg = await toCleanJpeg(file);
+    const r = jpeg ? await functionClient.bestie.addPhoto(c.completionId, jpeg) : null;
+    setBusy(null);
+    if (!jpeg) return setSwapNote({ id: item.id, text: 'Bestie could not read that photo. Try another one.' });
+    if (!r || !r.ok) return tryAgain(item.id, 'save the photo');
+    if (r.data.outcome === 'refused') return setSwapNote({ id: item.id, text: r.data.message });
+    if (r.data.outcome !== 'saved') return changed(item.id);
+    setJournalKey((k) => k + 1);
+    setSwapNote({ id: item.id, text: 'Saved privately to your Journal, with its location removed.' });
+    track('plan_item_photo', { item: item.id });
+  };
   const [done, setDone] = useState<Record<string, boolean>>({});
   // Restore today's ticks (Tap & track keeps progress on this device)
   useEffect(() => {
-    if (!plan || !inputs) return;
+    if (!plan || !inputs || isMember) return;
     const ids = saveToday(plan.items, inputs.goals);
     setDone(Object.fromEntries(ids.map((id) => [id, true])));
   }, [plan, inputs]);
@@ -155,7 +222,8 @@ function DayView({ server }: { server?: ServerDayPlan }) {
   if (!inputs || !plan || (!isMember && (!inputs.area || !inputs.goals.length))) return <Navigate to={withUtm('/plan/inputs')} replace />;
 
   const unlocked = !!unlockedFor || isAdmin;
-  const doneCount = Object.values(done).filter(Boolean).length;
+  const doneMap: Record<string, boolean> = isMember ? Object.fromEntries(plan.items.filter((i) => i.proof?.done).map((i) => [i.id, true])) : done;
+  const doneCount = Object.values(doneMap).filter(Boolean).length;
   const toggle = (id: string) => {
     const on = !done[id];
     const ids = saveDone(id, on);
@@ -228,8 +296,24 @@ function DayView({ server }: { server?: ServerDayPlan }) {
           <PlanRow
             key={item.id}
             item={item}
-            done={!!done[item.id]}
-            onToggle={() => toggle(item.id)}
+            done={!!doneMap[item.id]}
+            onToggle={() => (isMember ? memberTick(item) : toggle(item.id))}
+            ready={isMember && !item.proof?.done ? readyLabel(item.proof?.readyAt, new Date()) : null}
+            proof={
+              isMember ? (
+                reflecting?.id === item.id ? (
+                  <ReflectionBox
+                    value={reflecting.text}
+                    busy={busy === item.id}
+                    onChange={(text) => setReflecting({ id: item.id, text })}
+                    onSave={() => completeItem(item, reflecting.text)}
+                    onCancel={() => setReflecting(null)}
+                  />
+                ) : item.proof?.done ? (
+                  <PhotoAdd busy={busy === item.id} onFile={(f) => addPhoto(item, f)} />
+                ) : undefined
+              ) : undefined
+            }
             feel={feel[item.id]}
             onFeel={(f) => rate(item.id, f)}
             onSwap={item.id === 'rest' ? undefined : isMember ? () => openChoices(item.id) : () => swap(item.id)}
@@ -243,7 +327,9 @@ function DayView({ server }: { server?: ServerDayPlan }) {
         ))}
       </ul>
 
-      <Tracker items={plan.items} done={done} isMember={isMember} />
+      <Tracker items={plan.items} done={doneMap} isMember={isMember} />
+
+      {isMember && <MemberJournal refreshKey={journalKey} />}
 
       {event && <TodayEvent event={event} />}
 
@@ -559,10 +645,14 @@ function PlanRow({
   busy,
   choices,
   note,
+  ready,
+  proof,
 }: {
   item: PlanItem;
   done: boolean;
   onToggle: () => void;
+  ready?: string | null;
+  proof?: React.ReactNode;
   feel?: Feel;
   onFeel: (f: Feel) => void;
   onSwap?: () => void;
@@ -578,8 +668,9 @@ function PlanRow({
           type="button"
           role="checkbox"
           aria-checked={done}
-          aria-label={`Mark ${item.title} as done`}
+          aria-label={done && item.proof ? `Undo ${item.title}` : `Mark ${item.title} as done`}
           onClick={onToggle}
+          disabled={busy}
           className={cx(
             'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold',
             done ? 'border-wb-plum bg-wb-plum text-wb-paper' : 'border-wb-plum/30 hover:border-wb-plum',
@@ -606,6 +697,7 @@ function PlanRow({
               <span>{item.venue}</span>
             </span>
           </p>
+          {ready && <p className="mt-1.5 text-[14px] text-wb-taupe">{ready}</p>}
           {item.timing && (
             <p className="mt-1.5 flex items-start gap-1 text-[14px] text-wb-soft">
               <Sun className="mt-[3px] h-3.5 w-3.5 shrink-0 text-wb-gold" strokeWidth={1.6} />
@@ -681,6 +773,7 @@ function PlanRow({
             </div>
           )}
           {choices}
+          {proof}
           {note && (
             <p className="mt-1 text-[13px] text-wb-taupe" role="status">
               {note}
@@ -689,6 +782,109 @@ function PlanRow({
         </div>
       </div>
     </Card>
+  );
+}
+
+/** A Mindset is completed with one line: what stayed with her (#72). Watching or listening alone earns nothing. */
+function ReflectionBox({ value, busy, onChange, onSave, onCancel }: { value: string; busy?: boolean; onChange: (v: string) => void; onSave: () => void; onCancel: () => void }) {
+  const ok = value.trim().length > 0;
+  return (
+    <div className="mt-3 rounded-[14px] bg-wb-paper px-3 py-3">
+      <label className="block text-[14px] text-wb-soft" htmlFor="wb-reflection">
+        One line: what stayed with you?
+      </label>
+      <textarea
+        id="wb-reflection"
+        value={value}
+        maxLength={280}
+        rows={2}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full resize-none rounded-[12px] border border-wb-plum/20 bg-wb-shell px-3 py-2 text-[15px] text-wb-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wb-gold"
+      />
+      <div className="mt-2 flex items-center gap-4">
+        <PillButton onClick={onSave} disabled={!ok || busy}>
+          Done
+        </PillButton>
+        <button type="button" onClick={onCancel} className="h-10 px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline">
+          Not now
+        </button>
+        <span className="ml-auto text-[13px] text-wb-taupe">{value.length}/280</span>
+      </div>
+    </div>
+  );
+}
+
+/** An optional photo for something she has done: private, location removed, no points (DEC-003). */
+function PhotoAdd({ busy, onFile }: { busy?: boolean; onFile: (f: File) => void }) {
+  return (
+    <label className={cx('mt-3 inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full px-1 text-[14px] text-wb-plum underline-offset-4 hover:underline', busy && 'pointer-events-none opacity-50')}>
+      <Camera className="h-4 w-4" strokeWidth={1.6} /> Add a photo
+      <span className="text-wb-taupe">(optional · private · location removed)</span>
+      <input
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) onFile(f);
+        }}
+      />
+    </label>
+  );
+}
+
+/** Her Journal (#72): the last 30 days of Completions, with her Reflections and photos. Only she sees it. */
+function MemberJournal({ refreshKey }: { refreshKey: number }) {
+  const [entries, setEntries] = useState<JournalEntry[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let live = true;
+    functionClient.bestie.journal().then((r) => {
+      if (!live) return;
+      setEntries(r.ok && r.data.outcome === 'entries' ? r.data.entries : []);
+    });
+    return () => {
+      live = false;
+    };
+  }, [refreshKey, reload]);
+  const removePhoto = async (id: string) => {
+    const r = await functionClient.bestie.deletePhoto(id);
+    setNote(r.ok && r.data.outcome === 'deleted' ? 'Photo removed.' : 'Bestie could not remove that photo right now.');
+    setReload((k) => k + 1);
+  };
+  if (!entries || !entries.length) return null;
+  const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short' });
+  return (
+    <section className="mt-8" aria-labelledby="wb-journal">
+      <h2 id="wb-journal" className="text-[24px] text-wb-ink">
+        Your Journal
+      </h2>
+      <p className="mt-1 text-[15px] text-wb-soft">The last 30 days. Only you can see this.</p>
+      <ul className="mt-4 space-y-3">
+        {entries.map((e) => (
+          <Card as="li" key={e.completionId} className="p-4">
+            <p className="text-[13px] uppercase tracking-[0.14em] text-wb-taupe">{when.format(new Date(e.completedAt))}</p>
+            <p className="mt-1 font-wb-serif text-[18px] leading-snug text-wb-ink">{e.title}</p>
+            {e.reflection && <p className="mt-1.5 text-[15px] italic leading-snug text-wb-soft">“{e.reflection}”</p>}
+            {e.photoUrl && (
+              <div className="mt-3">
+                <img src={e.photoUrl} alt={`Your photo for ${e.title}`} className="max-h-64 rounded-[12px] object-cover" loading="lazy" />
+                <button type="button" onClick={() => removePhoto(e.completionId)} className="mt-1 h-9 px-1 text-[13px] text-wb-taupe underline-offset-4 hover:underline">
+                  Remove photo
+                </button>
+              </div>
+            )}
+          </Card>
+        ))}
+      </ul>
+      {note && (
+        <p className="mt-2 text-[13px] text-wb-taupe" role="status">
+          {note}
+        </p>
+      )}
+    </section>
   );
 }
 

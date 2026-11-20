@@ -28,7 +28,10 @@ export function createHttpTransport({ fetch, hostname, fnBase }: HttpTransportOp
     const headers: Record<string, string> = {}
     let body: BodyInit | undefined
     if (req.form) body = req.form
-    else if (req.body !== undefined && req.method !== 'GET') {
+    else if (req.blob) {
+      headers['Content-Type'] = req.blob.type || 'application/octet-stream'
+      body = req.blob
+    } else if (req.body !== undefined && req.method !== 'GET') {
       headers['Content-Type'] = 'application/json'
       body = JSON.stringify(req.body)
     }

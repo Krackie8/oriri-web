@@ -79,3 +79,53 @@ describe('bestie.options, swap and skip (#71)', () => {
     expect((await client({ 'POST /bestie/suggestions/s1/skip': reply(500, {}) }).fc.bestie.skip('s1')).ok).toBe(false)
   })
 })
+
+describe('bestie.complete, undo, photos and the Journal (#72)', () => {
+  it('complete: sends the Reflection and returns the plan', async () => {
+    const { fc, fake } = client({ 'POST /bestie/suggestions/s1/complete': reply(200, { success: true, plan }) })
+    expect(await fc.bestie.complete('s1', 'Rest is part of it')).toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/suggestions/s1/complete', body: { reflection: 'Rest is part of it' } })
+  })
+  it('complete: a refusal carries its reason and gentle message; tooSoon carries when it opens', async () => {
+    const tooSoon = { success: false, reason: 'tooSoon', readyAt: '2026-11-20T05:45:00.000Z', error: 'Not quite yet.' }
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(409, tooSoon) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'refused', reason: 'tooSoon', message: 'Not quite yet.', readyAt: '2026-11-20T05:45:00.000Z' } })
+    const capped = { success: false, reason: 'mealCapped', error: 'One Meal counts per mealtime.' }
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(409, capped) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'refused', reason: 'mealCapped', message: 'One Meal counts per mealtime.' } })
+    const reflection = { success: false, reason: 'reflectionNeeded', error: 'Write one line.' }
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(400, reflection) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'refused', reason: 'reflectionNeeded', message: 'Write one line.' } })
+  })
+  it('complete: a 409 without a reason is notJoined; gone, signedOut and a 500 as elsewhere', async () => {
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(409, { success: false, error: 'Join' }) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'notJoined' } })
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(404, {}) }).fc.bestie.complete('s1')).toEqual({ ok: true, data: { outcome: 'gone' } })
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(401, {}) }).fc.bestie.complete('s1')).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+    expect((await client({ 'POST /bestie/suggestions/s1/complete': reply(500, {}) }).fc.bestie.complete('s1')).ok).toBe(false)
+  })
+  it('undo: returns the plan, or gone once the day has passed', async () => {
+    const { fc, fake } = client({ 'POST /bestie/completions/c1/undo': reply(200, { success: true, plan }) })
+    expect(await fc.bestie.undo('c1')).toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/completions/c1/undo' })
+    expect(await client({ 'POST /bestie/completions/c1/undo': reply(404, {}) }).fc.bestie.undo('c1')).toEqual({ ok: true, data: { outcome: 'gone' } })
+  })
+  it('addPhoto: sends the JPEG as the body; a refusal passes its message on', async () => {
+    const jpeg = new Blob([new Uint8Array([0xff, 0xd8])], { type: 'image/jpeg' })
+    const { fc, fake } = client({ 'POST /bestie/completions/c1/photo': reply(200, { success: true }) })
+    expect(await fc.bestie.addPhoto('c1', jpeg)).toEqual({ ok: true, data: { outcome: 'saved' } })
+    expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/completions/c1/photo', blob: jpeg })
+    expect(await client({ 'POST /bestie/completions/c1/photo': reply(413, { success: false, error: 'Too big.' }) }).fc.bestie.addPhoto('c1', jpeg))
+      .toEqual({ ok: true, data: { outcome: 'refused', message: 'Too big.' } })
+    expect(await client({ 'POST /bestie/completions/c1/photo': reply(415, { success: false, error: 'Please choose a photo.' }) }).fc.bestie.addPhoto('c1', jpeg))
+      .toEqual({ ok: true, data: { outcome: 'refused', message: 'Please choose a photo.' } })
+  })
+  it('deletePhoto and journal', async () => {
+    expect(await client({ 'DELETE /bestie/completions/c1/photo': reply(200, { success: true }) }).fc.bestie.deletePhoto('c1'))
+      .toEqual({ ok: true, data: { outcome: 'deleted' } })
+    const entries = [{ completionId: 'c1', title: 'Sunset walk', pillars: ['move'], reflection: null, completedAt: '2026-11-20T15:00:00Z', photoUrl: null }]
+    expect(await client({ 'GET /bestie/journal': reply(200, { success: true, entries }) }).fc.bestie.journal())
+      .toEqual({ ok: true, data: { outcome: 'entries', entries } })
+    expect(await client({ 'GET /bestie/journal': reply(401, {}) }).fc.bestie.journal()).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+  })
+})

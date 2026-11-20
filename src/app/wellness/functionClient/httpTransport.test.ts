@@ -113,6 +113,13 @@ describe('HTTP transport: request shape', () => {
     expect(init.headers).toEqual({ Authorization: 'Bearer tok' })
   })
 
+  it('sends a binary body as-is, with its own Content-Type (a photo)', async () => {
+    const blob = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
+    const init = await sent({ method: 'POST', path: '/bestie/completions/c1/photo', blob, token: 'tok' })
+    expect(init.body).toBe(blob)
+    expect(init.headers).toEqual({ 'Content-Type': 'image/jpeg', Authorization: 'Bearer tok' })
+  })
+
   it('returns null json when the reply is not JSON', async () => {
     const f = stubFetch({ direct: [{ status: 503, type: 'text/html' }] })
     expect(await createHttpTransport({ fetch: f.fetch, hostname: 'localhost', fnBase: FN }).send(req)).toEqual({ status: 503, json: null })

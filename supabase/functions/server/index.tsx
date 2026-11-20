@@ -7,7 +7,10 @@ import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
 import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
-import { checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, type BestieStore, type StoredPlan, type ChangeOutcome } from './bestie.ts'
+import {
+  checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, complete as bestieComplete, undoCompletion, attachPhoto,
+  deletePhoto, journal as bestieJournal, MAX_PHOTO_BYTES, type BestieStore, type PhotoStore, type StoredPlan, type ChangeOutcome, type CompleteOutcome,
+} from './bestie.ts'
 
 const app = new Hono()
 
@@ -8487,10 +8490,24 @@ const loadStoredPlan = async (tx: any, plan: any): Promise<StoredPlan> => {
     select id, member_id, energy::text, time_min, budget_aed::float8 as budget_aed, goal::text, city, area, created_at::text
     from bestie.check_ins where id = ${plan.check_in_id}`;
   const suggestions = await tx`
-    select id, catalogue_item_id, pillar::text, is_light, is_new_for_you, reason, outcome::text, engine_version, replaces_id
+    select id, catalogue_item_id, pillar::text, is_light, is_new_for_you, reason, outcome::text, engine_version, replaces_id,
+           to_json(created_at) #>> '{}' as created_at
     from bestie.suggestions where day_plan_id = ${plan.id} order by pillar, created_at, id`;
-  return { plan, checkIn, suggestions } as StoredPlan;
+  const completions = await tx`
+    select c.id, c.suggestion_id, to_json(c.completed_at) #>> '{}' as completed_at
+    from bestie.completions c join bestie.suggestions s on s.id = c.suggestion_id
+    where s.day_plan_id = ${plan.id} and c.undone_at is null`;
+  return { plan, checkIn, suggestions, completions } as StoredPlan;
 };
+
+/** A Completion with what the rules need from its Suggestion (replayed in completion_store.test.sql). */
+const completionRows = (tx: any, where: any) => tx`
+  select c.id, c.member_id, c.suggestion_id, s.catalogue_item_id, to_json(s.created_at) #>> '{}' as shown_at, c.proof_kind,
+         c.reflection, c.photo_path, c.flagged, c.flag_reason, to_json(c.completed_at) #>> '{}' as completed_at,
+         to_json(c.undone_at) #>> '{}' as undone_at
+  from bestie.completions c join bestie.suggestions s on s.id = c.suggestion_id
+  where ${where}
+  order by c.completed_at desc`;
 
 const postgresBestieStore: BestieStore = {
   async getMember(id) {
@@ -8593,6 +8610,106 @@ const postgresBestieStore: BestieStore = {
       return await loadStoredPlan(tx, plan);
     });
   },
+  // #72: Completing with Proof. Replayed on the twin in supabase/tests/completion_store.test.sql.
+  async suggestionToComplete(memberId, suggestionId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select s.id, s.catalogue_item_id, s.pillar::text, s.is_light, s.is_new_for_you, s.reason, s.outcome::text, s.engine_version,
+               s.replaces_id, to_json(s.created_at) #>> '{}' as created_at, d.plan_date::text, d.status = 'active' as plan_active
+        from bestie.suggestions s join bestie.day_plans d on d.id = s.day_plan_id
+        where s.id = ${suggestionId} and s.member_id = ${memberId}`;
+    });
+    const r: any = rows[0];
+    if (!r) return null;
+    const { plan_date, plan_active, ...suggestion } = r;
+    return { suggestion, plan_date, plan_active };
+  },
+  async liveCompletionsBetween(memberId, from, to) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return completionRows(tx, tx`c.member_id = ${memberId} and c.undone_at is null and c.completed_at >= ${from} and c.completed_at < ${to}`);
+    });
+  },
+  async recordCompletion(nc) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${nc.memberId} for update`;
+      const [s] = await tx`
+        update bestie.suggestions set outcome = 'completed', outcome_at = ${nc.at}
+        where id = ${nc.suggestionId} and member_id = ${nc.memberId} and outcome in ('shown', 'accepted')
+        returning id`;
+      if (!s) return null;
+      if (nc.flagIds.length) {
+        await tx`
+          update bestie.completions set flagged = true, flag_reason = ${nc.flagReason}
+          where member_id = ${nc.memberId} and undone_at is null and id::text = any(${nc.flagIds})`;
+      }
+      const [c] = await tx`
+        insert into bestie.completions (member_id, suggestion_id, proof_kind, reflection, flagged, flag_reason, completed_at)
+        values (${nc.memberId}, ${nc.suggestionId}, ${nc.proofKind}, ${nc.reflection}, ${nc.flagNew}, ${nc.flagNew ? nc.flagReason : null}, ${nc.at})
+        returning id`;
+      return c.id;
+    });
+  },
+  async completion(memberId, completionId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return completionRows(tx, tx`c.id = ${completionId} and c.member_id = ${memberId}`);
+    });
+    return (rows[0] as any) ?? null;
+  },
+  async undoCompletion(memberId, completionId, at) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${memberId} for update`;
+      const [c] = await tx`
+        update bestie.completions set undone_at = ${at}
+        where id = ${completionId} and member_id = ${memberId} and undone_at is null
+        returning suggestion_id`;
+      if (!c) return false;
+      await tx`
+        update bestie.suggestions s
+        set outcome = case when d.status = 'active' then 'shown' else 'replaced' end::bestie.suggestion_outcome, outcome_at = ${at}
+        from bestie.day_plans d
+        where s.id = ${c.suggestion_id} and d.id = s.day_plan_id and s.outcome = 'completed'`;
+      return true;
+    });
+  },
+  async setPhoto(memberId, completionId, path) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        update bestie.completions set photo_path = ${path}
+        where id = ${completionId} and member_id = ${memberId} and undone_at is null
+        returning id`;
+    });
+    return rows.length === 1;
+  },
+  async journal(memberId, since) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return completionRows(tx, tx`c.member_id = ${memberId} and c.undone_at is null and c.completed_at >= ${since}`);
+    });
+  },
+};
+
+/** The private bucket for Completion photos (#72). Only this function, with the service role, reaches it. */
+const BESTIE_PHOTOS = 'bestie-photos';
+const supabasePhotoStore: PhotoStore = {
+  async put(path, jpeg) {
+    const { error } = await supabase.storage.from(BESTIE_PHOTOS).upload(path, jpeg, { contentType: 'image/jpeg', upsert: true });
+    if (error) throw new Error(`photo upload failed: ${error.message}`);
+  },
+  async remove(path) {
+    const { error } = await supabase.storage.from(BESTIE_PHOTOS).remove([path]);
+    if (error) throw new Error(`photo remove failed: ${error.message}`);
+  },
+  async signedUrl(path, seconds) {
+    const { data, error } = await supabase.storage.from(BESTIE_PHOTOS).createSignedUrl(path, seconds);
+    if (error || !data) throw new Error(`photo link failed: ${error?.message}`);
+    return data.signedUrl;
+  },
 };
 
 /** One insert for a set of Suggestions, sent as a JSON array (replayed in day_plan_store.test.sql). */
@@ -8655,6 +8772,99 @@ app.post('/make-server-a278ea32/bestie/suggestions/:id/skip', async (c) => {
   } catch (e) {
     console.log(`bestie/skip failed: ${e}`);
     return c.json({ success: false, error: 'Could not skip right now. Please try again.' }, 500);
+  }
+});
+
+// #72: completing with Proof, same-day undo, the optional photo and the Journal (DEC-003).
+// Refusals are gentle and never accuse; a quiet flag never shows in any reply.
+const MEALTIME_NAME = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner' } as const;
+const completeReply = (c: any, r: CompleteOutcome) => {
+  switch (r.outcome) {
+    case 'planned': return c.json({ success: true, plan: r.plan });
+    case 'notJoined': return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+    case 'tooSoon': return c.json({ success: false, reason: 'tooSoon', readyAt: r.readyAt, error: 'Not quite yet: give it the time it takes, then tick it off.' }, 409);
+    case 'reflectionNeeded': return c.json({ success: false, reason: 'reflectionNeeded', error: 'Write one line: what stayed with you?' }, 400);
+    case 'reflectionTooLong': return c.json({ success: false, reason: 'reflectionTooLong', error: 'Keep it to one line (280 characters).' }, 400);
+    case 'mealCapped': return c.json({ success: false, reason: 'mealCapped', error: `You've already logged ${MEALTIME_NAME[r.mealtime]}. One Meal counts per mealtime.` }, 409);
+    case 'reachOutCapped': return c.json({ success: false, reason: 'reachOutCapped', error: 'One reach-out a day counts. Try an event for Meet up.' }, 409);
+    default: return c.json({ success: false, error: 'That Suggestion is no longer in your plan.' }, 404);
+  }
+};
+
+app.post('/make-server-a278ea32/bestie/suggestions/:id/complete', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const r = UUID.test(id) ? await bestieComplete(postgresBestieStore, { id: user.id }, id, { reflection: body.reflection }, new Date()) : { outcome: 'notFound' as const };
+    return completeReply(c, r);
+  } catch (e) {
+    console.log(`bestie/complete failed: ${e}`);
+    return c.json({ success: false, error: 'Could not save that right now. Please try again.' }, 500);
+  }
+});
+
+app.post('/make-server-a278ea32/bestie/completions/:id/undo', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const r = UUID.test(id) ? await undoCompletion(postgresBestieStore, supabasePhotoStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' as const };
+    if (r.outcome === 'planned') return c.json({ success: true, plan: r.plan });
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+    return c.json({ success: false, error: 'That can only be undone on the day you ticked it.' }, 404);
+  } catch (e) {
+    console.log(`bestie/undo failed: ${e}`);
+    return c.json({ success: false, error: 'Could not undo right now. Please try again.' }, 500);
+  }
+});
+
+// The photo arrives as the raw JPEG body; its metadata (location included) is stripped before it is stored.
+app.post('/make-server-a278ea32/bestie/completions/:id/photo', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    if (!UUID.test(id)) return c.json({ success: false, error: 'That Completion was not found.' }, 404);
+    const declared = Number(c.req.header('content-length') || 0);
+    if (declared > MAX_PHOTO_BYTES) return c.json({ success: false, reason: 'tooLarge', error: 'That photo is too big (5 MB at most).' }, 413);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const r = await attachPhoto(postgresBestieStore, supabasePhotoStore, { id: user.id }, id, bytes);
+    if (r.outcome === 'saved') return c.json({ success: true });
+    if (r.outcome === 'tooLarge') return c.json({ success: false, reason: 'tooLarge', error: 'That photo is too big (5 MB at most).' }, 413);
+    if (r.outcome === 'notJpeg') return c.json({ success: false, reason: 'notJpeg', error: 'Please choose a photo.' }, 415);
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
+    return c.json({ success: false, error: 'That Completion was not found.' }, 404);
+  } catch (e) {
+    console.log(`bestie/photo failed: ${e}`);
+    return c.json({ success: false, error: 'Could not save the photo right now. Please try again.' }, 500);
+  }
+});
+
+app.delete('/make-server-a278ea32/bestie/completions/:id/photo', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const r = UUID.test(id) ? await deletePhoto(postgresBestieStore, supabasePhotoStore, { id: user.id }, id) : { outcome: 'notFound' as const };
+    if (r.outcome === 'deleted') return c.json({ success: true });
+    return c.json({ success: false, error: 'That photo was not found.' }, 404);
+  } catch (e) {
+    console.log(`bestie/photo delete failed: ${e}`);
+    return c.json({ success: false, error: 'Could not remove the photo right now. Please try again.' }, 500);
+  }
+});
+
+app.get('/make-server-a278ea32/bestie/journal', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const r = await bestieJournal(postgresBestieStore, supabasePhotoStore, { id: user.id }, new Date());
+    return c.json({ success: true, entries: r.entries });
+  } catch (e) {
+    console.log(`bestie/journal failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your Journal.' }, 500);
   }
 });
 
