@@ -22,6 +22,8 @@ export interface TransportRequest {
   path: string
   body?: unknown
   form?: FormData
+  /** A binary body sent as-is with its own type (a photo). */
+  blob?: Blob
   /** Bearer token: the signed-in user's, or the anon key. */
   token: string
 }

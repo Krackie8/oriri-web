@@ -31,6 +31,13 @@ describe('fromServerPlan', () => {
     expect(p.items[2].label).toBe('Meet up · light')
   })
 
+  it('carries what Completing needs: when it opens, a Reflection for Mindset, and her Completion (#72)', () => {
+    const done = { completionId: 'c1', at: '2026-11-16T06:00:00Z' }
+    const p = fromServerPlan({ ...plan, suggestions: plan.suggestions.map((s, k) => ({ ...s, readyAt: `2026-11-16T0${5 + k}:00:00Z`, done: k === 0 ? done : null })) })
+    expect(p.items[0].proof).toEqual({ readyAt: '2026-11-16T05:00:00Z', needsReflection: false, done })
+    expect(p.items[3].proof).toEqual({ readyAt: '2026-11-16T08:00:00Z', needsReflection: true, done: null })
+  })
+
   it('still shows an item Ren added without a code entry', () => {
     const ren = fromServerPlan(plan).items[3]
     expect(ren).toMatchObject({ title: "Ren's new pick", pillar: 'mindset', priceLabel: 'Free', links: [] })

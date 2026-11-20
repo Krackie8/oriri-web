@@ -50,6 +50,8 @@ export interface PlanItem {
   steps?: string[];
   /** Best time of day, e.g. "Go after 6pm, when it cools down". */
   timing?: string;
+  /** A Member's Suggestion from Bestie (#72): when she can tick it, whether it needs a Reflection, her Completion. */
+  proof?: { readyAt?: string; needsReflection: boolean; done: { completionId: string; at: string } | null };
 }
 
 /**

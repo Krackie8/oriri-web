@@ -40,6 +40,7 @@ export function fromServerPlan(p: ServerDayPlan): Plan {
       minutes: s.minutes,
       links: shown?.links ?? [],
       steps: shown?.steps,
+      proof: { readyAt: s.readyAt, needsReflection: s.pillars.includes('mindset'), done: s.done ?? null },
     };
   });
   const total = items.reduce((t, x) => t + x.cost, 0);

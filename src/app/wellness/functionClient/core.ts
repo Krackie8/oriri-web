@@ -7,17 +7,17 @@ import type { Method, Result, Transport } from './types'
 export type GetToken = () => Promise<string>
 
 export interface Core {
-  request<T = unknown>(method: Method, path: string, opts?: { body?: unknown; form?: FormData }): Promise<Result<T>>
+  request<T = unknown>(method: Method, path: string, opts?: { body?: unknown; form?: FormData; blob?: Blob }): Promise<Result<T>>
 }
 
 const UNREACHABLE = 'Could not reach Oriri. Check your connection.'
 
 export function createCore(transport: Transport, getToken: GetToken): Core {
   return {
-    async request<T>(method: Method, path: string, opts: { body?: unknown; form?: FormData } = {}): Promise<Result<T>> {
+    async request<T>(method: Method, path: string, opts: { body?: unknown; form?: FormData; blob?: Blob } = {}): Promise<Result<T>> {
       let res
       try {
-        res = await transport.send({ method, path, body: opts.body, form: opts.form, token: await getToken() })
+        res = await transport.send({ method, path, body: opts.body, form: opts.form, ...(opts.blob ? { blob: opts.blob } : {}), token: await getToken() })
       } catch {
         return { ok: false, error: { status: 0, message: UNREACHABLE } }
       }

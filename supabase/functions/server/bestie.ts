@@ -20,6 +20,7 @@
  */
 import { HOME_AREAS } from './join.ts'
 import { CATALOGUE_SEED, type Energy, type Goal, type Pillar, type SeedItem } from './catalogueSeed.ts'
+import { burstFlags, dubaiDayBounds, gateOpensAt, mealtimeOf, stripJpegMetadata, type LiveCompletion, type Mealtime } from './proof.ts'
 
 export type { Energy, Goal, Pillar }
 
@@ -67,15 +68,19 @@ export interface SuggestionRow {
   outcome: Outcome
   engine_version: string
   replaces_id: string | null
+  /** When she was shown it (her Check-in, or the swap): the time gate starts here. */
+  created_at: string
 }
 
 export interface StoredPlan {
   plan: DayPlanRow
   checkIn: CheckInRow
   suggestions: SuggestionRow[]
+  /** The live (not undone) Completions of this plan's Suggestions. */
+  completions: { id: string; suggestion_id: string; completed_at: string }[]
 }
 
-export type NewSuggestion = Omit<SuggestionRow, 'id' | 'outcome' | 'replaces_id'>
+export type NewSuggestion = Omit<SuggestionRow, 'id' | 'outcome' | 'replaces_id' | 'created_at'>
 
 export interface NewPlan {
   memberId: string
@@ -103,6 +108,45 @@ export interface HistoryRow {
   plan_date: string
 }
 
+export type ProofKind = 'tick' | 'reflection' | 'reach_out'
+
+/** A Completion, with what the rules need from its Suggestion. */
+export interface CompletionRow {
+  id: string
+  member_id: string
+  suggestion_id: string
+  catalogue_item_id: string
+  /** When its Suggestion was shown. */
+  shown_at: string
+  proof_kind: ProofKind
+  reflection: string | null
+  photo_path: string | null
+  flagged: boolean
+  flag_reason: string | null
+  completed_at: string
+  undone_at: string | null
+}
+
+/** A Suggestion she wants to complete, with its plan. */
+export interface CompletionTarget {
+  suggestion: SuggestionRow
+  plan_date: string
+  plan_active: boolean
+}
+
+export interface NewCompletion {
+  memberId: string
+  suggestionId: string
+  proofKind: ProofKind
+  reflection: string | null
+  at: string
+  /** Flag the new Completion too. */
+  flagNew: boolean
+  /** Her earlier live Completions today that join the flagged burst. */
+  flagIds: string[]
+  flagReason: string
+}
+
 /** The storage port. */
 export interface BestieStore {
   getMember(id: string): Promise<{ id: string; home_area: string | null } | null>
@@ -125,6 +169,33 @@ export interface BestieStore {
    * her pick as shown and the ones she passed on as not_picked, all pointing to it. Null if it was no longer open.
    */
   recordSwap(s: NewSwap): Promise<StoredPlan | null>
+  /** Her Suggestion with its plan, any outcome; null when it is not hers. */
+  suggestionToComplete(memberId: string, suggestionId: string): Promise<CompletionTarget | null>
+  /** Her live (not undone) Completions with completed_at in [from, to). */
+  liveCompletionsBetween(memberId: string, from: string, to: string): Promise<CompletionRow[]>
+  /**
+   * In one transaction: move the Suggestion from shown or accepted to completed, record the Completion
+   * and set the flags. Null (and nothing written) if the Suggestion was no longer open.
+   */
+  recordCompletion(c: NewCompletion): Promise<string | null>
+  /** Her Completion, live or undone; null when it is not hers. */
+  completion(memberId: string, completionId: string): Promise<CompletionRow | null>
+  /**
+   * In one transaction: set undone_at (only if still live) and move its Suggestion from completed back
+   * to shown, or to replaced when its plan has been replaced since. False if it was not live.
+   */
+  undoCompletion(memberId: string, completionId: string, at: string): Promise<boolean>
+  /** Sets or clears the photo path of her live Completion. */
+  setPhoto(memberId: string, completionId: string, path: string | null): Promise<boolean>
+  /** Her live Completions since `since`, newest first. */
+  journal(memberId: string, since: string): Promise<CompletionRow[]>
+}
+
+/** Where photos live: the private bucket, reached only by the edge function. */
+export interface PhotoStore {
+  put(path: string, jpeg: Uint8Array): Promise<void>
+  remove(path: string): Promise<void>
+  signedUrl(path: string, seconds: number): Promise<string>
 }
 
 export interface SuggestionView {
@@ -139,6 +210,10 @@ export interface SuggestionView {
   energyFit: Energy[]
   why: string
   newForYou: boolean
+  /** When the time gate opens: she can complete it from then on. */
+  readyAt: string
+  /** Her live Completion of it, or null. */
+  done: { completionId: string; at: string } | null
 }
 
 export interface DayPlan {
@@ -169,6 +244,25 @@ export type CheckInOutcome =
 
 export type SwapOptionsOutcome = { outcome: 'options'; options: SwapOption[] } | { outcome: 'notJoined' } | { outcome: 'notFound' }
 export type ChangeOutcome = { outcome: 'planned'; plan: DayPlan } | { outcome: 'notJoined' } | { outcome: 'notFound' } | { outcome: 'notOffered' }
+export type CompleteOutcome =
+  | { outcome: 'planned'; plan: DayPlan }
+  | { outcome: 'notJoined' }
+  | { outcome: 'notFound' }
+  | { outcome: 'tooSoon'; readyAt: string }
+  | { outcome: 'reflectionNeeded' }
+  | { outcome: 'reflectionTooLong' }
+  | { outcome: 'mealCapped'; mealtime: Mealtime }
+  | { outcome: 'reachOutCapped' }
+export type UndoOutcome = { outcome: 'planned'; plan: DayPlan } | { outcome: 'notJoined' } | { outcome: 'notFound' }
+export type PhotoOutcome = { outcome: 'saved' } | { outcome: 'deleted' } | { outcome: 'notJoined' } | { outcome: 'notFound' } | { outcome: 'notJpeg' } | { outcome: 'tooLarge' }
+export interface JournalEntry {
+  completionId: string
+  title: string
+  pillars: Pillar[]
+  reflection: string | null
+  completedAt: string
+  photoUrl: string | null
+}
 
 /* ── Dubai time ─────────────────────────────────────────────────────────── */
 const DUBAI_OFFSET_MS = 4 * 3600_000 // UTC+4, no daylight saving
@@ -366,6 +460,7 @@ const OPEN: Outcome[] = ['shown', 'accepted']
 function view(stored: StoredPlan, byId: Map<string, CatalogueItem>): DayPlan {
   const c = stored.checkIn
   const live = stored.suggestions.filter((s) => IN_PLAN.includes(s.outcome))
+  const doneBy = new Map(stored.completions.map((x) => [x.suggestion_id, x]))
   return {
     id: stored.plan.id,
     date: stored.plan.plan_date,
@@ -377,6 +472,8 @@ function view(stored: StoredPlan, byId: Map<string, CatalogueItem>): DayPlan {
       return {
         id: s.id, slug: i.slug, title: i.title, pillars: i.pillars, minutes: i.durationMin, costAed: i.costAed,
         light: s.is_light, outdoor: i.outdoor, energyFit: i.energyFit, why: s.reason, newForYou: s.is_new_for_you,
+        readyAt: gateOpensAt(s.created_at, i.durationMin).toISOString(),
+        done: doneBy.has(s.id) ? { completionId: doneBy.get(s.id)!.id, at: doneBy.get(s.id)!.completed_at } : null,
       }
     }),
   }
@@ -498,6 +595,150 @@ export async function skipSuggestion(store: BestieStore, user: { id: string }, s
   return plan ? { outcome: 'planned', plan } : { outcome: 'notFound' }
 }
 
+/* ── Completing with Proof (#72, DEC-003) ───────────────────────────────── */
+export const MAX_REFLECTION = 280
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+/** Photos are kept 12 months; the sweeper that removes older ones is its own ticket. */
+export const PHOTO_KEEP_MONTHS = 12
+const JOURNAL_DAYS = 30
+const PHOTO_URL_SECONDS = 600
+
+const proofKindOf = (i: CatalogueItem): ProofKind =>
+  i.pillars.includes('mindset') ? 'reflection' : i.kind === 'reach_out' ? 'reach_out' : 'tick'
+const asLive = (c: CompletionRow, byId: Map<string, CatalogueItem>): LiveCompletion => ({
+  id: c.id, completedAt: c.completed_at, shownAt: c.shown_at, minutes: byId.get(c.catalogue_item_id)?.durationMin ?? 0,
+})
+
+/**
+ * She marks one of today's Suggestions done. Only her own, open Suggestions from today's active plan;
+ * only once its duration could have passed since she was shown it; one Meal per mealtime and one
+ * reach-out a day; a Mindset needs a Reflection. A burst she could not have kept up is flagged
+ * quietly: it changes nothing she sees.
+ *
+ * The caps are read before the write. Two Meal (or reach-out) Suggestions are never open at once,
+ * because checking in again replaces the open ones, so two taps cannot race past a cap; two taps
+ * on the same Suggestion are stopped by the one-live-Completion index.
+ */
+export async function complete(store: BestieStore, user: { id: string }, suggestionId: string, proof: { reflection?: unknown }, now: Date): Promise<CompleteOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const target = await store.suggestionToComplete(member.id, suggestionId)
+  if (!target || !target.plan_active || target.plan_date !== dubaiDate(now) || !OPEN.includes(target.suggestion.outcome)) return { outcome: 'notFound' }
+  const catalogue = await store.catalogue('dubai')
+  const byId = new Map(catalogue.map((i) => [i.id, i]))
+  const item = byId.get(target.suggestion.catalogue_item_id)
+  if (!item) return { outcome: 'notFound' }
+
+  const readyAt = gateOpensAt(target.suggestion.created_at, item.durationMin)
+  if (now < readyAt) return { outcome: 'tooSoon', readyAt: readyAt.toISOString() }
+
+  const kind = proofKindOf(item)
+  let reflection: string | null = null
+  if (kind === 'reflection') {
+    reflection = typeof proof.reflection === 'string' ? proof.reflection.trim() : ''
+    if (!reflection) return { outcome: 'reflectionNeeded' }
+    if (reflection.length > MAX_REFLECTION) return { outcome: 'reflectionTooLong' }
+  }
+
+  const { from, to } = dubaiDayBounds(now)
+  const today = await store.liveCompletionsBetween(member.id, from, to)
+  const itemOf = (c: CompletionRow) => byId.get(c.catalogue_item_id)
+  if (item.pillars.includes('meal')) {
+    const mealtime = mealtimeOf(now)
+    if (today.some((c) => itemOf(c)?.pillars.includes('meal') && mealtimeOf(new Date(c.completed_at)) === mealtime)) return { outcome: 'mealCapped', mealtime }
+  }
+  if (item.kind === 'reach_out' && today.some((c) => itemOf(c)?.kind === 'reach_out')) return { outcome: 'reachOutCapped' }
+
+  const NEW = '__new__'
+  const flags = burstFlags([
+    ...today.map((c) => asLive(c, byId)),
+    { id: NEW, completedAt: now.toISOString(), shownAt: target.suggestion.created_at, minutes: item.durationMin },
+  ])
+  const id = await store.recordCompletion({
+    memberId: member.id, suggestionId, proofKind: kind, reflection, at: now.toISOString(),
+    flagNew: flags.includes(NEW), flagIds: flags.filter((f) => f !== NEW), flagReason: 'too_fast',
+  })
+  if (!id) return { outcome: 'notFound' }
+  const plan = await todayPlan(store, user, now)
+  return plan ? { outcome: 'planned', plan } : { outcome: 'notFound' }
+}
+
+/** Her live Completion from today (Dubai date), or null. */
+async function todaysCompletion(store: BestieStore, memberId: string, completionId: string, now: Date) {
+  const c = await store.completion(memberId, completionId)
+  if (!c || c.undone_at) return null
+  const { from, to } = dubaiDayBounds(now)
+  const at = Date.parse(c.completed_at)
+  return at >= Date.parse(from) && at < Date.parse(to) ? c : null
+}
+
+/** She undoes a mis-tap, the same day. The row stays as history; its photo goes now. */
+export async function undoCompletion(store: BestieStore, photos: PhotoStore, user: { id: string }, completionId: string, now: Date): Promise<UndoOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const c = await todaysCompletion(store, member.id, completionId, now)
+  if (!c || !(await store.undoCompletion(member.id, c.id, now.toISOString()))) return { outcome: 'notFound' }
+  if (c.photo_path) await photos.remove(c.photo_path)
+  const plan = await todayPlan(store, user, now)
+  return plan ? { outcome: 'planned', plan } : { outcome: 'notFound' }
+}
+
+/** An optional photo for one of her Completions: JPEG only, every metadata segment removed, private. */
+export async function attachPhoto(store: BestieStore, photos: PhotoStore, user: { id: string }, completionId: string, bytes: Uint8Array): Promise<PhotoOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const c = await store.completion(member.id, completionId)
+  if (!c || c.undone_at) return { outcome: 'notFound' }
+  if (bytes.length > MAX_PHOTO_BYTES) return { outcome: 'tooLarge' }
+  const clean = stripJpegMetadata(bytes)
+  if (!clean) return { outcome: 'notJpeg' }
+  const path = `${member.id}/${c.id}.jpg`
+  await photos.put(path, clean)
+  if (!(await store.setPhoto(member.id, c.id, path))) {
+    await photos.remove(path)
+    return { outcome: 'notFound' }
+  }
+  return { outcome: 'saved' }
+}
+
+/** She removes a photo herself. */
+export async function deletePhoto(store: BestieStore, photos: PhotoStore, user: { id: string }, completionId: string): Promise<PhotoOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const c = await store.completion(member.id, completionId)
+  if (!c || c.undone_at || !c.photo_path) return { outcome: 'notFound' }
+  await photos.remove(c.photo_path)
+  await store.setPhoto(member.id, c.id, null)
+  return { outcome: 'deleted' }
+}
+
+/** Her Journal: the last 30 days of Completions, newest first, with short-lived photo links. */
+export async function journal(store: BestieStore, photos: PhotoStore, user: { id: string }, now: Date): Promise<{ entries: JournalEntry[] }> {
+  const since = new Date(now.getTime() - JOURNAL_DAYS * DAY_MS).toISOString()
+  const [rows, catalogue] = await Promise.all([store.journal(user.id, since), store.catalogue('dubai')])
+  const byId = new Map(catalogue.map((i) => [i.id, i]))
+  const entries = await Promise.all(rows.map(async (c) => {
+    const i = byId.get(c.catalogue_item_id)
+    return {
+      completionId: c.id, title: i?.title ?? 'Something from Bestie', pillars: i?.pillars ?? [], reflection: c.reflection,
+      completedAt: c.completed_at, photoUrl: c.photo_path ? await photos.signedUrl(c.photo_path, PHOTO_URL_SECONDS) : null,
+    }
+  }))
+  return { entries }
+}
+
+/** In-memory photo store for tests. */
+export function createMemoryPhotoStore() {
+  const files = new Map<string, Uint8Array>()
+  const store: PhotoStore & { files: typeof files } = {
+    files,
+    async put(path, jpeg) { files.set(path, jpeg) },
+    async remove(path) { files.delete(path) },
+    async signedUrl(path, seconds) { return `memory://${path}?expires=${seconds}` },
+  }
+  return store
+}
+
 /** In-memory store for tests. The Catalogue defaults to the seed, with ids `cat-<slug>`. */
 export function createMemoryBestieStore(opts: { members?: { id: string; home_area: string | null }[]; catalogue?: CatalogueItem[] } = {}) {
   const members = new Map((opts.members ?? []).map((m) => [m.id, m]))
@@ -505,17 +746,26 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
   const checkIns: CheckInRow[] = []
   const plans: (DayPlanRow & { status: 'active' | 'replaced' })[] = []
   const suggestions: (SuggestionRow & { day_plan_id: string; member_id: string })[] = []
+  const completions: (Omit<CompletionRow, 'catalogue_item_id' | 'shown_at'>)[] = []
+  const withSuggestion = (c: (typeof completions)[number]): CompletionRow => {
+    const s = suggestions.find((x) => x.id === c.suggestion_id)!
+    return { ...c, catalogue_item_id: s.catalogue_item_id, shown_at: s.created_at }
+  }
   let n = 0
   const id = (p: string) => `${p}-${++n}`
   const load = (plan: DayPlanRow): StoredPlan => ({
     plan,
     checkIn: checkIns.find((c) => c.id === plan.check_in_id)!,
     suggestions: suggestions.filter((s) => s.day_plan_id === plan.id),
+    completions: completions
+      .filter((c) => !c.undone_at && suggestions.some((s) => s.id === c.suggestion_id && s.day_plan_id === plan.id))
+      .map((c) => ({ id: c.id, suggestion_id: c.suggestion_id, completed_at: c.completed_at })),
   })
-  const store: BestieStore & { checkIns: typeof checkIns; plans: typeof plans; suggestions: typeof suggestions } = {
+  const store: BestieStore & { checkIns: typeof checkIns; plans: typeof plans; suggestions: typeof suggestions; completions: typeof completions } = {
     checkIns,
     plans,
     suggestions,
+    completions,
     async getMember(memberId) {
       return members.get(memberId) ?? null
     },
@@ -535,7 +785,7 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
       checkIns.push(c)
       const plan = { id: id('plan'), member_id: np.memberId, check_in_id: c.id, plan_date: np.planDate, created_at: np.at, status: 'active' as const }
       plans.push(plan)
-      for (const s of np.suggestions) suggestions.push({ ...s, id: id('s'), outcome: 'shown', replaces_id: null, day_plan_id: plan.id, member_id: np.memberId })
+      for (const s of np.suggestions) suggestions.push({ ...s, id: id('s'), outcome: 'shown', replaces_id: null, created_at: np.at, day_plan_id: plan.id, member_id: np.memberId })
       return load(plan)
     },
     async history(memberId, sinceDate) {
@@ -559,10 +809,56 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
       if (!old) return null
       old.outcome = 'swapped'
       const add = (s: NewSuggestion, outcome: Outcome) =>
-        suggestions.push({ ...s, id: id('s'), outcome, replaces_id: old.id, day_plan_id: sw.planId, member_id: sw.memberId })
+        suggestions.push({ ...s, id: id('s'), outcome, replaces_id: old.id, created_at: sw.at, day_plan_id: sw.planId, member_id: sw.memberId })
       add(sw.picked, 'shown')
       for (const s of sw.passedOn) add(s, 'not_picked')
       return load(plans.find((p) => p.id === sw.planId)!)
+    },
+    async suggestionToComplete(memberId, suggestionId) {
+      const s = suggestions.find((x) => x.id === suggestionId && x.member_id === memberId)
+      if (!s) return null
+      const p = plans.find((x) => x.id === s.day_plan_id)!
+      const { day_plan_id: _plan, member_id: _member, ...suggestion } = s
+      return { suggestion, plan_date: p.plan_date, plan_active: p.status === 'active' }
+    },
+    async liveCompletionsBetween(memberId, from, to) {
+      return completions.filter((c) => c.member_id === memberId && !c.undone_at && c.completed_at >= from && c.completed_at < to).map(withSuggestion)
+    },
+    async recordCompletion(nc) {
+      const s = suggestions.find((x) => x.id === nc.suggestionId && x.member_id === nc.memberId && OPEN.includes(x.outcome))
+      if (!s) return null
+      s.outcome = 'completed'
+      for (const f of completions) if (nc.flagIds.includes(f.id) && f.member_id === nc.memberId) { f.flagged = true; f.flag_reason = nc.flagReason }
+      const c = {
+        id: id('c'), member_id: nc.memberId, suggestion_id: s.id, proof_kind: nc.proofKind, reflection: nc.reflection, photo_path: null,
+        flagged: nc.flagNew, flag_reason: nc.flagNew ? nc.flagReason : null, completed_at: nc.at, undone_at: null,
+      }
+      completions.push(c)
+      return c.id
+    },
+    async completion(memberId, completionId) {
+      const c = completions.find((x) => x.id === completionId && x.member_id === memberId)
+      return c ? withSuggestion(c) : null
+    },
+    async undoCompletion(memberId, completionId, at) {
+      const c = completions.find((x) => x.id === completionId && x.member_id === memberId && !x.undone_at)
+      if (!c) return false
+      c.undone_at = at
+      const s = suggestions.find((x) => x.id === c.suggestion_id && x.outcome === 'completed')
+      if (s) s.outcome = plans.find((p) => p.id === s.day_plan_id)!.status === 'active' ? 'shown' : 'replaced'
+      return true
+    },
+    async setPhoto(memberId, completionId, path) {
+      const c = completions.find((x) => x.id === completionId && x.member_id === memberId && !x.undone_at)
+      if (!c) return false
+      c.photo_path = path
+      return true
+    },
+    async journal(memberId, since) {
+      return completions
+        .filter((c) => c.member_id === memberId && !c.undone_at && c.completed_at >= since)
+        .map(withSuggestion)
+        .sort((a, b) => (a.completed_at < b.completed_at ? 1 : -1))
     },
   }
   return store
