@@ -59,17 +59,19 @@ export async function statusImage(statusName: string, levels: PillarNumbers): Pr
     const ang = -Math.PI / 2 + (i * Math.PI) / 2;
     g.fillText(PILLAR_LABEL[p], W / 2 + (r + 70) * Math.cos(ang), oy + r + (r + 50) * Math.sin(ang) + 12);
   });
-  g.font = '400 30px Figtree, system-ui, sans-serif';
-  g.fillText('oriri.me', W / 2, H - 70);
+  // Some apps drop the text sent with an image, so the image carries the way in too.
+  g.fillStyle = INK;
+  g.font = '500 36px Figtree, system-ui, sans-serif';
+  g.fillText('Try Bestie free · oriri.me/bestie', W / 2, H - 70);
   return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
-/** Opens the phone's share sheet with the image, or downloads it. Returns what happened. */
-export async function shareOrSave(blob: Blob): Promise<'shared' | 'saved' | 'cancelled'> {
+/** Opens the phone's share sheet with the image and `text` (which carries the join link), or downloads the image. */
+export async function shareOrSave(blob: Blob, text: string): Promise<'shared' | 'saved' | 'cancelled'> {
   const file = new File([blob], 'oriri-status.png', { type: 'image/png' });
   if (shareMethod(navigator as never) === 'share') {
     try {
-      await navigator.share({ files: [file], title: 'My Oriri Status' });
+      await navigator.share({ files: [file], title: 'My Oriri Status', text });
       return 'shared';
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return 'cancelled';

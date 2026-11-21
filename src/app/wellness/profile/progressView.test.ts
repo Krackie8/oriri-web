@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chartPoints, levelUpLine, profileScreen, shareMethod, toNextLine, withArticle, CHART_AXES } from './progressView'
+import { chartPoints, levelUpLine, profileScreen, shareMethod, shareText, toNextLine, withArticle, CHART_AXES, SHARE_LINK } from './progressView'
 
 const L = (move: number, meal: number, mindset: number, meet_up: number) => ({ move, meal, mindset, meet_up })
 
@@ -55,5 +55,16 @@ describe('withArticle', () => {
   it('uses "an" before a vowel', () => {
     expect(withArticle('Iconic Balanced')).toBe('an Iconic Balanced')
     expect(withArticle('Glowing Clean Eater')).toBe('a Glowing Clean Eater')
+  })
+})
+
+describe('the join link that goes with a shared Status', () => {
+  it('points at Bestie on the live site, tagged so a share shows up in analytics, with nothing about her', () => {
+    const u = new URL(SHARE_LINK)
+    expect(u.origin + u.pathname).toBe('https://www.oriri.me/bestie')
+    expect(Object.fromEntries(u.searchParams)).toEqual({ utm_source: 'status_share', utm_medium: 'share', utm_campaign: 'status' })
+  })
+  it('the share text names her Status and carries the link', () => {
+    expect(shareText('Iconic Balanced')).toBe(`I’m now an Iconic Balanced on Oriri. Bestie plans my day around my energy, time and budget. Try it free: ${SHARE_LINK}`)
   })
 })

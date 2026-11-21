@@ -50,3 +50,12 @@ export function profileScreen(r: Result<ProfileOutcome>): 'member' | 'guest' | '
 
 /** "a Glowing Clean Eater", "an Iconic Balanced". */
 export const withArticle = (name: string) => `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`
+
+/**
+ * The link sent with a shared Status: Bestie on the live site, tagged so shares show up in analytics.
+ * It names no Member and opens nothing of hers; crediting her for who joins is its own ticket.
+ */
+export const SHARE_LINK = 'https://www.oriri.me/bestie?utm_source=status_share&utm_medium=share&utm_campaign=status'
+
+export const shareText = (statusName: string) =>
+  `I’m now ${withArticle(statusName)} on Oriri. Bestie plans my day around my energy, time and budget. Try it free: ${SHARE_LINK}`
