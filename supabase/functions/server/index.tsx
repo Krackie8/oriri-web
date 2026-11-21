@@ -9,7 +9,7 @@ import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
 import {
   checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, complete as bestieComplete, undoCompletion, attachPhoto,
-  deletePhoto, journal as bestieJournal, profile as bestieProfile, MAX_PHOTO_BYTES, type BestieStore, type PhotoStore, type StoredPlan, type ChangeOutcome, type CompleteOutcome,
+  deletePhoto, journal as bestieJournal, profile as bestieProfile, morning as bestieMorning, MAX_PHOTO_BYTES, type BestieStore, type MeetUpSource, type PhotoStore, type StoredPlan, type ChangeOutcome, type CompleteOutcome,
 } from './bestie.ts'
 
 const app = new Hono()
@@ -8746,6 +8746,76 @@ const postgresBestieStore: BestieStore = {
       return completionRows(tx, tx`c.member_id = ${memberId} and c.undone_at is null and c.completed_at >= ${since}`);
     });
   },
+  // #74: every date comes back as text (to_char), never as a postgres.js Date. SQL replayed in
+  // supabase/tests/morning_lines.test.sql.
+  async completionDays(memberId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select distinct to_char(completed_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as day
+        from bestie.completions where member_id = ${memberId} and undone_at is null order by 1`;
+    });
+    return rows.map((r: any) => r.day as string);
+  },
+  async dailyLines() {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select id, body, author, goal::text as goal, pillar::text as pillar, energy::text as energy, moment,
+               to_char(show_on, 'YYYY-MM-DD') as show_on
+        from bestie.daily_lines where is_active`;
+    });
+    return rows.map((r: any) => ({
+      id: r.id, body: r.body, author: r.author, goal: r.goal, pillar: r.pillar, energy: r.energy, moment: r.moment, showOn: r.show_on,
+    }));
+  },
+  async recentLines(memberId, sinceDate) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select line_id, to_char(shown_on, 'YYYY-MM-DD') as shown_on from bestie.member_lines
+        where member_id = ${memberId} and shown_on >= ${sinceDate}::date`;
+    });
+    return rows.map((r: any) => ({ lineId: r.line_id as string, shownOn: r.shown_on as string }));
+  },
+  async recordLine(memberId, lineId, shownOn) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`
+        insert into bestie.member_lines (member_id, line_id, shown_on) values (${memberId}, ${lineId}, ${shownOn}::date)
+        on conflict (member_id, shown_on) do nothing`;
+      return tx`select line_id from bestie.member_lines where member_id = ${memberId} and shown_on = ${shownOn}::date`;
+    });
+    return (rows[0]?.line_id as string) ?? lineId;
+  },
+  async morningSignals(memberId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select to_char(m.created_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as joined_on,
+               coalesce((select c.granted from bestie.consents c where c.member_id = m.id and c.purpose = 'personalisation'
+                         order by c.recorded_at desc limit 1), false) as personal,
+               ci.energy::text as energy, ci.goal::text as goal
+        from bestie.members m
+        left join lateral (select energy, goal from bestie.check_ins where member_id = m.id order by created_at desc limit 1) ci on true
+        where m.id = ${memberId}`;
+    });
+    const r: any = rows[0];
+    return {
+      joinedOn: r?.joined_on ?? '2026-01-01',
+      personal: r?.personal === true,
+      lastCheckIn: r?.energy ? { energy: r.energy, goal: r.goal ?? null } : null,
+    };
+  },
+};
+
+/** This week's Meet ups (#74): the Stepsisters moments and wellness events Ren keeps in the key-value store. */
+const kvMeetUps: MeetUpSource = {
+  async upcoming() {
+    const [moments, events] = await Promise.all([kv.getByPrefix('wellness:moment:'), kv.getByPrefix('wellness:event:')]);
+    const tag = (kind: 'moment' | 'event') => (x: any) => (x && typeof x === 'object' ? [{ ...x, id: String(x.id ?? ''), kind }] : []);
+    return [...(moments || []).flatMap(tag('moment')), ...(events || []).flatMap(tag('event'))];
+  },
 };
 
 /** The private bucket for Completion photos (#72). Only this function, with the service role, reaches it. */
@@ -8921,6 +8991,20 @@ app.get('/make-server-a278ea32/bestie/profile', async (c) => {
   } catch (e) {
     console.log(`bestie/profile failed: ${e}`);
     return c.json({ success: false, error: 'Could not load your Profile.' }, 500);
+  }
+});
+
+// Morning with Bestie (#74): a line in Ren's voice, the sky, this week's Meet up and her Streak.
+app.get('/make-server-a278ea32/bestie/morning', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const r = await bestieMorning(postgresBestieStore, kvMeetUps, { id: user.id }, new Date());
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to see your morning.' }, 409);
+    return c.json({ success: true, card: r.card });
+  } catch (e) {
+    console.log(`bestie/morning failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your morning.' }, 500);
   }
 });
 
