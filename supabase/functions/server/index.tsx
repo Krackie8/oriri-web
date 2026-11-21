@@ -9,7 +9,7 @@ import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
 import {
   checkIn as bestieCheckIn, todayPlan, swapOptions, swapSuggestion, skipSuggestion, complete as bestieComplete, undoCompletion, attachPhoto,
-  deletePhoto, journal as bestieJournal, MAX_PHOTO_BYTES, type BestieStore, type PhotoStore, type StoredPlan, type ChangeOutcome, type CompleteOutcome,
+  deletePhoto, journal as bestieJournal, profile as bestieProfile, MAX_PHOTO_BYTES, type BestieStore, type PhotoStore, type StoredPlan, type ChangeOutcome, type CompleteOutcome,
 } from './bestie.ts'
 
 const app = new Hono()
@@ -8509,6 +8509,22 @@ const completionRows = (tx: any, where: any) => tx`
   where ${where}
   order by c.completed_at desc`;
 
+/** Her per-Pillar ledger sums and member_levels rows before `before` (all when null); replayed in points_levels.test.sql. */
+const progressRows = async (tx: any, memberId: string, before: string | null) => {
+  const sums = await tx`
+    select pillar::text as pillar, sum(amount)::int as total from bestie.points
+    where member_id = ${memberId} and (${before}::timestamptz is null or created_at < ${before}::timestamptz)
+    group by pillar`;
+  const rows = await tx`
+    select id::text as id, kind, pillar::text as pillar, level, status_shape as shape, status_tier as tier,
+           to_json(reached_at) #>> '{}' as "reachedAt"
+    from bestie.member_levels
+    where member_id = ${memberId} and (${before}::timestamptz is null or reached_at < ${before}::timestamptz)`;
+  const out = { move: 0, meal: 0, mindset: 0, meet_up: 0 } as Record<string, number>;
+  for (const s of sums) out[s.pillar] = s.total;
+  return { sums: out, recorded: rows } as any;
+};
+
 const postgresBestieStore: BestieStore = {
   async getMember(id) {
     const rows = await bestieDb().begin(async (tx: any) => {
@@ -8649,6 +8665,12 @@ const postgresBestieStore: BestieStore = {
         insert into bestie.completions (member_id, suggestion_id, proof_kind, reflection, flagged, flag_reason, completed_at)
         values (${nc.memberId}, ${nc.suggestionId}, ${nc.proofKind}, ${nc.reflection}, ${nc.flagNew}, ${nc.flagNew ? nc.flagReason : null}, ${nc.at})
         returning id`;
+      if (nc.points.length) {
+        await tx`
+          insert into bestie.points (member_id, pillar, amount, reason, completion_id, created_at)
+          select ${nc.memberId}, p.pillar::bestie.pillar, p.amount, 'completion', ${c.id}, ${nc.at}
+          from jsonb_to_recordset(${JSON.stringify(nc.points)}::jsonb) as p(pillar text, amount int)`;
+      }
       return c.id;
     });
   },
@@ -8673,7 +8695,39 @@ const postgresBestieStore: BestieStore = {
         set outcome = case when d.status = 'active' then 'shown' else 'replaced' end::bestie.suggestion_outcome, outcome_at = ${at}
         from bestie.day_plans d
         where s.id = ${c.suggestion_id} and d.id = s.day_plan_id and s.outcome = 'completed'`;
+      await tx`
+        insert into bestie.points (member_id, pillar, amount, reason, completion_id, created_at)
+        select member_id, pillar, -amount, 'undo', completion_id, ${at} from bestie.points
+        where completion_id = ${completionId} and member_id = ${memberId} and reason = 'completion'`;
       return true;
+    });
+  },
+  async progressInputs(memberId, before) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return progressRows(tx, memberId, before);
+    });
+  },
+  async settleProgress(memberId, at, decide) {
+    return await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      await tx`select 1 from bestie.members where id = ${memberId} for update`;
+      const ch = decide(await progressRows(tx, memberId, null));
+      if (ch.retract.length) {
+        await tx`delete from bestie.member_levels where member_id = ${memberId} and id::text = any(${ch.retract})`;
+      }
+      if (ch.newLevelRows.length) {
+        await tx`
+          insert into bestie.member_levels (member_id, kind, pillar, level, reached_at)
+          select ${memberId}, 'level', l.pillar::bestie.pillar, l.level, ${at}
+          from jsonb_to_recordset(${JSON.stringify(ch.newLevelRows)}::jsonb) as l(pillar text, level smallint)`;
+      }
+      if (ch.moment) {
+        await tx`
+          insert into bestie.member_levels (member_id, kind, status_shape, status_tier, reached_at)
+          values (${memberId}, 'status', ${ch.moment.shape}, ${ch.moment.tier}, ${at})`;
+      }
+      return ch;
     });
   },
   async setPhoto(memberId, completionId, path) {
@@ -8780,7 +8834,7 @@ app.post('/make-server-a278ea32/bestie/suggestions/:id/skip', async (c) => {
 const MEALTIME_NAME = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner' } as const;
 const completeReply = (c: any, r: CompleteOutcome) => {
   switch (r.outcome) {
-    case 'planned': return c.json({ success: true, plan: r.plan });
+    case 'planned': return c.json({ success: true, plan: r.plan, progress: r.progress });
     case 'notJoined': return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
     case 'tooSoon': return c.json({ success: false, reason: 'tooSoon', readyAt: r.readyAt, error: 'Not quite yet: give it the time it takes, then tick it off.' }, 409);
     case 'reflectionNeeded': return c.json({ success: false, reason: 'reflectionNeeded', error: 'Write one line: what stayed with you?' }, 400);
@@ -8811,7 +8865,7 @@ app.post('/make-server-a278ea32/bestie/completions/:id/undo', async (c) => {
     if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
     const id = c.req.param('id');
     const r = UUID.test(id) ? await undoCompletion(postgresBestieStore, supabasePhotoStore, { id: user.id }, id, new Date()) : { outcome: 'notFound' as const };
-    if (r.outcome === 'planned') return c.json({ success: true, plan: r.plan });
+    if (r.outcome === 'planned') return c.json({ success: true, plan: r.plan, progress: r.progress });
     if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to get your Day plan.' }, 409);
     return c.json({ success: false, error: 'That can only be undone on the day you ticked it.' }, 404);
   } catch (e) {
@@ -8853,6 +8907,20 @@ app.delete('/make-server-a278ea32/bestie/completions/:id/photo', async (c) => {
   } catch (e) {
     console.log(`bestie/photo delete failed: ${e}`);
     return c.json({ success: false, error: 'Could not remove the photo right now. Please try again.' }, 500);
+  }
+});
+
+// Her Profile (#73): Levels, the 30-days-ago layer, Status and moments. Private to her.
+app.get('/make-server-a278ea32/bestie/profile', async (c) => {
+  try {
+    const user = await socialUser(c);
+    if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
+    const r = await bestieProfile(postgresBestieStore, { id: user.id }, new Date());
+    if (r.outcome === 'notJoined') return c.json({ success: false, error: 'Join Oriri to see your Profile.' }, 409);
+    return c.json({ success: true, profile: r.profile });
+  } catch (e) {
+    console.log(`bestie/profile failed: ${e}`);
+    return c.json({ success: false, error: 'Could not load your Profile.' }, 500);
   }
 });
 

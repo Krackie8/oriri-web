@@ -12,7 +12,7 @@ import PrivacyPage from './pages/PrivacyPage';
 import ShopPage from './pages/ShopPage';
 import PodcastPage from './pages/PodcastPage';
 import BestiePage from './pages/BestiePage';
-import GuestProfilePage from './pages/GuestProfilePage';
+import ProfilePage from './profile/MemberProfilePage';
 import WeeklyRecap from './bestie/WeeklyRecap';
 import { captureAttribution } from './analytics/utm';
 import { countPageView } from './analytics/firstParty';
@@ -145,7 +145,7 @@ export default function WellnessSite() {
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/podcast" element={<PodcastPage />} />
           {/* Only reached by guests: App.tsx sends signed-in users to the full profile */}
-          <Route path="/profile" element={<GuestProfilePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/privacy" element={<PrivacyPage onCookieSettings={() => setCookieSettingsOpen(true)} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

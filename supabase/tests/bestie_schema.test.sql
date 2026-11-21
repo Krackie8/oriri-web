@@ -52,9 +52,13 @@ insert into bestie.day_plans (id, member_id, check_in_id, plan_date)
 insert into bestie.suggestions (id, member_id, day_plan_id, check_in_id, catalogue_item_id, pillar, engine_version)
   values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000c1', 'move', 'v1'),
          ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c1', 'move', 'v1');
-insert into bestie.points (member_id, pillar, amount, reason)
-  values ('00000000-0000-0000-0000-00000000000a', 'move', 10, 'completion'),
-         ('00000000-0000-0000-0000-00000000000b', 'move', 10, 'completion');
+-- Every points row comes from a Completion (#73). B's is undone so 4b can complete f2 again.
+insert into bestie.completions (id, member_id, suggestion_id, proof_kind, undone_at)
+  values ('00000000-0000-0000-0000-0000000000a8', '00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000f1', 'tick', null),
+         ('00000000-0000-0000-0000-0000000000a9', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000f2', 'tick', now());
+insert into bestie.points (member_id, pillar, amount, reason, completion_id)
+  values ('00000000-0000-0000-0000-00000000000a', 'move', 10, 'completion', '00000000-0000-0000-0000-0000000000a8'),
+         ('00000000-0000-0000-0000-00000000000b', 'move', 10, 'completion', '00000000-0000-0000-0000-0000000000a9');
 
 -- 3. Only one active Day plan per Member per day.
 select pg_temp.raises(

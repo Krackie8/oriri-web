@@ -21,6 +21,10 @@
 import { HOME_AREAS } from './join.ts'
 import { CATALOGUE_SEED, type Energy, type Goal, type Pillar, type SeedItem } from './catalogueSeed.ts'
 import { burstFlags, dubaiDayBounds, gateOpensAt, mealtimeOf, stripJpegMetadata, type LiveCompletion, type Mealtime } from './proof.ts'
+import {
+  emptySums, levelsFrom, nextAt, pointsFor, progressChanges, statusName, statusOf, PILLAR_ORDER,
+  type Levels, type ProgressChanges, type RecordedRow, type Status, type Sums, type Tier,
+} from './progress.ts'
 
 export type { Energy, Goal, Pillar }
 
@@ -145,6 +149,14 @@ export interface NewCompletion {
   /** Her earlier live Completions today that join the flagged burst. */
   flagIds: string[]
   flagReason: string
+  /** The ledger rows this Completion earns, written in the same transaction (#73). */
+  points: { pillar: Pillar; amount: number }[]
+}
+
+/** What her ledger and member_levels hold, as progressChanges reads them. */
+export interface ProgressInputs {
+  sums: Sums
+  recorded: RecordedRow[]
 }
 
 /** The storage port. */
@@ -182,9 +194,17 @@ export interface BestieStore {
   completion(memberId: string, completionId: string): Promise<CompletionRow | null>
   /**
    * In one transaction: set undone_at (only if still live) and move its Suggestion from completed back
-   * to shown, or to replaced when its plan has been replaced since. False if it was not live.
+   * to shown, or to replaced when its plan has been replaced since, and write one negative ledger row
+   * per award (reason 'undo'). False if it was not live.
    */
   undoCompletion(memberId: string, completionId: string, at: string): Promise<boolean>
+  /** Her per-Pillar sums from ledger rows created before `before`, and her member_levels rows reached before it (all, when null). */
+  progressInputs(memberId: string, before: string | null): Promise<ProgressInputs>
+  /**
+   * In one transaction under her member-row lock: read her inputs, ask `decide`, then record its Level
+   * rows and moment (at `at`) and delete the rows it retracts. Returns what `decide` returned.
+   */
+  settleProgress(memberId: string, at: string, decide: (i: ProgressInputs) => ProgressChanges): Promise<ProgressChanges>
   /** Sets or clears the photo path of her live Completion. */
   setPhoto(memberId: string, completionId: string, path: string | null): Promise<boolean>
   /** Her live Completions since `since`, newest first. */
@@ -244,8 +264,25 @@ export type CheckInOutcome =
 
 export type SwapOptionsOutcome = { outcome: 'options'; options: SwapOption[] } | { outcome: 'notJoined' } | { outcome: 'notFound' }
 export type ChangeOutcome = { outcome: 'planned'; plan: DayPlan } | { outcome: 'notJoined' } | { outcome: 'notFound' } | { outcome: 'notOffered' }
+/** What a Completion or undo did to her Levels and Status. */
+export interface Progress {
+  levelUps: { pillar: Pillar; level: number }[]
+  moment: (Status & { name: string }) | null
+}
+export interface ProfileView {
+  levels: Levels
+  /** Her Levels as they were 30 days ago: the chart's inner outline. */
+  levels30: Levels
+  points: Sums
+  /** Points that reach her next Level, per Pillar; null at Level 10. */
+  nextAt: Record<Pillar, number | null>
+  status: Status & { name: string }
+  /** Her Status moments, newest first. */
+  moments: (Status & { name: string; at: string })[]
+}
+export type ProfileOutcome = { outcome: 'profile'; profile: ProfileView } | { outcome: 'notJoined' }
 export type CompleteOutcome =
-  | { outcome: 'planned'; plan: DayPlan }
+  | { outcome: 'planned'; plan: DayPlan; progress: Progress }
   | { outcome: 'notJoined' }
   | { outcome: 'notFound' }
   | { outcome: 'tooSoon'; readyAt: string }
@@ -253,7 +290,7 @@ export type CompleteOutcome =
   | { outcome: 'reflectionTooLong' }
   | { outcome: 'mealCapped'; mealtime: Mealtime }
   | { outcome: 'reachOutCapped' }
-export type UndoOutcome = { outcome: 'planned'; plan: DayPlan } | { outcome: 'notJoined' } | { outcome: 'notFound' }
+export type UndoOutcome = { outcome: 'planned'; plan: DayPlan; progress: Progress } | { outcome: 'notJoined' } | { outcome: 'notFound' }
 export type PhotoOutcome = { outcome: 'saved' } | { outcome: 'deleted' } | { outcome: 'notJoined' } | { outcome: 'notFound' } | { outcome: 'notJpeg' } | { outcome: 'tooLarge' }
 export interface JournalEntry {
   completionId: string
@@ -657,10 +694,60 @@ export async function complete(store: BestieStore, user: { id: string }, suggest
   const id = await store.recordCompletion({
     memberId: member.id, suggestionId, proofKind: kind, reflection, at: now.toISOString(),
     flagNew: flags.includes(NEW), flagIds: flags.filter((f) => f !== NEW), flagReason: 'too_fast',
+    points: pointsFor(item, kind),
   })
   if (!id) return { outcome: 'notFound' }
+  const progress = await settle(store, member.id, now)
   const plan = await todayPlan(store, user, now)
-  return plan ? { outcome: 'planned', plan } : { outcome: 'notFound' }
+  return plan ? { outcome: 'planned', plan, progress } : { outcome: 'notFound' }
+}
+
+/**
+ * Records her Level-ups and Status moment after the ledger changed; a same-day undo takes them back.
+ * Runs after the Completion (or undo) has committed. If it fails, that write still stands, so this reports
+ * no change instead of an error; the next settle writes whatever is missing, and her Profile reads Levels
+ * from the ledger either way.
+ */
+async function settle(store: BestieStore, memberId: string, now: Date): Promise<Progress> {
+  const dayStart = dubaiDayBounds(now).from
+  try {
+    const ch = await store.settleProgress(memberId, now.toISOString(), (i) => progressChanges({ ...i, dayStart }))
+    return { levelUps: ch.levelUps, moment: ch.moment ? { ...ch.moment, name: statusName(ch.moment) } : null }
+  } catch (e) {
+    console.log(`bestie settleProgress failed for a member: ${e}`)
+    return { levelUps: [], moment: null }
+  }
+}
+
+const PROFILE_LAYER_DAYS = 30
+const floorOf = (rows: RecordedRow[]): Partial<Levels> => {
+  const f: Partial<Levels> = {}
+  for (const r of rows) if (r.kind === 'level' && r.pillar && r.level) f[r.pillar] = Math.max(f[r.pillar] ?? 1, r.level)
+  return f
+}
+
+/** Her Profile: Levels on the spider chart (now and 30 days ago), her Status and her moments. Private to her. */
+export async function profile(store: BestieStore, user: { id: string }, now: Date): Promise<ProfileOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const cut = new Date(now.getTime() - PROFILE_LAYER_DAYS * DAY_MS).toISOString()
+  const [nowIn, thenIn] = await Promise.all([store.progressInputs(member.id, null), store.progressInputs(member.id, cut)])
+  const levels = levelsFrom(nowIn.sums, floorOf(nowIn.recorded))
+  const status = statusOf(levels, nowIn.sums)
+  const next = {} as Record<Pillar, number | null>
+  for (const p of PILLAR_ORDER) next[p] = nextAt(levels[p])
+  const moments = nowIn.recorded
+    .filter((r) => r.kind === 'status' && r.shape && r.tier)
+    .sort((a, b) => Date.parse(b.reachedAt) - Date.parse(a.reachedAt))
+    .slice(0, 10)
+    .map((r) => { const st = { shape: r.shape!, tier: r.tier as Tier }; return { ...st, name: statusName(st), at: r.reachedAt } })
+  return {
+    outcome: 'profile',
+    profile: {
+      levels, levels30: levelsFrom(thenIn.sums, floorOf(thenIn.recorded)), points: { ...emptySums(), ...nowIn.sums },
+      nextAt: next, status: { ...status, name: statusName(status) }, moments,
+    },
+  }
 }
 
 /** Her live Completion from today (Dubai date), or null. */
@@ -679,8 +766,9 @@ export async function undoCompletion(store: BestieStore, photos: PhotoStore, use
   const c = await todaysCompletion(store, member.id, completionId, now)
   if (!c || !(await store.undoCompletion(member.id, c.id, now.toISOString()))) return { outcome: 'notFound' }
   if (c.photo_path) await photos.remove(c.photo_path)
+  const progress = await settle(store, member.id, now)
   const plan = await todayPlan(store, user, now)
-  return plan ? { outcome: 'planned', plan } : { outcome: 'notFound' }
+  return plan ? { outcome: 'planned', plan, progress } : { outcome: 'notFound' }
 }
 
 /** An optional photo for one of her Completions: JPEG only, every metadata segment removed, private. */
@@ -747,6 +835,17 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
   const plans: (DayPlanRow & { status: 'active' | 'replaced' })[] = []
   const suggestions: (SuggestionRow & { day_plan_id: string; member_id: string })[] = []
   const completions: (Omit<CompletionRow, 'catalogue_item_id' | 'shown_at'>)[] = []
+  const points: { id: number; member_id: string; pillar: Pillar; amount: number; reason: 'completion' | 'undo'; completion_id: string | null; created_at: string }[] = []
+  const levelRows: { id: number; member_id: string; kind: 'level' | 'status'; pillar: Pillar | null; level: number | null; status_shape: string | null; status_tier: string | null; reached_at: string }[] = []
+  let rowId = 1000
+  const inputs = (memberId: string, before: string | null): ProgressInputs => {
+    const sums = emptySums()
+    for (const r of points) if (r.member_id === memberId && (!before || r.created_at < before)) sums[r.pillar] += r.amount
+    const recorded = levelRows
+      .filter((r) => r.member_id === memberId && (!before || r.reached_at < before))
+      .map((r) => ({ id: String(r.id), kind: r.kind, pillar: r.pillar, level: r.level, shape: r.status_shape, tier: r.status_tier, reachedAt: r.reached_at }))
+    return { sums, recorded }
+  }
   const withSuggestion = (c: (typeof completions)[number]): CompletionRow => {
     const s = suggestions.find((x) => x.id === c.suggestion_id)!
     return { ...c, catalogue_item_id: s.catalogue_item_id, shown_at: s.created_at }
@@ -761,11 +860,31 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
       .filter((c) => !c.undone_at && suggestions.some((s) => s.id === c.suggestion_id && s.day_plan_id === plan.id))
       .map((c) => ({ id: c.id, suggestion_id: c.suggestion_id, completed_at: c.completed_at })),
   })
-  const store: BestieStore & { checkIns: typeof checkIns; plans: typeof plans; suggestions: typeof suggestions; completions: typeof completions } = {
+  const store: BestieStore & {
+    checkIns: typeof checkIns; plans: typeof plans; suggestions: typeof suggestions; completions: typeof completions
+    points: typeof points; levelRows: typeof levelRows
+    /** Test helper: ledger points from an earlier Completion, at a time. */
+    seedPoints(memberId: string, pillar: Pillar, amount: number, at: string): void
+  } = {
     checkIns,
     plans,
     suggestions,
     completions,
+    points,
+    levelRows,
+    seedPoints(memberId, pillar, amount, at) {
+      points.push({ id: ++rowId, member_id: memberId, pillar, amount, reason: 'completion', completion_id: null, created_at: at })
+    },
+    async progressInputs(memberId, before) {
+      return inputs(memberId, before)
+    },
+    async settleProgress(memberId, at, decide) {
+      const ch = decide(inputs(memberId, null))
+      for (let i = levelRows.length - 1; i >= 0; i--) if (levelRows[i].member_id === memberId && ch.retract.includes(String(levelRows[i].id))) levelRows.splice(i, 1)
+      for (const u of ch.newLevelRows) levelRows.push({ id: ++rowId, member_id: memberId, kind: 'level', pillar: u.pillar, level: u.level, status_shape: null, status_tier: null, reached_at: at })
+      if (ch.moment) levelRows.push({ id: ++rowId, member_id: memberId, kind: 'status', pillar: null, level: null, status_shape: ch.moment.shape, status_tier: ch.moment.tier, reached_at: at })
+      return ch
+    },
     async getMember(memberId) {
       return members.get(memberId) ?? null
     },
@@ -834,6 +953,7 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
         flagged: nc.flagNew, flag_reason: nc.flagNew ? nc.flagReason : null, completed_at: nc.at, undone_at: null,
       }
       completions.push(c)
+      for (const x of nc.points) points.push({ id: ++rowId, member_id: nc.memberId, pillar: x.pillar, amount: x.amount, reason: 'completion', completion_id: c.id, created_at: nc.at })
       return c.id
     },
     async completion(memberId, completionId) {
@@ -844,6 +964,8 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
       const c = completions.find((x) => x.id === completionId && x.member_id === memberId && !x.undone_at)
       if (!c) return false
       c.undone_at = at
+      for (const x of points.filter((r) => r.completion_id === c.id && r.reason === 'completion'))
+        points.push({ ...x, id: ++rowId, amount: -x.amount, reason: 'undo', created_at: at })
       const s = suggestions.find((x) => x.id === c.suggestion_id && x.outcome === 'completed')
       if (s) s.outcome = plans.find((p) => p.id === s.day_plan_id)!.status === 'active' ? 'shown' : 'replaced'
       return true
