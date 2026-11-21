@@ -20,6 +20,7 @@
  */
 import { HOME_AREAS } from './join.ts'
 import { CATALOGUE_SEED, type Energy, type Goal, type Pillar, type SeedItem } from './catalogueSeed.ts'
+import { HOT_MONTHS, skyHint } from './morning.ts'
 import { burstFlags, dubaiDayBounds, gateOpensAt, mealtimeOf, stripJpegMetadata, type LiveCompletion, type Mealtime } from './proof.ts'
 import {
   emptySums, levelsFrom, nextAt, pointsFor, progressChanges, statusName, statusOf, PILLAR_ORDER,
@@ -29,7 +30,7 @@ import {
 export type { Energy, Goal, Pillar }
 
 /** Names the plan-fitting rules. Bump it whenever they change (a fingerprint test enforces this). */
-export const BESTIE_ENGINE_VERSION = 'bestie-2'
+export const BESTIE_ENGINE_VERSION = 'bestie-3'
 
 export const PILLARS: Pillar[] = ['move', 'meal', 'mindset', 'meet_up']
 const ENERGIES: Energy[] = ['low', 'steady', 'high']
@@ -308,9 +309,6 @@ const dubai = (now: Date) => new Date(now.getTime() + DUBAI_OFFSET_MS)
 const dubaiDate = (now: Date) => dubai(now).toISOString().slice(0, 10)
 const dayNumber = (date: string) => Math.round(Date.parse(`${date}T00:00:00Z`) / DAY_MS)
 const addDays = (date: string, n: number) => new Date((dayNumber(date) + n) * DAY_MS).toISOString().slice(0, 10)
-/** Approximate sunset by month (0 = January). */
-const SUNSET = ['6:00pm', '6:20pm', '6:30pm', '6:40pm', '6:55pm', '7:10pm', '7:10pm', '6:55pm', '6:30pm', '6:00pm', '5:35pm', '5:35pm']
-const HOT_MONTHS = [4, 5, 6, 7, 8, 9] // May to October
 /** The shortest Check-in: enough for a light version in every Pillar, which count against her time too. */
 export const MIN_MINUTES = 30
 
@@ -475,7 +473,7 @@ const GOAL_LINE: Record<Goal, string> = {
   connect: 'Easy to do with a friend.', unwind: 'It helps you unwind.',
 }
 
-function why(i: CatalogueItem, input: Input, month: number, shortOnTime: boolean, fresh = false): string {
+function why(i: CatalogueItem, input: Input, date: string, shortOnTime: boolean, fresh = false): string {
   const parts: string[] = []
   if (fresh) parts.push('New for you.')
   if (i.light) parts.push(shortOnTime ? 'Short on time today, so here is a light version. It still counts.' : 'A light version for today. It still counts.')
@@ -483,8 +481,8 @@ function why(i: CatalogueItem, input: Input, month: number, shortOnTime: boolean
   else if (input.energy === 'low') parts.push('You said low energy, so this one is gentle.')
   else if (input.goal && i.goals.includes(input.goal)) parts.push(GOAL_LINE[input.goal])
   else parts.push(i.costAed > 0 ? `Fits your ${input.minutes} minutes and AED ${input.budgetAed}.` : `Fits your ${input.minutes} minutes, and it's free.`)
-  const hot = HOT_MONTHS.includes(month)
-  if (i.outdoor) parts.push(hot ? `Go after the ${SUNSET[month]} sunset, when it's cooler.` : `Sunset is around ${SUNSET[month]}.`)
+  const { hot, sunset } = skyHint(date)
+  if (i.outdoor) parts.push(hot ? `Go after the ${sunset} sunset, when it's cooler.` : `Sunset is around ${sunset}.`)
   else if (hot && i.costAed > 0 && (i.kind === 'workout' || i.kind === 'recovery')) parts.push('Indoors and air-conditioned, so any time works.')
   return parts.join(' ')
 }
@@ -525,7 +523,6 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
   if (typeof input === 'string') return { outcome: 'invalid', message: input }
 
   const today = dubaiDate(now)
-  const month = dubai(now).getUTCMonth()
   const { catalogue, history, ever, ctx } = await context(store, member.id, input, today)
   const fitted = fit(catalogue, ctx)
   const lean = leansWeakest(today) ? weakestPillar(history, today) : null
@@ -537,7 +534,7 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
     checkIn: { energy: input.energy, time_min: input.minutes, budget_aed: input.budgetAed, goal: input.goal, city: 'dubai', area: input.area },
     suggestions: items.map((i) => ({
       catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, is_new_for_you: i.id === fresh,
-      reason: why(i, input, month, fitted.shortOnTime.has(i.id), i.id === fresh), engine_version: BESTIE_ENGINE_VERSION,
+      reason: why(i, input, today, fitted.shortOnTime.has(i.id), i.id === fresh), engine_version: BESTIE_ENGINE_VERSION,
     })),
   })
   return { outcome: 'planned', plan: view(stored, new Map(catalogue.map((i) => [i.id, i]))) }
@@ -593,12 +590,12 @@ export async function swapOptions(store: BestieStore, user: { id: string }, sugg
   const o = await openSuggestion(store, user, suggestionId, now)
   if (o.outcome !== 'open') return o
   const { options, input } = await alternatives(store, o)
-  const month = dubai(now).getUTCMonth()
+  const today = dubaiDate(now)
   return {
     outcome: 'options',
     options: options.map((i) => ({
       catalogueItemId: i.id, slug: i.slug, title: i.title, pillars: i.pillars, minutes: i.durationMin, costAed: i.costAed,
-      light: i.light, outdoor: i.outdoor, why: why(i, input, month, false),
+      light: i.light, outdoor: i.outdoor, why: why(i, input, today, false),
     })),
   }
 }
@@ -610,10 +607,10 @@ export async function swapSuggestion(store: BestieStore, user: { id: string }, s
   const { options, input, byId } = await alternatives(store, o)
   const pick = options.find((i) => i.id === catalogueItemId)
   if (!pick) return { outcome: 'notOffered' }
-  const month = dubai(now).getUTCMonth()
+  const today = dubaiDate(now)
   const row = (i: CatalogueItem): NewSuggestion => ({
     catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, is_new_for_you: false,
-    reason: why(i, input, month, false), engine_version: BESTIE_ENGINE_VERSION,
+    reason: why(i, input, today, false), engine_version: BESTIE_ENGINE_VERSION,
   })
   const stored = await store.recordSwap({
     memberId: o.memberId, planId: o.stored.plan.id, oldId: o.target.id, at: now.toISOString(),

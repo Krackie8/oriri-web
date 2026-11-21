@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { checkIn, todayPlan, createMemoryBestieStore, BESTIE_ENGINE_VERSION, type DayPlan } from './bestie'
+import { sunsetAt } from './morning'
 
 const MEMBER = { id: 'm1' }
 const NOV = new Date('2026-11-16T05:00:00Z') // 09:00 in Dubai, cool season
@@ -42,7 +43,7 @@ describe('A good day (Steady, 2 hours, AED 250)', () => {
       expect(s.engine_version).toBe(BESTIE_ENGINE_VERSION)
       expect(s.reason).toBeTruthy()
     }
-    expect(BESTIE_ENGINE_VERSION).toBe('bestie-2')
+    expect(BESTIE_ENGINE_VERSION).toBe('bestie-3')
   })
 })
 
@@ -98,13 +99,13 @@ describe('Dubai heat and sunset', () => {
     const p = await plan(setup(), { energy: 'low', minutes: 60, budgetAed: 0 })
     const outdoor = p.suggestions.find((s) => s.outdoor)!
     expect(outdoor).toBeTruthy()
-    expect(outdoor.why).toMatch(/sunset is around 5:35pm/i)
+    expect(outdoor.why).toContain(`Sunset is around ${sunsetAt('2026-11-16')}.`) // the NOAA time (DEC-013)
   })
 
   it('in the hot months outdoor is still allowed when nothing indoor fits, timed after sunset', async () => {
     const p = await plan(setup(), { energy: 'low', minutes: 60, budgetAed: 0 }, JULY)
     const outdoor = p.suggestions.find((s) => s.outdoor)!
-    expect(outdoor.why).toMatch(/after the 7:10pm sunset/i)
+    expect(outdoor.why).toContain(`Go after the ${sunsetAt('2026-07-10')} sunset`)
   })
 
   it('in the hot months an indoor Move beats an outdoor one that fits as well', async () => {
