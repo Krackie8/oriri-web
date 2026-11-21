@@ -8669,7 +8669,7 @@ const postgresBestieStore: BestieStore = {
         await tx`
           insert into bestie.points (member_id, pillar, amount, reason, completion_id, created_at)
           select ${nc.memberId}, p.pillar::bestie.pillar, p.amount, 'completion', ${c.id}, ${nc.at}
-          from jsonb_to_recordset(${JSON.stringify(nc.points)}::jsonb) as p(pillar text, amount int)`;
+          from jsonb_to_recordset(${tx.json(nc.points)}::jsonb) as p(pillar text, amount int)`;
       }
       return c.id;
     });
@@ -8720,7 +8720,7 @@ const postgresBestieStore: BestieStore = {
         await tx`
           insert into bestie.member_levels (member_id, kind, pillar, level, reached_at)
           select ${memberId}, 'level', l.pillar::bestie.pillar, l.level, ${at}
-          from jsonb_to_recordset(${JSON.stringify(ch.newLevelRows)}::jsonb) as l(pillar text, level smallint)`;
+          from jsonb_to_recordset(${tx.json(ch.newLevelRows)}::jsonb) as l(pillar text, level smallint)`;
       }
       if (ch.moment) {
         await tx`
