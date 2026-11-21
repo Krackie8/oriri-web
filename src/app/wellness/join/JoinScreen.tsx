@@ -14,6 +14,7 @@ import { Card, PillButton, Screen, StepHeader, cx } from '../bestie/kit';
 import { loadInputs } from '../bestie/state';
 import { LOCALE } from '../bestie/config';
 import { formSubmit } from '../analytics/track';
+import { countLead } from '../analytics/firstParty';
 import { getUtm } from '../analytics/utm';
 import { CONSENT_LINES } from './consents';
 import { joinRedirectUrl } from './redirect';
@@ -170,6 +171,7 @@ function Details({ onJoined }: { onJoined: () => void }) {
       // Keeps the Free day conversion events Ren's reports and ads count, now fired when she actually joins.
       const utm = getUtm();
       const tags = { utm_source: utm.utm_source, utm_medium: utm.utm_medium, utm_campaign: utm.utm_campaign };
+      countLead('member_join'); // one lead in Admin › Traffic, however many GA events fire
       formSubmit('free_day', tags);
       formSubmit('pilot_application', tags);
     }
