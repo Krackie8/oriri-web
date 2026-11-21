@@ -12,6 +12,8 @@ import { Card, Eyebrow, GoldRule, PillLink, PillarIcon, Screen } from '../bestie
 import { SpiderChart } from './SpiderChart';
 import { ShareStatus } from './ShareStatus';
 import { CHART_AXES, PILLAR_LABEL, profileScreen, toNextLine } from './progressView';
+import { Flame } from 'lucide-react';
+import { streakLine } from '../bestie/morningView';
 
 export default function ProfilePage() {
   const [r, setR] = useState<Result<ProfileOutcome> | null>(null);
@@ -43,6 +45,12 @@ function MemberProfile({ profile: p }: { profile: Profile }) {
           Your Status comes from your Levels. It grows as you complete what Bestie suggests, and it never goes down.
         </p>
         {import.meta.env.DEV && <p className="mt-1 text-[12px] text-wb-taupe">(Status names are placeholders.)</p>}
+        {p.streak && (
+          <p className="mt-3 flex items-center gap-2 text-[16px] text-wb-ink">
+            <Flame className="h-4 w-4 text-wb-plum" strokeWidth={1.6} aria-hidden />
+            {streakLine(p.streak)}
+          </p>
+        )}
       </div>
 
       <Card className="mt-6 p-4">
