@@ -10,7 +10,9 @@ import { buildPlan, describeTime, money, swapItem, type Plan, type PlanItem, typ
 import * as wellnessApi from '../../utils/wellnessApi';
 import type { StepsistersMoment } from '../../utils/wellnessApi';
 import { getUnlocked, loadInputs } from './state';
-import { functionClient, type JournalEntry, type ServerDayPlan, type SuggestionChange, type SwapOption } from '../functionClient';
+import { functionClient, type JournalEntry, type PillarNumbers, type Progress, type ServerDayPlan, type StatusView, type SuggestionChange, type SwapOption } from '../functionClient';
+import { levelUpLine, withArticle } from '../profile/progressView';
+import { ShareStatus } from '../profile/ShareStatus';
 import { fromServerPlan } from './serverPlan';
 import { toCleanJpeg } from './photo';
 import { readyLabel } from './proofView';
@@ -110,6 +112,13 @@ function DayView({ server }: { server?: ServerDayPlan }) {
   // the time gate and the caps on the server; refusals come back gentle, and a quiet flag never shows.
   const [reflecting, setReflecting] = useState<{ id: string; text: string } | null>(null);
   const [journalKey, setJournalKey] = useState(0);
+  // #73: a new Status is a moment she can share; a Level-up is a quiet line under the item.
+  const [moment, setMoment] = useState<StatusView | null>(null);
+  const showProgress = (id: string, p: Progress, undone = false) => {
+    setMoment(undone ? null : p.moment);
+    const line = undone ? null : levelUpLine(p.levelUps);
+    if (line) setSwapNote({ id, text: line });
+  };
   const showServerPlan = (p: ServerDayPlan) => {
     setPlan(fromServerPlan(p));
     setJournalKey((k) => k + 1);
@@ -125,7 +134,9 @@ function DayView({ server }: { server?: ServerDayPlan }) {
     if (d.outcome === 'planned') {
       setReflecting(null);
       showServerPlan(d.plan);
+      showProgress(item.id, d.progress);
       track('plan_item_done', { item: item.id, done: true });
+      if (d.progress.moment) track('status_moment', { tier: d.progress.moment.tier, shape: d.progress.moment.shape });
       return;
     }
     if (d.outcome === 'refused') {
@@ -145,6 +156,7 @@ function DayView({ server }: { server?: ServerDayPlan }) {
     if (!r.ok) return tryAgain(item.id, 'undo that');
     if (r.data.outcome === 'planned') {
       showServerPlan(r.data.plan);
+      showProgress(item.id, r.data.progress, true);
       track('plan_item_done', { item: item.id, done: false });
       return;
     }
@@ -301,7 +313,17 @@ function DayView({ server }: { server?: ServerDayPlan }) {
         ))}
       </ul>
 
+      {isMember && moment && <StatusMoment moment={moment} onClose={() => setMoment(null)} />}
+
       <Tracker items={plan.items} done={doneMap} isMember={isMember} />
+
+      {isMember && (
+        <div className="mt-6">
+          <PillLink to="/profile" tone="outline" size="md">
+            Your Profile
+          </PillLink>
+        </div>
+      )}
 
       {isMember && <MemberJournal refreshKey={journalKey} />}
 
@@ -805,6 +827,34 @@ function PhotoAdd({ busy, onFile }: { busy?: boolean; onFile: (f: File) => void 
         }}
       />
     </label>
+  );
+}
+
+/** A new Status (#73): a moment she can share or save. Her Levels for the image come from her Profile. */
+function StatusMoment({ moment, onClose }: { moment: StatusView; onClose: () => void }) {
+  const [levels, setLevels] = useState<PillarNumbers | null>(null);
+  useEffect(() => {
+    let live = true;
+    functionClient.bestie.profile().then((r) => live && r.ok && r.data.outcome === 'profile' && setLevels(r.data.profile.levels));
+    return () => {
+      live = false;
+    };
+  }, [moment.name]);
+  return (
+    <Card as="section" className="mt-6 border border-wb-gold/40 p-5 text-center" aria-live="polite">
+      <Sparkles className="mx-auto h-6 w-6 text-wb-gold" strokeWidth={1.4} aria-hidden />
+      <p className="mt-2 text-[13px] uppercase tracking-[0.14em] text-wb-taupe">A new Status</p>
+      <h2 className="mt-1 text-[26px] leading-tight text-wb-ink">You’re now {withArticle(moment.name)}</h2>
+      {levels && <ShareStatus name={moment.name} levels={levels} className="mt-4" />}
+      <div className="mt-4 flex items-center justify-center gap-4 text-[14px]">
+        <Link to="/profile" className="text-wb-plum underline-offset-4 hover:underline">
+          See your Profile
+        </Link>
+        <button type="button" onClick={onClose} className="text-wb-taupe underline-offset-4 hover:underline">
+          Close
+        </button>
+      </div>
+    </Card>
   );
 }
 

@@ -141,3 +141,19 @@ describe('profile', () => {
     expect((await profile(store, { id: 'nobody' }, dubai('09:00'))).outcome).toBe('notJoined')
   })
 })
+
+describe('a failure recording Levels never loses the Completion', () => {
+  it('the Completion and its points stand; progress reads as no change, and the next settle catches up', async () => {
+    const { store } = setup()
+    const t = dubai('09:00')
+    const p = await plan(store, GOOD, t)
+    const real = store.settleProgress
+    store.settleProgress = async () => { throw new Error('db blip') }
+    const r = await complete(store, MEMBER, of(p, 'move').id, {}, plus(t, 120))
+    expect(r.outcome).toBe('planned')
+    if (r.outcome !== 'planned') return
+    expect(r.progress).toEqual({ levelUps: [], moment: null })
+    expect(store.points.length).toBeGreaterThan(0)
+    store.settleProgress = real
+  })
+})

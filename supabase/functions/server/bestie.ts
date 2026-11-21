@@ -702,11 +702,21 @@ export async function complete(store: BestieStore, user: { id: string }, suggest
   return plan ? { outcome: 'planned', plan, progress } : { outcome: 'notFound' }
 }
 
-/** Records her Level-ups and Status moment after the ledger changed; a same-day undo takes them back. */
+/**
+ * Records her Level-ups and Status moment after the ledger changed; a same-day undo takes them back.
+ * Runs after the Completion (or undo) has committed. If it fails, that write still stands, so this reports
+ * no change instead of an error; the next settle writes whatever is missing, and her Profile reads Levels
+ * from the ledger either way.
+ */
 async function settle(store: BestieStore, memberId: string, now: Date): Promise<Progress> {
   const dayStart = dubaiDayBounds(now).from
-  const ch = await store.settleProgress(memberId, now.toISOString(), (i) => progressChanges({ ...i, dayStart }))
-  return { levelUps: ch.levelUps, moment: ch.moment ? { ...ch.moment, name: statusName(ch.moment) } : null }
+  try {
+    const ch = await store.settleProgress(memberId, now.toISOString(), (i) => progressChanges({ ...i, dayStart }))
+    return { levelUps: ch.levelUps, moment: ch.moment ? { ...ch.moment, name: statusName(ch.moment) } : null }
+  } catch (e) {
+    console.log(`bestie settleProgress failed for a member: ${e}`)
+    return { levelUps: [], moment: null }
+  }
 }
 
 const PROFILE_LAYER_DAYS = 30
