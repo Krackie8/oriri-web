@@ -44,8 +44,9 @@ insert into bestie.completions (id, member_id, suggestion_id, proof_kind, comple
   -- Undone on the 27th: never counts.
   ('00000000-0000-0000-0000-0000000008f3', '00000000-0000-0000-0000-0000000008a1', '00000000-0000-0000-0000-0000000008e3', 'reach_out', '2026-11-27T08:00:00Z', '2026-11-27T08:05:00Z');
 
--- 1. The line checks accept a full row, then refuse what breaks them.
+-- 1. The line checks accept a full row, then refuse what breaks them. The seed is in, unsigned.
 set role service_role;
+select pg_temp.check((select count(*) >= 60 and bool_and(author = 'bestie') from bestie.daily_lines), 'the seed bank is in: 60 or more lines, all unsigned drafts');
 insert into bestie.daily_lines (id, body, author, goal, pillar, energy, moment, show_on) values
   ('00000000-0000-0000-0000-000000000801', 'Small and steady still counts.', 'bestie', null, null, null, 'any', null),
   ('00000000-0000-0000-0000-000000000802', 'Three days in a row. Look at you.', 'ren', 'glow', 'move', 'high', 'streak', null),
