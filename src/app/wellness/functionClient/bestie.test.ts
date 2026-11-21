@@ -83,7 +83,7 @@ describe('bestie.options, swap and skip (#71)', () => {
 describe('bestie.complete, undo, photos and the Journal (#72)', () => {
   it('complete: sends the Reflection and returns the plan', async () => {
     const { fc, fake } = client({ 'POST /bestie/suggestions/s1/complete': reply(200, { success: true, plan }) })
-    expect(await fc.bestie.complete('s1', 'Rest is part of it')).toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(await fc.bestie.complete('s1', 'Rest is part of it')).toEqual({ ok: true, data: { outcome: 'planned', plan, progress: { levelUps: [], moment: null } } })
     expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/suggestions/s1/complete', body: { reflection: 'Rest is part of it' } })
   })
   it('complete: a refusal carries its reason and gentle message; tooSoon carries when it opens', async () => {
@@ -106,7 +106,7 @@ describe('bestie.complete, undo, photos and the Journal (#72)', () => {
   })
   it('undo: returns the plan, or gone once the day has passed', async () => {
     const { fc, fake } = client({ 'POST /bestie/completions/c1/undo': reply(200, { success: true, plan }) })
-    expect(await fc.bestie.undo('c1')).toEqual({ ok: true, data: { outcome: 'planned', plan } })
+    expect(await fc.bestie.undo('c1')).toEqual({ ok: true, data: { outcome: 'planned', plan, progress: { levelUps: [], moment: null } } })
     expect(fake.calls[0]).toMatchObject({ method: 'POST', path: '/bestie/completions/c1/undo' })
     expect(await client({ 'POST /bestie/completions/c1/undo': reply(404, {}) }).fc.bestie.undo('c1')).toEqual({ ok: true, data: { outcome: 'gone' } })
   })
@@ -127,5 +127,32 @@ describe('bestie.complete, undo, photos and the Journal (#72)', () => {
     expect(await client({ 'GET /bestie/journal': reply(200, { success: true, entries }) }).fc.bestie.journal())
       .toEqual({ ok: true, data: { outcome: 'entries', entries } })
     expect(await client({ 'GET /bestie/journal': reply(401, {}) }).fc.bestie.journal()).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+  })
+})
+
+describe('bestie Levels, Status and the Profile (#73)', () => {
+  const progress = { levelUps: [{ pillar: 'move', level: 2 }], moment: { shape: 'move', tier: 'rising', name: 'Rising Mover' } }
+  it('complete and undo pass the progress through', async () => {
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(200, { success: true, plan, progress }) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'planned', plan, progress } })
+    expect(await client({ 'POST /bestie/completions/c1/undo': reply(200, { success: true, plan, progress }) }).fc.bestie.undo('c1'))
+      .toEqual({ ok: true, data: { outcome: 'planned', plan, progress } })
+  })
+  it('a reply without progress reads as no change', async () => {
+    expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(200, { success: true, plan }) }).fc.bestie.complete('s1'))
+      .toEqual({ ok: true, data: { outcome: 'planned', plan, progress: { levelUps: [], moment: null } } })
+  })
+  it('profile: her Profile, notJoined, or signedOut', async () => {
+    const profile = {
+      levels: { move: 2, meal: 5, mindset: 2, meet_up: 1 }, levels30: { move: 1, meal: 5, mindset: 1, meet_up: 1 },
+      points: { move: 40, meal: 300, mindset: 30, meet_up: 0 }, nextAt: { move: 80, meal: 450, mindset: 80, meet_up: 30 },
+      status: { shape: 'meal', tier: 'glowing', name: 'Glowing Clean Eater' }, moments: [],
+    }
+    const { fc, fake } = client({ 'GET /bestie/profile': reply(200, { success: true, profile }) })
+    expect(await fc.bestie.profile()).toEqual({ ok: true, data: { outcome: 'profile', profile } })
+    expect(fake.calls[0]).toMatchObject({ method: 'GET', path: '/bestie/profile' })
+    expect(await client({ 'GET /bestie/profile': reply(409, {}) }).fc.bestie.profile()).toEqual({ ok: true, data: { outcome: 'notJoined' } })
+    expect(await client({ 'GET /bestie/profile': reply(401, {}) }).fc.bestie.profile()).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+    expect((await client({ 'GET /bestie/profile': reply(500, {}) }).fc.bestie.profile()).ok).toBe(false)
   })
 })

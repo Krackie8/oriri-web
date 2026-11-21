@@ -77,13 +77,35 @@ export type ChangeOutcome =
 
 /** Why a Completion was refused (#72). The message is Bestie's, gentle, and never accuses. */
 export type RefusalReason = 'tooSoon' | 'reflectionNeeded' | 'reflectionTooLong' | 'mealCapped' | 'reachOutCapped'
+export type Tier = 'rising' | 'glowing' | 'radiant' | 'iconic'
+/** A Status: shape and tier keys plus its (placeholder) display name. */
+export interface StatusView { shape: string; tier: Tier; name: string }
+/** What a Completion or undo did to her Levels and Status (#73). */
+export interface Progress {
+  levelUps: { pillar: Pillar; level: number }[]
+  moment: StatusView | null
+}
+const NO_PROGRESS: Progress = { levelUps: [], moment: null }
+export type PillarNumbers = Record<Pillar, number>
+/** Her Profile: private to her (DEC-003). */
+export interface Profile {
+  levels: PillarNumbers
+  /** Her Levels 30 days ago: the chart's inner outline. */
+  levels30: PillarNumbers
+  points: PillarNumbers
+  nextAt: Record<Pillar, number | null>
+  status: StatusView
+  moments: (StatusView & { at: string })[]
+}
+export type ProfileOutcome = { outcome: 'profile'; profile: Profile } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
+
 export type CompleteOutcome =
-  | { outcome: 'planned'; plan: DayPlan }
+  | { outcome: 'planned'; plan: DayPlan; progress: Progress }
   | { outcome: 'refused'; reason: RefusalReason; message: string; readyAt?: string }
   | { outcome: 'gone' }
   | { outcome: 'notJoined' }
   | { outcome: 'signedOut' }
-export type UndoOutcome = { outcome: 'planned'; plan: DayPlan } | { outcome: 'gone' } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
+export type UndoOutcome = { outcome: 'planned'; plan: DayPlan; progress: Progress } | { outcome: 'gone' } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
 export type PhotoOutcome = { outcome: 'saved' } | { outcome: 'deleted' } | { outcome: 'refused'; message: string } | { outcome: 'gone' } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
 
 /** One Completion in her Journal. */
@@ -141,9 +163,9 @@ export function createBestie(core: Core) {
 
     /** She ticks a Suggestion off (#72). A Mindset needs her one-line Reflection. */
     async complete(suggestionId: string, reflection?: string): Promise<Result<CompleteOutcome>> {
-      const r = await core.request<{ plan: DayPlan }>('POST', `/bestie/suggestions/${encodeURIComponent(suggestionId)}/complete`,
+      const r = await core.request<{ plan: DayPlan; progress?: Progress }>('POST', `/bestie/suggestions/${encodeURIComponent(suggestionId)}/complete`,
         { body: reflection === undefined ? {} : { reflection } })
-      if (r.ok) return { ok: true, data: { outcome: 'planned', plan: r.data.plan } }
+      if (r.ok) return { ok: true, data: { outcome: 'planned', plan: r.data.plan, progress: r.data.progress ?? NO_PROGRESS } }
       const d = (r.error.details ?? {}) as { reason?: RefusalReason; readyAt?: string }
       if ((r.error.status === 400 || r.error.status === 409) && d.reason) {
         return { ok: true, data: { outcome: 'refused', reason: d.reason, message: r.error.message, ...(d.readyAt ? { readyAt: d.readyAt } : {}) } }
@@ -153,8 +175,8 @@ export function createBestie(core: Core) {
 
     /** She undoes a mis-tap, the same day. */
     async undo(completionId: string): Promise<Result<UndoOutcome>> {
-      const r = await core.request<{ plan: DayPlan }>('POST', `/bestie/completions/${encodeURIComponent(completionId)}/undo`)
-      if (r.ok) return { ok: true, data: { outcome: 'planned', plan: r.data.plan } }
+      const r = await core.request<{ plan: DayPlan; progress?: Progress }>('POST', `/bestie/completions/${encodeURIComponent(completionId)}/undo`)
+      if (r.ok) return { ok: true, data: { outcome: 'planned', plan: r.data.plan, progress: r.data.progress ?? NO_PROGRESS } }
       return changeError(r)
     },
 
@@ -177,6 +199,15 @@ export function createBestie(core: Core) {
       const r = await core.request<{ entries: JournalEntry[] }>('GET', '/bestie/journal')
       if (r.ok) return { ok: true, data: { outcome: 'entries', entries: r.data.entries } }
       if (r.error.status === 401) return { ok: true, data: { outcome: 'signedOut' } }
+      return r
+    },
+
+    /** Her Levels, Status and moments (#73). */
+    async profile(): Promise<Result<ProfileOutcome>> {
+      const r = await core.request<{ profile: Profile }>('GET', '/bestie/profile')
+      if (r.ok) return { ok: true, data: { outcome: 'profile', profile: r.data.profile } }
+      if (r.error.status === 401) return { ok: true, data: { outcome: 'signedOut' } }
+      if (r.error.status === 409) return { ok: true, data: { outcome: 'notJoined' } }
       return r
     },
   }
