@@ -211,7 +211,7 @@ describe('new for you', () => {
 })
 
 describe('the engine version', () => {
-  it('is bestie-2 for the learning rules', () => {
-    expect(BESTIE_ENGINE_VERSION).toBe('bestie-2')
+  it('is bestie-3: the learning rules, with sunset by the NOAA formula (#74)', () => {
+    expect(BESTIE_ENGINE_VERSION).toBe('bestie-3')
   })
 })

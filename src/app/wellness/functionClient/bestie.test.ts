@@ -142,6 +142,21 @@ describe('bestie Levels, Status and the Profile (#73)', () => {
     expect(await client({ 'POST /bestie/suggestions/s1/complete': reply(200, { success: true, plan }) }).fc.bestie.complete('s1'))
       .toEqual({ ok: true, data: { outcome: 'planned', plan, progress: { levelUps: [], moment: null } } })
   })
+  it('morning: her card, notJoined, signedOut, and a failure stays an error (#74)', async () => {
+    const card = {
+      line: { text: 'Small and steady still counts.', by: 'bestie' },
+      sky: { sunset: '5:31pm', hot: false, hint: 'Good season for outdoors · sunset 5:31pm' },
+      meetUp: null,
+      streak: { count: 2, todayDone: false, restUsedThisWeek: true, restDayYesterday: true },
+    }
+    const { fc, fake } = client({ 'GET /bestie/morning': reply(200, { success: true, card }) })
+    expect(await fc.bestie.morning()).toEqual({ ok: true, data: { outcome: 'morning', card } })
+    expect(fake.calls[0]).toMatchObject({ method: 'GET', path: '/bestie/morning' })
+    expect(await client({ 'GET /bestie/morning': reply(409, { success: false, error: 'Join' }) }).fc.bestie.morning()).toEqual({ ok: true, data: { outcome: 'notJoined' } })
+    expect(await client({ 'GET /bestie/morning': reply(401, { success: false, error: 'Unauthorized' }) }).fc.bestie.morning()).toEqual({ ok: true, data: { outcome: 'signedOut' } })
+    expect((await client({ 'GET /bestie/morning': reply(500, { success: false, error: 'Could not load your morning.' }) }).fc.bestie.morning()).ok).toBe(false)
+  })
+
   it('profile: her Profile, notJoined, or signedOut', async () => {
     const profile = {
       levels: { move: 2, meal: 5, mindset: 2, meet_up: 1 }, levels30: { move: 1, meal: 5, mindset: 1, meet_up: 1 },

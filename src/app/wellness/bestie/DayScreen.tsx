@@ -16,6 +16,8 @@ import { ShareStatus } from '../profile/ShareStatus';
 import { fromServerPlan } from './serverPlan';
 import { toCleanJpeg } from './photo';
 import { readyLabel } from './proofView';
+import { MorningCard, WrapUpHeader, useMorning } from './MorningCard';
+import { isWrapUpTime, wrapUpView } from './morningView';
 import { CHECK_IN_AGAIN } from './returning';
 import { useViewer } from './viewer';
 import { ctaClick, track } from '../analytics/track';
@@ -196,6 +198,11 @@ function DayView({ server }: { server?: ServerDayPlan }) {
   const { isAdmin } = useAdmin();
 
   const event = useTodayEvent();
+  // #74: her morning card, and from 18:00 (or when she asks) the evening Wrap-up. Refreshed after a tick.
+  const memberDoneCount = isMember && plan ? plan.items.filter((i) => i.proof?.done).length : 0;
+  const morningCard = useMorning(isMember ? 'member' : 'never', memberDoneCount);
+  const [wrapAsked, setWrapAsked] = useState(false);
+  const wrapUp = isMember && (wrapAsked || isWrapUpTime(new Date()));
   const [feel, setFeel] = useState<Record<string, Feel>>(() => loadFeel());
   const rate = (id: string, f: Feel) => {
     const next = { ...feel, [id]: f };
@@ -256,7 +263,18 @@ function DayView({ server }: { server?: ServerDayPlan }) {
       {chipRow}
       {isAdmin && !unlockedFor && <p className="mt-3 rounded-[12px] bg-wb-gold-soft/60 px-4 py-2 text-[14px] text-wb-soft">Admin preview: no email needed, nothing is saved.</p>}
 
-      <Affirmation energy={inputs.energy} />
+      {!isMember ? (
+        <Affirmation energy={inputs.energy} />
+      ) : wrapUp ? (
+        <WrapUpHeader summary={wrapUpView(plan.items, (i) => !!doneMap[i.id]).summary} streak={morningCard?.streak ?? null} />
+      ) : (
+        <>
+          {morningCard && <MorningCard card={morningCard} />}
+          <button type="button" onClick={() => setWrapAsked(true)} className="mt-3 text-[15px] text-wb-plum underline underline-offset-4">
+            Wrap up my day
+          </button>
+        </>
+      )}
 
       <div className="mt-4 grid grid-cols-3 divide-x divide-wb-sand rounded-[16px] border border-wb-sand bg-wb-shell py-3 text-center">
         <div>
@@ -275,10 +293,12 @@ function DayView({ server }: { server?: ServerDayPlan }) {
         </div>
       </div>
 
-      <h2 className="mt-8 text-[24px] text-wb-ink">Today’s plan</h2>
-      <p className="mt-1 text-[15px] text-wb-soft">Do these in any order. Tap a place to open it in Maps.</p>
+      <h2 className="mt-8 text-[24px] text-wb-ink">{wrapUp ? 'Your day' : 'Today’s plan'}</h2>
+      <p className="mt-1 text-[15px] text-wb-soft">
+        {wrapUp ? 'What’s still open comes first. What you’ve done is below, and you can undo a mis-tap.' : 'Do these in any order. Tap a place to open it in Maps.'}
+      </p>
       <ul className="mt-4 space-y-3">
-        {plan.items.map((item) => (
+        {(wrapUp ? (({ open, done: finished }) => [...open, ...finished])(wrapUpView(plan.items, (i) => !!doneMap[i.id])) : plan.items).map((item) => (
           <PlanRow
             key={item.id}
             item={item}

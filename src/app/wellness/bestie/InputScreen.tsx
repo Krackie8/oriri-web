@@ -13,6 +13,7 @@ import { supabase } from '../../utils/supabase/client';
 import { toServerCheckIn } from './serverPlan';
 import { checkInGate, seen, wantsAgain } from './returning';
 import { useViewer } from './viewer';
+import { MorningCard, useMorning } from './MorningCard';
 
 function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
@@ -35,6 +36,7 @@ export default function InputScreen() {
   // hasn't done yet and restart its timers. She checks in again only from her day ("Check in again").
   const again = wantsAgain(useLocation().search);
   const gate = checkInGate(seen(useViewer(again)), again);
+  const morningCard = useMorning('session'); // #74: Members only; a visitor never calls
   const [v, setV] = useState<PlanInputs>(() => loadInputs() || DEFAULT_INPUTS);
   const [customMin, setCustomMin] = useState(() => (TIME_CHIPS.some((c) => c.minutes === v.minutes) ? '' : String(v.minutes)));
   const set = (patch: Partial<PlanInputs>) => setV((s) => ({ ...s, ...patch }));
@@ -77,6 +79,7 @@ export default function InputScreen() {
     <form onSubmit={submit}>
       <Screen className="pb-36">
         <StepHeader back={again ? '/plan/day' : '/'} step={1} total={2} title="How's today looking?" sub="Fill in all three so Bestie can curate your day." />
+        {morningCard && <MorningCard card={morningCard} />}
         {again && (
           <p className="mt-4 rounded-[12px] bg-wb-gold-soft/60 px-4 py-3 text-[14px] leading-snug text-wb-soft" role="note">
             A new Check-in replaces what you haven't done yet. Anything you've ticked stays.

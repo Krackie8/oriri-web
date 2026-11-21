@@ -20,6 +20,8 @@
  */
 import { HOME_AREAS } from './join.ts'
 import { CATALOGUE_SEED, type Energy, type Goal, type Pillar, type SeedItem } from './catalogueSeed.ts'
+import { HOT_MONTHS, momentOf, pickLine, skyHint, thisWeeksMeetUp, type DailyLine, type MeetUpRow, type MeetUpView } from './morning.ts'
+import { streakOf, type StreakView } from './streak.ts'
 import { burstFlags, dubaiDayBounds, gateOpensAt, mealtimeOf, stripJpegMetadata, type LiveCompletion, type Mealtime } from './proof.ts'
 import {
   emptySums, levelsFrom, nextAt, pointsFor, progressChanges, statusName, statusOf, PILLAR_ORDER,
@@ -29,7 +31,7 @@ import {
 export type { Energy, Goal, Pillar }
 
 /** Names the plan-fitting rules. Bump it whenever they change (a fingerprint test enforces this). */
-export const BESTIE_ENGINE_VERSION = 'bestie-2'
+export const BESTIE_ENGINE_VERSION = 'bestie-3'
 
 export const PILLARS: Pillar[] = ['move', 'meal', 'mindset', 'meet_up']
 const ENERGIES: Energy[] = ['low', 'steady', 'high']
@@ -209,6 +211,21 @@ export interface BestieStore {
   setPhoto(memberId: string, completionId: string, path: string | null): Promise<boolean>
   /** Her live Completions since `since`, newest first. */
   journal(memberId: string, since: string): Promise<CompletionRow[]>
+  /** The Dubai dates (YYYY-MM-DD) of her live Completions. */
+  completionDays(memberId: string): Promise<string[]>
+  /** Ren's active daily lines. */
+  dailyLines(): Promise<DailyLine[]>
+  /** The lines she was shown from `sinceDate` on. */
+  recentLines(memberId: string, sinceDate: string): Promise<{ lineId: string; shownOn: string }[]>
+  /** Records the line she is shown that Dubai day, unless one already is; returns the one stored. */
+  recordLine(memberId: string, lineId: string, shownOn: string): Promise<string>
+  /** When she joined (Dubai date), her latest personalisation Consent, and her latest Check-in. */
+  morningSignals(memberId: string): Promise<{ joinedOn: string; personal: boolean; lastCheckIn: { energy: Energy; goal: Goal | null } | null }>
+}
+
+/** Where this week's Meet ups come from: the Stepsisters moments and events in the key-value store. */
+export interface MeetUpSource {
+  upcoming(): Promise<MeetUpRow[]>
 }
 
 /** Where photos live: the private bucket, reached only by the edge function. */
@@ -279,7 +296,18 @@ export interface ProfileView {
   status: Status & { name: string }
   /** Her Status moments, newest first. */
   moments: (Status & { name: string; at: string })[]
+  /** Her Streak (#74): it never affects her Levels. */
+  streak: StreakView
 }
+/** Morning with Bestie (#74, DEC-013). */
+export interface MorningCard {
+  /** A line in Ren's voice; `by` is 'ren' only for a line she wrote or approved. */
+  line: { text: string; by: 'ren' | 'bestie' } | null
+  sky: { sunset: string; hot: boolean; hint: string }
+  meetUp: MeetUpView | null
+  streak: StreakView
+}
+export type MorningOutcome = { outcome: 'morning'; card: MorningCard } | { outcome: 'notJoined' }
 export type ProfileOutcome = { outcome: 'profile'; profile: ProfileView } | { outcome: 'notJoined' }
 export type CompleteOutcome =
   | { outcome: 'planned'; plan: DayPlan; progress: Progress }
@@ -308,9 +336,6 @@ const dubai = (now: Date) => new Date(now.getTime() + DUBAI_OFFSET_MS)
 const dubaiDate = (now: Date) => dubai(now).toISOString().slice(0, 10)
 const dayNumber = (date: string) => Math.round(Date.parse(`${date}T00:00:00Z`) / DAY_MS)
 const addDays = (date: string, n: number) => new Date((dayNumber(date) + n) * DAY_MS).toISOString().slice(0, 10)
-/** Approximate sunset by month (0 = January). */
-const SUNSET = ['6:00pm', '6:20pm', '6:30pm', '6:40pm', '6:55pm', '7:10pm', '7:10pm', '6:55pm', '6:30pm', '6:00pm', '5:35pm', '5:35pm']
-const HOT_MONTHS = [4, 5, 6, 7, 8, 9] // May to October
 /** The shortest Check-in: enough for a light version in every Pillar, which count against her time too. */
 export const MIN_MINUTES = 30
 
@@ -475,7 +500,7 @@ const GOAL_LINE: Record<Goal, string> = {
   connect: 'Easy to do with a friend.', unwind: 'It helps you unwind.',
 }
 
-function why(i: CatalogueItem, input: Input, month: number, shortOnTime: boolean, fresh = false): string {
+function why(i: CatalogueItem, input: Input, date: string, shortOnTime: boolean, fresh = false): string {
   const parts: string[] = []
   if (fresh) parts.push('New for you.')
   if (i.light) parts.push(shortOnTime ? 'Short on time today, so here is a light version. It still counts.' : 'A light version for today. It still counts.')
@@ -483,8 +508,8 @@ function why(i: CatalogueItem, input: Input, month: number, shortOnTime: boolean
   else if (input.energy === 'low') parts.push('You said low energy, so this one is gentle.')
   else if (input.goal && i.goals.includes(input.goal)) parts.push(GOAL_LINE[input.goal])
   else parts.push(i.costAed > 0 ? `Fits your ${input.minutes} minutes and AED ${input.budgetAed}.` : `Fits your ${input.minutes} minutes, and it's free.`)
-  const hot = HOT_MONTHS.includes(month)
-  if (i.outdoor) parts.push(hot ? `Go after the ${SUNSET[month]} sunset, when it's cooler.` : `Sunset is around ${SUNSET[month]}.`)
+  const { hot, sunset } = skyHint(date)
+  if (i.outdoor) parts.push(hot ? `Go after the ${sunset} sunset, when it's cooler.` : `Sunset is around ${sunset}.`)
   else if (hot && i.costAed > 0 && (i.kind === 'workout' || i.kind === 'recovery')) parts.push('Indoors and air-conditioned, so any time works.')
   return parts.join(' ')
 }
@@ -525,7 +550,6 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
   if (typeof input === 'string') return { outcome: 'invalid', message: input }
 
   const today = dubaiDate(now)
-  const month = dubai(now).getUTCMonth()
   const { catalogue, history, ever, ctx } = await context(store, member.id, input, today)
   const fitted = fit(catalogue, ctx)
   const lean = leansWeakest(today) ? weakestPillar(history, today) : null
@@ -537,7 +561,7 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
     checkIn: { energy: input.energy, time_min: input.minutes, budget_aed: input.budgetAed, goal: input.goal, city: 'dubai', area: input.area },
     suggestions: items.map((i) => ({
       catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, is_new_for_you: i.id === fresh,
-      reason: why(i, input, month, fitted.shortOnTime.has(i.id), i.id === fresh), engine_version: BESTIE_ENGINE_VERSION,
+      reason: why(i, input, today, fitted.shortOnTime.has(i.id), i.id === fresh), engine_version: BESTIE_ENGINE_VERSION,
     })),
   })
   return { outcome: 'planned', plan: view(stored, new Map(catalogue.map((i) => [i.id, i]))) }
@@ -593,12 +617,12 @@ export async function swapOptions(store: BestieStore, user: { id: string }, sugg
   const o = await openSuggestion(store, user, suggestionId, now)
   if (o.outcome !== 'open') return o
   const { options, input } = await alternatives(store, o)
-  const month = dubai(now).getUTCMonth()
+  const today = dubaiDate(now)
   return {
     outcome: 'options',
     options: options.map((i) => ({
       catalogueItemId: i.id, slug: i.slug, title: i.title, pillars: i.pillars, minutes: i.durationMin, costAed: i.costAed,
-      light: i.light, outdoor: i.outdoor, why: why(i, input, month, false),
+      light: i.light, outdoor: i.outdoor, why: why(i, input, today, false),
     })),
   }
 }
@@ -610,10 +634,10 @@ export async function swapSuggestion(store: BestieStore, user: { id: string }, s
   const { options, input, byId } = await alternatives(store, o)
   const pick = options.find((i) => i.id === catalogueItemId)
   if (!pick) return { outcome: 'notOffered' }
-  const month = dubai(now).getUTCMonth()
+  const today = dubaiDate(now)
   const row = (i: CatalogueItem): NewSuggestion => ({
     catalogue_item_id: i.id, pillar: i.pillars[0], is_light: i.light, is_new_for_you: false,
-    reason: why(i, input, month, false), engine_version: BESTIE_ENGINE_VERSION,
+    reason: why(i, input, today, false), engine_version: BESTIE_ENGINE_VERSION,
   })
   const stored = await store.recordSwap({
     memberId: o.memberId, planId: o.stored.plan.id, oldId: o.target.id, at: now.toISOString(),
@@ -731,7 +755,7 @@ export async function profile(store: BestieStore, user: { id: string }, now: Dat
   const member = await store.getMember(user.id)
   if (!member) return { outcome: 'notJoined' }
   const cut = new Date(now.getTime() - PROFILE_LAYER_DAYS * DAY_MS).toISOString()
-  const [nowIn, thenIn] = await Promise.all([store.progressInputs(member.id, null), store.progressInputs(member.id, cut)])
+  const [nowIn, thenIn, days] = await Promise.all([store.progressInputs(member.id, null), store.progressInputs(member.id, cut), store.completionDays(member.id)])
   const levels = levelsFrom(nowIn.sums, floorOf(nowIn.recorded))
   const status = statusOf(levels, nowIn.sums)
   const next = {} as Record<Pillar, number | null>
@@ -745,8 +769,49 @@ export async function profile(store: BestieStore, user: { id: string }, now: Dat
     outcome: 'profile',
     profile: {
       levels, levels30: levelsFrom(thenIn.sums, floorOf(thenIn.recorded)), points: { ...emptySums(), ...nowIn.sums },
-      nextAt: next, status: { ...status, name: statusName(status) }, moments,
+      nextAt: next, status: { ...status, name: statusName(status) }, moments, streak: streakOf(days, dubaiDate(now)),
     },
+  }
+}
+
+const LINE_MEMORY_DAYS = 14
+
+/**
+ * The morning card: a line in Ren's voice picked for her (only with her personalisation Consent;
+ * otherwise the day's general line, and nothing recorded), the sunset and heat, this week's Meet up,
+ * and her Streak. A failing Meet up source never fails the card.
+ */
+export async function morning(store: BestieStore, meetUps: MeetUpSource, user: { id: string }, now: Date): Promise<MorningOutcome> {
+  const member = await store.getMember(user.id)
+  if (!member) return { outcome: 'notJoined' }
+  const today = dubaiDate(now)
+  const [signals, days, lines] = await Promise.all([store.morningSignals(member.id), store.completionDays(member.id), store.dailyLines()])
+  const streak = streakOf(days, today)
+  let line: DailyLine | null
+  if (signals.personal) {
+    const [recent, inputs] = await Promise.all([store.recentLines(member.id, addDays(today, -LINE_MEMORY_DAYS)), store.progressInputs(member.id, null)])
+    const already = recent.find((r) => r.shownOn === today)
+    const lastDoneOn = days.filter((d) => d <= today).sort().at(-1) ?? null
+    const weakest = [...PILLAR_ORDER].sort((a, b) => (inputs.sums[a] ?? 0) - (inputs.sums[b] ?? 0))[0]
+    const moment = momentOf({ today, joinedOn: signals.joinedOn, lastDoneOn, streak, lastEnergy: signals.lastCheckIn?.energy ?? null })
+    line = (already && lines.find((l) => l.id === already.lineId)) || pickLine(lines,
+      { today, personal: true, moment, goal: signals.lastCheckIn?.goal ?? null, energy: signals.lastCheckIn?.energy ?? null, weakest }, recent)
+    if (line && !already) {
+      const stored = await store.recordLine(member.id, line.id, today)
+      if (stored !== line.id) line = lines.find((l) => l.id === stored) ?? line
+    }
+  } else {
+    line = pickLine(lines, { today, personal: false, moment: 'any', goal: null, energy: null, weakest: null }, [])
+  }
+  let meetUp: MeetUpView | null = null
+  try {
+    meetUp = thisWeeksMeetUp(await meetUps.upcoming(), today)
+  } catch (e) {
+    console.log(`bestie/morning: Meet ups unavailable: ${e}`)
+  }
+  return {
+    outcome: 'morning',
+    card: { line: line ? { text: line.body, by: line.author } : null, sky: skyHint(today), meetUp, streak },
   }
 }
 
@@ -828,7 +893,15 @@ export function createMemoryPhotoStore() {
 }
 
 /** In-memory store for tests. The Catalogue defaults to the seed, with ids `cat-<slug>`. */
-export function createMemoryBestieStore(opts: { members?: { id: string; home_area: string | null }[]; catalogue?: CatalogueItem[] } = {}) {
+export function createMemoryBestieStore(opts: {
+  members?: { id: string; home_area: string | null; joinedOn?: string }[]
+  catalogue?: CatalogueItem[]
+  lines?: DailyLine[]
+  consents?: { memberId: string; purpose: string; granted: boolean; at: string }[]
+} = {}) {
+  const dailyLines = opts.lines ?? []
+  const consents = opts.consents ?? []
+  const memberLines: { memberId: string; lineId: string; shownOn: string }[] = []
   const members = new Map((opts.members ?? []).map((m) => [m.id, m]))
   const items = opts.catalogue ?? CATALOGUE_SEED.map((i) => ({ ...i, id: `cat-${i.slug}` }))
   const checkIns: CheckInRow[] = []
@@ -981,6 +1054,30 @@ export function createMemoryBestieStore(opts: { members?: { id: string; home_are
         .filter((c) => c.member_id === memberId && !c.undone_at && c.completed_at >= since)
         .map(withSuggestion)
         .sort((a, b) => (a.completed_at < b.completed_at ? 1 : -1))
+    },
+    async completionDays(memberId) {
+      return [...new Set(completions.filter((c) => c.member_id === memberId && !c.undone_at).map((c) => dubaiDate(new Date(c.completed_at))))].sort()
+    },
+    async dailyLines() {
+      return dailyLines.map((l) => ({ ...l }))
+    },
+    async recentLines(memberId, sinceDate) {
+      return memberLines.filter((r) => r.memberId === memberId && r.shownOn >= sinceDate).map(({ lineId, shownOn }) => ({ lineId, shownOn }))
+    },
+    async recordLine(memberId, lineId, shownOn) {
+      const existing = memberLines.find((r) => r.memberId === memberId && r.shownOn === shownOn)
+      if (existing) return existing.lineId
+      memberLines.push({ memberId, lineId, shownOn })
+      return lineId
+    },
+    async morningSignals(memberId) {
+      const consent = consents.filter((c) => c.memberId === memberId && c.purpose === 'personalisation').sort((a, b) => (a.at < b.at ? -1 : 1)).at(-1)
+      const last = checkIns.filter((c) => c.member_id === memberId).at(-1)
+      return {
+        joinedOn: members.get(memberId)?.joinedOn ?? '2026-01-01',
+        personal: consent?.granted ?? false,
+        lastCheckIn: last ? { energy: last.energy, goal: last.goal } : null,
+      }
     },
   }
   return store

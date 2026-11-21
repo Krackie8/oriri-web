@@ -96,6 +96,8 @@ export interface Profile {
   nextAt: Record<Pillar, number | null>
   status: StatusView
   moments: (StatusView & { at: string })[]
+  /** Her Streak (#74). Optional: a function from before #74 does not send it. */
+  streak?: StreakView
 }
 export type ProfileOutcome = { outcome: 'profile'; profile: Profile } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
 
@@ -107,6 +109,23 @@ export type CompleteOutcome =
   | { outcome: 'signedOut' }
 export type UndoOutcome = { outcome: 'planned'; plan: DayPlan; progress: Progress } | { outcome: 'gone' } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
 export type PhotoOutcome = { outcome: 'saved' } | { outcome: 'deleted' } | { outcome: 'refused'; message: string } | { outcome: 'gone' } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
+
+/** Her Streak (#74, DEC-013): days with a Completion, one free rest day a week. Never affects Levels. */
+export interface StreakView {
+  count: number
+  todayDone: boolean
+  restUsedThisWeek: boolean
+  restDayYesterday: boolean
+}
+/** Morning with Bestie (#74): a line in Ren's voice, the sky, this week's Meet up and her Streak. */
+export interface MorningCard {
+  /** `by` is 'ren' only for a line Ren wrote or approved; a drafted line shows unsigned. */
+  line: { text: string; by: 'ren' | 'bestie' } | null
+  sky: { sunset: string; hot: boolean; hint: string }
+  meetUp: { title: string; date: string; time: string | null; location: string | null; url: string | null } | null
+  streak: StreakView
+}
+export type MorningOutcome = { outcome: 'morning'; card: MorningCard } | { outcome: 'notJoined' } | { outcome: 'signedOut' }
 
 /** One Completion in her Journal. */
 export interface JournalEntry {
@@ -199,6 +218,15 @@ export function createBestie(core: Core) {
       const r = await core.request<{ entries: JournalEntry[] }>('GET', '/bestie/journal')
       if (r.ok) return { ok: true, data: { outcome: 'entries', entries: r.data.entries } }
       if (r.error.status === 401) return { ok: true, data: { outcome: 'signedOut' } }
+      return r
+    },
+
+    /** Her morning card (#74). */
+    async morning(): Promise<Result<MorningOutcome>> {
+      const r = await core.request<{ card: MorningCard }>('GET', '/bestie/morning')
+      if (r.ok) return { ok: true, data: { outcome: 'morning', card: r.data.card } }
+      if (r.error.status === 401) return { ok: true, data: { outcome: 'signedOut' } }
+      if (r.error.status === 409) return { ok: true, data: { outcome: 'notJoined' } }
       return r
     },
 

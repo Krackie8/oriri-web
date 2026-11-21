@@ -18,3 +18,13 @@ describe('the Postgres store binds JSON the way postgres.js expects', () => {
     expect(src).toContain('jsonb_to_recordset(${tx.json(ch.newLevelRows)}::jsonb)')
   })
 })
+
+describe('the morning store reads dates as text (#74)', () => {
+  // postgres.js turns a date column into a JS Date; the module compares YYYY-MM-DD strings.
+  it('every date it reads comes through to_char', () => {
+    expect(src).toContain("to_char(completed_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as day")
+    expect(src).toContain("to_char(show_on, 'YYYY-MM-DD') as show_on")
+    expect(src).toContain("to_char(shown_on, 'YYYY-MM-DD') as shown_on")
+    expect(src).toContain("to_char(m.created_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as joined_on")
+  })
+})

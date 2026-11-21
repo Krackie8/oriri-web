@@ -233,6 +233,15 @@ describe('the prototype scenario "Trying to game it"', () => {
     for (const [k, s] of p.suggestions.entries()) await done(store, s.id, plus(dubai('20:00'), k), 'A slow morning')
     expect(store.completions.some((c) => c.flagged)).toBe(false)
   })
+
+  it('a Wrap-up soon after a late Check-in is still flagged when she could not have done it all (#74)', async () => {
+    const { store } = setup()
+    const t = dubai('19:00')
+    const p = await plan(store, LOW30, t)
+    // Her 30 minutes hold all four: the earliest she could finish them back to back is 19:30.
+    for (const [k, s] of p.suggestions.entries()) await done(store, s.id, plus(t, 30 + k), 'ok')
+    expect(store.completions.every((c) => c.flagged && c.flag_reason === 'too_fast')).toBe(true)
+  })
 })
 
 describe('learning from Completions', () => {
