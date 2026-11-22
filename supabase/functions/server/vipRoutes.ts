@@ -8,18 +8,17 @@
 import type { Hono } from 'npm:hono';
 import type { Context } from 'npm:hono';
 import * as vipHelpers from './vipHelpers.ts';
+import { hasAdminRole, type RolesReader } from './adminRole.ts';
 
-// Helper: Check if user is admin
-const isAdmin = (user: any): boolean => {
-  return user.user_metadata?.role === 'admin' || 
-         user.email === 'admin@oriri.com' ||
-         user.user_metadata?.isAdmin === true;
-};
+// Admin = a live admin row in public.user_roles (adminRole.ts). Never user_metadata, which a Member can edit.
+let rolesDb: RolesReader | null = null;
+const isAdmin = (user: any): Promise<boolean> => (rolesDb ? hasAdminRole(rolesDb, user?.id) : Promise.resolve(false));
 
 /**
  * Register all VIP routes on the Hono app
  */
 export function registerVipRoutes(app: any, supabase: any) {
+  rolesDb = supabase as RolesReader;
   console.log('🔧 Registering VIP Subscription API endpoints...');
 
   // ============================================
@@ -100,7 +99,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      const canView = user.id === requestedUserId || isAdmin(user);
+      const canView = user.id === requestedUserId || (await isAdmin(user));
       if (!canView) {
         return c.json({ success: false, error: 'You can only view your own subscription' }, 403);
       }
@@ -150,7 +149,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      const canUpdate = user.id === userId || isAdmin(user);
+      const canUpdate = user.id === userId || (await isAdmin(user));
       if (!canUpdate) {
         return c.json({ success: false, error: 'You can only update your own subscription' }, 403);
       }
@@ -225,7 +224,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      const canCancel = user.id === userId || isAdmin(user);
+      const canCancel = user.id === userId || (await isAdmin(user));
       if (!canCancel) {
         return c.json({ success: false, error: 'You can only cancel your own subscription' }, 403);
       }
@@ -378,7 +377,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -428,7 +427,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -462,7 +461,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -510,7 +509,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -545,7 +544,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         if (accessToken) {
           const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
           if (user && !userError) {
-            userIsAdmin = isAdmin(user);
+            userIsAdmin = (await isAdmin(user));
           }
         }
       } catch (error) {
@@ -579,7 +578,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -625,7 +624,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 
@@ -663,7 +662,7 @@ export function registerVipRoutes(app: any, supabase: any) {
         return c.json({ success: false, error: 'Unauthorized. Please log in.' }, 401);
       }
 
-      if (!isAdmin(user)) {
+      if (!(await isAdmin(user))) {
         return c.json({ success: false, error: 'Admin access required' }, 403);
       }
 

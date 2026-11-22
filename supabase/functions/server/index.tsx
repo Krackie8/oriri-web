@@ -5,6 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as kv from './kv_store.tsx'
 import * as vipHelpers from './vipHelpers.ts'
 import { registerVipRoutes } from './vipRoutes.ts'
+import { hasAdminRole, adminUserIds, type RolesReader } from './adminRole.ts'
 import postgres from 'npm:postgres@3.4.5'
 import { join as joinOriri, memberOf, type JoinStore } from './join.ts'
 import {
@@ -46,6 +47,10 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
+
+/** Admin = a live admin row in public.user_roles, read as service_role. Never user_metadata (adminRole.ts). */
+const isAdminUser = (userId: string | null | undefined) =>
+  hasAdminRole(supabase as unknown as RolesReader, userId);
 
 // Initialize storage on server startup (optional - only if storage is needed)
 const initializeStorage = async () => {
@@ -162,16 +167,15 @@ app.get('/make-server-a278ea32/user-info', async (c) => {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
 
+    const isAdmin = await isAdminUser(user.id);
     return c.json({
       success: true,
       user: {
         id: user.id,
         email: user.email,
         metadata: user.user_metadata,
-        role: user.user_metadata?.role,
-        isAdmin: user.user_metadata?.role === 'admin' || 
-                user.email === 'admin@oriri.com' ||
-                user.user_metadata?.isAdmin === true
+        role: isAdmin ? 'admin' : 'user',
+        isAdmin
       }
     });
   } catch (error) {
@@ -180,40 +184,7 @@ app.get('/make-server-a278ea32/user-info', async (c) => {
   }
 });
 
-// Make current user admin (temporary route for testing)
-app.post('/make-server-a278ea32/make-admin', async (c) => {
-  try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-    
-    if (!user || userError) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
-
-    // Update user metadata to include admin role
-    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
-      user_metadata: {
-        ...user.user_metadata,
-        role: 'admin',
-        isAdmin: true
-      }
-    });
-
-    if (updateError) {
-      console.log('Error making user admin:', updateError);
-      return c.json({ success: false, error: 'Failed to update user role' }, 500);
-    }
-
-    return c.json({
-      success: true,
-      message: 'User successfully made admin',
-      userId: user.id
-    });
-  } catch (error) {
-    console.log('Error in make-admin route:', error);
-    return c.json({ success: false, error: 'Failed to make user admin' }, 500);
-  }
-});
+// make-admin: removed (security). Admin roles live in public.user_roles and are not granted over HTTP.
 
 // Health check route - Unified endpoint with detailed diagnostics
 app.get('/make-server-a278ea32/health', async (c) => {
@@ -507,9 +478,7 @@ app.put('/make-server-a278ea32/live-sessions/:sessionId', async (c) => {
     console.log('User metadata:', user.user_metadata);
 
     // Check if user is admin (has admin role or specific admin email)
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     // Verify user has permission to edit (must be the host OR an admin)
     const canEdit = existingSession.hostId === user.id || isAdmin;
@@ -587,9 +556,7 @@ app.delete('/make-server-a278ea32/live-sessions/:sessionId', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     // Verify user has permission to delete (must be the host OR an admin)
     const canDelete = session.hostId === user.id || isAdmin;
@@ -842,7 +809,7 @@ app.post('/make-server-a278ea32/episodes', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     
     if (!isAdmin) {
       console.error('Non-admin user attempted to create episode:', user.email);
@@ -878,7 +845,7 @@ app.put('/make-server-a278ea32/episodes/:id', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     
     if (!isAdmin) {
       console.error('Non-admin user attempted to update episode:', user.email);
@@ -923,7 +890,7 @@ app.delete('/make-server-a278ea32/episodes/:id', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     
     if (!isAdmin) {
       console.error('Non-admin user attempted to delete episode:', user.email);
@@ -1143,233 +1110,9 @@ app.post('/make-server-a278ea32/seed-data', async (c) => {
   }
 });
 
-// Demo User Setup Route - Simplified and more robust
-app.post('/make-server-a278ea32/setup-demo-user', async (c) => {
-  try {
-    console.log('Starting demo user setup...');
-    
-    const demoUsers = [
-      { email: 'demo@oriri.com', password: 'demo123', name: 'Demo User' },
-      { email: 'test@oriri.com', password: 'test123', name: 'Test User' }
-    ];
-    
-    const results = [];
-    
-    for (const demoUser of demoUsers) {
-      try {
-        console.log(`Processing user: ${demoUser.email}`);
-        
-        // Try to create user first (will fail if exists)
-        const { data: createData, error: createError } = await supabase.auth.admin.createUser({
-          email: demoUser.email,
-          password: demoUser.password,
-          user_metadata: { 
-            name: demoUser.name,
-            role: 'user'
-          },
-          email_confirm: true
-        });
+// setup-demo-user: removed (security). It created accounts with fixed passwords, with no sign-in required.
 
-        if (!createError) {
-          // Successfully created new user
-          console.log(`Created new demo user: ${demoUser.email} - ${createData.user?.id}`);
-          results.push({
-            email: demoUser.email,
-            status: 'created',
-            userId: createData.user?.id,
-            emailConfirmed: true
-          });
-          continue;
-        }
-
-        // User might already exist, let's find and update them
-        if (createError.message.includes('already registered') || createError.message.includes('already exists')) {
-          console.log(`User already exists: ${demoUser.email}, checking confirmation status...`);
-          
-          const { data: users } = await supabase.auth.admin.listUsers();
-          const existingUser = users?.users?.find(user => user.email === demoUser.email);
-          
-          if (existingUser) {
-            // Update user to ensure email is confirmed and password is correct
-            console.log(`Updating existing user: ${demoUser.email}`);
-            const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
-              password: demoUser.password,
-              email_confirm: true,
-              user_metadata: {
-                name: demoUser.name,
-                role: 'user'
-              }
-            });
-            
-            if (updateError) {
-              console.log(`Error updating user ${demoUser.email}:`, updateError);
-            }
-            
-            results.push({
-              email: demoUser.email,
-              status: 'updated',
-              userId: existingUser.id,
-              emailConfirmed: true
-            });
-          } else {
-            results.push({
-              email: demoUser.email,
-              status: 'error',
-              error: 'User exists but could not be found'
-            });
-          }
-        } else {
-          console.log(`Unexpected error creating user ${demoUser.email}:`, createError);
-          results.push({
-            email: demoUser.email,
-            status: 'error',
-            error: createError.message
-          });
-        }
-      } catch (userError) {
-        console.log(`Exception processing user ${demoUser.email}:`, userError);
-        results.push({
-          email: demoUser.email,
-          status: 'error',
-          error: 'Processing exception'
-        });
-      }
-    }
-    
-    console.log('Demo user setup completed:', results);
-    
-    return c.json({ 
-      success: true, 
-      message: 'Demo user setup completed',
-      results: results,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.log('Fatal error in demo user setup:', error);
-    return c.json({ 
-      success: false, 
-      error: 'Failed to setup demo users',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500);
-  }
-});
-
-// Admin Registration Route
-app.post('/make-server-a278ea32/setup-admin', async (c) => {
-  try {
-    console.log('Starting admin setup...');
-    
-    const body = await c.req.json();
-    const { email, password, name } = body;
-    
-    // Default admin if no parameters provided
-    const adminEmail = email || 'admin@oriri.com';
-    const adminPassword = password || 'admin123';
-    const adminName = name || 'Oriri Admin';
-    
-    console.log(`Setting up admin user: ${adminEmail}`);
-    
-    try {
-      // First, try to find if user already exists
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find(user => user.email === adminEmail);
-      
-      if (existingUser) {
-        console.log(`Admin user already exists: ${adminEmail}, updating with admin privileges...`);
-        
-        // Update existing user to have admin privileges
-        const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
-          password: adminPassword,
-          email_confirm: true,
-          user_metadata: {
-            name: adminName,
-            role: 'admin',
-            isCreator: true
-          }
-        });
-        
-        if (updateError) {
-          console.log(`Error updating admin user:`, updateError);
-          return c.json({
-            success: false,
-            error: 'Failed to update existing admin user',
-            details: updateError.message
-          }, 500);
-        }
-        
-        console.log(`Successfully updated admin user: ${adminEmail}`);
-        return c.json({
-          success: true,
-          message: 'Admin user updated successfully',
-          admin: {
-            email: adminEmail,
-            userId: existingUser.id,
-            name: adminName,
-            status: 'updated'
-          },
-          credentials: {
-            email: adminEmail,
-            password: adminPassword
-          }
-        });
-      } else {
-        // Create new admin user
-        console.log(`Creating new admin user: ${adminEmail}`);
-        const { data: createData, error: createError } = await supabase.auth.admin.createUser({
-          email: adminEmail,
-          password: adminPassword,
-          user_metadata: { 
-            name: adminName,
-            role: 'admin',
-            isCreator: true
-          },
-          email_confirm: true
-        });
-
-        if (createError) {
-          console.log(`Error creating admin user:`, createError);
-          return c.json({
-            success: false,
-            error: 'Failed to create admin user',
-            details: createError.message
-          }, 500);
-        }
-
-        console.log(`Successfully created admin user: ${adminEmail} - ${createData.user?.id}`);
-        return c.json({
-          success: true,
-          message: 'Admin user created successfully',
-          admin: {
-            email: adminEmail,
-            userId: createData.user?.id,
-            name: adminName,
-            status: 'created'
-          },
-          credentials: {
-            email: adminEmail,
-            password: adminPassword
-          }
-        });
-      }
-      
-    } catch (userError) {
-      console.log(`Exception processing admin user:`, userError);
-      return c.json({
-        success: false,
-        error: 'Exception during admin creation',
-        details: userError instanceof Error ? userError.message : 'Unknown error'
-      }, 500);
-    }
-    
-  } catch (error) {
-    console.log('Fatal error in admin setup:', error);
-    return c.json({ 
-      success: false, 
-      error: 'Failed to setup admin user',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500);
-  }
-});
+// setup-admin: removed (security). With no sign-in it set the password and admin flags of any account by email.
 
 // Admin Check Route
 app.get('/make-server-a278ea32/check-admin', async (c) => {
@@ -1381,14 +1124,15 @@ app.get('/make-server-a278ea32/check-admin', async (c) => {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
 
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
-    const isCreator = user.user_metadata?.isCreator === true;
-    
+    const isAdmin = await isAdminUser(user.id);
+    // There is no separate creator role in user_roles: an admin is the creator.
+    const isCreator = isAdmin;
+
     return c.json({
       success: true,
       isAdmin,
       isCreator,
-      userRole: user.user_metadata?.role || 'user',
+      userRole: isAdmin ? 'admin' : 'user',
       userData: {
         id: user.id,
         email: user.email,
@@ -1412,35 +1156,34 @@ app.get('/make-server-a278ea32/list-admins', async (c) => {
     }
 
     // Check if requesting user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     
     if (!isAdmin) {
       return c.json({ success: false, error: 'Forbidden - Admin access required' }, 403);
     }
 
-    // List all users
-    const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
-    
-    if (listError) {
-      throw new Error(listError.message);
+    // Admins only: the full user list is no longer returned.
+    const ids = await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0]);
+    const admins = [];
+    for (const id of ids) {
+      const { data } = await supabase.auth.admin.getUserById(id);
+      const u = data?.user;
+      if (!u) continue;
+      admins.push({
+        id: u.id,
+        email: u.email || '',
+        name: u.user_metadata?.name || u.email || 'Unknown',
+        role: 'admin',
+        isCreator: true,
+        createdAt: u.created_at,
+        lastSignIn: u.last_sign_in_at
+      });
     }
-
-    const allUsers = usersData.users.map(u => ({
-      id: u.id,
-      email: u.email || '',
-      name: u.user_metadata?.name || u.email || 'Unknown',
-      role: u.user_metadata?.role || 'user',
-      isCreator: u.user_metadata?.isCreator === true,
-      createdAt: u.created_at,
-      lastSignIn: u.last_sign_in_at
-    }));
-
-    const admins = allUsers.filter(u => u.role === 'admin' || u.isCreator);
 
     return c.json({
       success: true,
       admins,
-      allUsers
+      allUsers: admins
     });
   } catch (error) {
     console.log('Error listing admins:', error);
@@ -1448,192 +1191,11 @@ app.get('/make-server-a278ea32/list-admins', async (c) => {
   }
 });
 
-// Create New Admin (Admin Only)
-app.post('/make-server-a278ea32/create-admin', async (c) => {
-  try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-    
-    if (!user || userError) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
+// create-admin: removed (security). Admin roles live in public.user_roles and are not granted over HTTP.
 
-    // Check if requesting user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
-    
-    if (!isAdmin) {
-      return c.json({ success: false, error: 'Forbidden - Admin access required' }, 403);
-    }
+// promote-to-admin: removed (security). Admin roles live in public.user_roles and are not granted over HTTP.
 
-    const body = await c.req.json();
-    const { email, password, name } = body;
-
-    if (!email || !password || !name) {
-      return c.json({ success: false, error: 'Email, password, and name are required' }, 400);
-    }
-
-    // Create new admin user
-    const { data: createData, error: createError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      user_metadata: { 
-        name,
-        role: 'admin',
-        isCreator: false
-      },
-      email_confirm: true
-    });
-
-    if (createError) {
-      throw new Error(createError.message);
-    }
-
-    console.log(`Admin created new admin user: ${email} by ${user.email}`);
-
-    return c.json({
-      success: true,
-      message: 'Admin user created successfully',
-      admin: {
-        id: createData.user?.id,
-        email,
-        name
-      }
-    });
-  } catch (error) {
-    console.log('Error creating admin:', error);
-    return c.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to create admin' 
-    }, 500);
-  }
-});
-
-// Promote User to Admin (Admin Only)
-app.post('/make-server-a278ea32/promote-to-admin', async (c) => {
-  try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-    
-    if (!user || userError) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
-
-    // Check if requesting user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
-    
-    if (!isAdmin) {
-      return c.json({ success: false, error: 'Forbidden - Admin access required' }, 403);
-    }
-
-    const body = await c.req.json();
-    const { email } = body;
-
-    if (!email) {
-      return c.json({ success: false, error: 'Email is required' }, 400);
-    }
-
-    // Find user by email
-    const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
-    
-    if (listError) {
-      throw new Error(listError.message);
-    }
-
-    const targetUser = usersData.users.find(u => u.email === email);
-
-    if (!targetUser) {
-      return c.json({ success: false, error: 'User not found' }, 404);
-    }
-
-    // Update user to admin
-    const { error: updateError } = await supabase.auth.admin.updateUserById(targetUser.id, {
-      user_metadata: {
-        ...targetUser.user_metadata,
-        role: 'admin'
-      }
-    });
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    console.log(`User promoted to admin: ${email} by ${user.email}`);
-
-    return c.json({
-      success: true,
-      message: 'User promoted to admin successfully'
-    });
-  } catch (error) {
-    console.log('Error promoting user:', error);
-    return c.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to promote user' 
-    }, 500);
-  }
-});
-
-// Revoke Admin Access (Admin Only)
-app.post('/make-server-a278ea32/revoke-admin', async (c) => {
-  try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-    
-    if (!user || userError) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401);
-    }
-
-    // Check if requesting user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
-    
-    if (!isAdmin) {
-      return c.json({ success: false, error: 'Forbidden - Admin access required' }, 403);
-    }
-
-    const body = await c.req.json();
-    const { userId } = body;
-
-    if (!userId) {
-      return c.json({ success: false, error: 'User ID is required' }, 400);
-    }
-
-    // Get target user
-    const { data: targetUser, error: getUserError } = await supabase.auth.admin.getUserById(userId);
-
-    if (getUserError || !targetUser) {
-      return c.json({ success: false, error: 'User not found' }, 404);
-    }
-
-    // Prevent revoking creator's access
-    if (targetUser.user.user_metadata?.isCreator === true) {
-      return c.json({ success: false, error: 'Cannot revoke creator access' }, 403);
-    }
-
-    // Update user to regular user
-    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...targetUser.user.user_metadata,
-        role: 'user'
-      }
-    });
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    console.log(`Admin access revoked for: ${targetUser.user.email} by ${user.email}`);
-
-    return c.json({
-      success: true,
-      message: 'Admin access revoked successfully'
-    });
-  } catch (error) {
-    console.log('Error revoking admin:', error);
-    return c.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to revoke admin access' 
-    }, 500);
-  }
-});
+// revoke-admin: removed (security). Admin roles live in public.user_roles and are not granted over HTTP.
 
 
 // Episode Like Route
@@ -2271,7 +1833,7 @@ app.get('/make-server-a278ea32/podcast/sync-all', async (c) => {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
 
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -2450,7 +2012,7 @@ app.get('/make-server-a278ea32/podcast/sync/:platform', async (c) => {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
 
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3073,7 +2635,7 @@ app.post('/make-server-a278ea32/admin/episodes', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3144,9 +2706,7 @@ app.get('/make-server-a278ea32/episodes/exclusive', async (c) => {
 
     // Check if user has VIP access (you can implement your VIP logic here)
     // For now, we'll allow all authenticated users to see exclusive content
-    const isVip = user.user_metadata?.vipStatus === 'active' || 
-                  user.user_metadata?.role === 'admin' || 
-                  user.user_metadata?.isCreator;
+    const isVip = user.user_metadata?.vipStatus === 'active' || await isAdminUser(user.id);
 
     if (!isVip) {
       return c.json({ success: false, error: 'VIP membership required' }, 403);
@@ -3184,7 +2744,7 @@ app.put('/make-server-a278ea32/admin/episodes/:id', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3238,7 +2798,7 @@ app.delete('/make-server-a278ea32/admin/episodes/:id', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3303,7 +2863,7 @@ app.post('/make-server-a278ea32/live-sessions', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3345,7 +2905,7 @@ app.put('/make-server-a278ea32/live-sessions/:id', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3411,7 +2971,7 @@ app.delete('/make-server-a278ea32/live-sessions/:id', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3547,7 +3107,7 @@ app.post('/make-server-a278ea32/chat/:sessionId/:messageId/moderate', async (c) 
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3645,7 +3205,7 @@ app.post('/make-server-a278ea32/upload-live-session-image', async (c) => {
     }
 
     // Check if user is admin/creator
-    const isAdmin = user.user_metadata?.role === 'admin' || user.user_metadata?.isCreator;
+    const isAdmin = await isAdminUser(user.id);
     if (!isAdmin) {
       return c.json({ success: false, error: 'Admin access required' }, 403);
     }
@@ -3742,17 +3302,8 @@ app.post('/make-server-a278ea32/upload-live-session-image', async (c) => {
 // COMMUNITY ENDPOINTS
 // ===============================
 
-// Helper function to check if user is admin
-const isAdmin = (user: any) => {
-  return user.user_metadata?.role === 'admin' || 
-         user.email === 'admin@oriri.com' ||
-         user.user_metadata?.isAdmin === true;
-};
-
-// Helper function to check if user is creator
-const isCreator = (user: any) => {
-  return isAdmin(user) || user.user_metadata?.isCreator === true;
-};
+// Creator = admin (public.user_roles). Never user_metadata, which a Member can edit.
+const isCreator = (user: any) => isAdminUser(user?.id);
 
 // Helper function to generate community analytics
 const generateCommunityAnalytics = async () => {
@@ -4005,7 +3556,7 @@ app.post('/make-server-a278ea32/community/posts', async (c) => {
       authorName: body.authorName || user.user_metadata?.name || user.email,
       authorAvatar: userProfile.avatar || user.user_metadata?.avatar_url || `https://ui-avatars.io/api/?name=${encodeURIComponent(body.authorName || user.email)}&background=random`,
       authorBadges: body.authorBadges || userProfile.badges || [],
-      isCreator: body.isCreator !== undefined ? body.isCreator : isCreator(user),
+      isCreator: await isCreator(user),
       isVip: body.isVip !== undefined ? body.isVip : (user.user_metadata?.subscription === 'vip'),
       content: body.content,
       mediaUrls: body.mediaUrls || [],
@@ -4878,7 +4429,7 @@ app.post('/make-server-a278ea32/push/send', async (c) => {
     const accessToken = c.req.header('Authorization')?.split(' ')[1];
     if (!accessToken) return c.json({ success: false, error: 'Unauthorized' }, 401);
     const { data: { user } } = await supabase.auth.getUser(accessToken);
-    const isAdmin = user?.user_metadata?.role === 'admin' || user?.user_metadata?.isCreator === true;
+    const isAdmin = await isAdminUser(user?.id);
     if (!isAdmin) return c.json({ success: false, error: 'Forbidden' }, 403);
 
     const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -4943,8 +4494,8 @@ async function socialUser(c: any): Promise<any | null> {
   return user;
 }
 
-function socialIsAdmin(user: any): boolean {
-  return user?.user_metadata?.role === 'admin' || user?.user_metadata?.isCreator === true;
+function socialIsAdmin(user: any): Promise<boolean> {
+  return isAdminUser(user?.id);
 }
 
 /**
@@ -4992,7 +4543,7 @@ app.put('/make-server-a278ea32/social/config', async (c) => {
   try {
     const user = await socialUser(c);
     if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
-    if (!socialIsAdmin(user)) {
+    if (!(await socialIsAdmin(user))) {
       return c.json({ success: false, error: 'Admin access required to edit social config' }, 403);
     }
 
@@ -5048,7 +4599,7 @@ app.get('/make-server-a278ea32/social/stats', async (c) => {
   try {
     const user = await socialUser(c);
     if (!user) return c.json({ success: false, error: 'Unauthorized' }, 401);
-    if (!socialIsAdmin(user)) {
+    if (!(await socialIsAdmin(user))) {
       return c.json({ success: false, error: 'Admin access required to view social stats' }, 403);
     }
 
@@ -5116,7 +4667,7 @@ app.post('/make-server-a278ea32/community/posts', async (c) => {
     const postId = `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Determine user role and badges
-    const isCreator = user.user_metadata?.isCreator === true || user.user_metadata?.role === 'admin';
+    const isCreator = await isAdminUser(user.id);
     const isVip = user.user_metadata?.vipStatus === 'active' || user.user_metadata?.isVip === true;
     
     const authorBadges = [];
@@ -5277,9 +4828,7 @@ app.post('/make-server-a278ea32/community/posts/:postId/approve', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     if (!isAdmin) {
       return c.json({ success: false, error: 'Only admins can approve posts' }, 403);
@@ -5324,9 +4873,7 @@ app.post('/make-server-a278ea32/community/posts/:postId/reject', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     if (!isAdmin) {
       return c.json({ success: false, error: 'Only admins can reject posts' }, 403);
@@ -5371,9 +4918,7 @@ app.post('/make-server-a278ea32/community/posts/:postId/pin', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     if (!isAdmin) {
       return c.json({ success: false, error: 'Only admins can pin posts' }, 403);
@@ -5416,9 +4961,7 @@ app.post('/make-server-a278ea32/community/posts/:postId/lock', async (c) => {
     }
 
     // Check if user is admin
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
 
     if (!isAdmin) {
       return c.json({ success: false, error: 'Only admins can lock posts' }, 403);
@@ -5470,9 +5013,7 @@ app.delete('/make-server-a278ea32/community/posts/:postId', async (c) => {
     }
     
     // Check if user is admin or the post author
-    const isAdmin = user.user_metadata?.role === 'admin' || 
-                   user.email === 'admin@oriri.com' ||
-                   user.user_metadata?.isAdmin === true;
+    const isAdmin = await isAdminUser(user.id);
     const isAuthor = post.authorId === user.id;
     
     if (!isAdmin && !isAuthor) {
@@ -5977,23 +5518,14 @@ const verifyAdminAccess = async (c: any) => {
 
   console.log('[verifyAdminAccess] User authenticated:', user.email);
   console.log('[verifyAdminAccess] User ID:', user.id);
-  console.log('[verifyAdminAccess] User metadata:', user.user_metadata);
   
-  // Check multiple admin indicators to match the logic used throughout the app
-  const isAdmin = user.user_metadata?.role === 'admin' || 
-                  user.email === 'admin@oriri.com' ||
-                  user.user_metadata?.isAdmin === true ||
-                  user.user_metadata?.isCreator === true;
+  // Admin = a live admin row in public.user_roles (adminRole.ts).
+  const isAdmin = await isAdminUser(user.id);
   
   console.log('[verifyAdminAccess] Is admin:', isAdmin);
   
   if (!isAdmin) {
-    console.error('[verifyAdminAccess] User is not admin:', {
-      email: user.email,
-      role: user.user_metadata?.role,
-      isAdmin: user.user_metadata?.isAdmin,
-      isCreator: user.user_metadata?.isCreator
-    });
+    console.error('[verifyAdminAccess] User is not admin:', user.id);
     return { authorized: false, error: 'Forbidden - Admin access required', status: 403 };
   }
 
@@ -6028,9 +5560,8 @@ app.get('/make-server-a278ea32/admin/analytics/overview', async (c) => {
     // Get all chat messages (approximate engagement)
     const allMessages = await kv.getByPrefix('chat_message_') || [];
     
-    // Get all admins (from Supabase Auth)
-    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers();
-    const adminCount = users?.filter(u => u.user_metadata?.role === 'admin' || u.user_metadata?.isCreator).length || 0;
+    // Admins come from public.user_roles.
+    const adminCount = (await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0])).size;
     
     // ✅ NEW: Get all episode engagement metrics
     const allEpisodeMetrics = await kv.getByPrefix('episode_metrics_') || [];
@@ -7964,7 +7495,7 @@ function wellnessPick(body: any, fields: string[]) {
 async function wellnessAdmin(c: any) {
   const user = await socialUser(c);
   if (!user) return { error: c.json({ success: false, error: 'Unauthorized' }, 401) };
-  if (!socialIsAdmin(user)) return { error: c.json({ success: false, error: 'Admin access required' }, 403) };
+  if (!(await socialIsAdmin(user))) return { error: c.json({ success: false, error: 'Admin access required' }, 403) };
   return { user };
 }
 
