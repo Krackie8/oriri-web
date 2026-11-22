@@ -1,7 +1,8 @@
 /**
  * The first bank of daily lines for Morning with Bestie (#74, DEC-013), drafted in Ren's voice from
  * her own writing (her Stepsisters write-ups, Directory notes and Tea for Two episode descriptions).
- * Every line is author 'bestie': it shows unsigned until Ren approves it. The review file
+ * Every line is seeded author 'bestie' (unsigned). Ren approved all 64 on 2026-11-22, and a later
+ * migration signs them 'ren' (RENS_APPROVALS below). The review file
  * docs/lines/2026-11-ren-voice.md lists the same lines; a test keeps the two equal.
  *
  * Tags narrow who a line fits: a null tag fits everyone. `pillar` means her weakest Pillar.
@@ -122,4 +123,30 @@ const lit = (v: string | null) => (v === null ? 'null' : `'${v}'`)
 export function linesSeedSql(): string {
   const rows = DAILY_LINES_SEED.map((l) => `  ($l$${l.body}$l$, 'bestie', ${lit(l.goal)}, ${lit(l.pillar)}, ${lit(l.energy)}, '${l.moment}')`)
   return `insert into bestie.daily_lines (body, author, goal, pillar, energy, moment) values\n${rows.join(',\n')}\non conflict (body) do nothing;\n`
+}
+
+/**
+ * The lines Ren approved as hers, signed "· Ren" from then on. 2026-11-22: all 64 of the first bank,
+ * unchanged. A line added to the seed later is not in this list until she approves it.
+ */
+export const RENS_APPROVALS: readonly string[] = DAILY_LINES_SEED.slice(0, 64).map((l) => l.body)
+
+/** The approval migration's statement. It aborts unless it signs exactly the approved bodies, all still unsigned. */
+export function renApprovalSql(bodies: readonly string[] = RENS_APPROVALS): string {
+  const list = bodies.map((b) => `      $l$${b}$l$`).join(',\n')
+  return [
+    'do $approve$',
+    'declare signed int;',
+    'begin',
+    "  update bestie.daily_lines set author = 'ren'",
+    "    where author = 'bestie' and body in (",
+    list,
+    '    );',
+    '  get diagnostics signed = row_count;',
+    `  if signed <> ${bodies.length} then`,
+    `    raise exception 'expected to sign ${bodies.length} lines as Ren, signed %', signed;`,
+    '  end if;',
+    'end $approve$;',
+    '',
+  ].join('\n')
 }

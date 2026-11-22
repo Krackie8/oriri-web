@@ -44,9 +44,9 @@ insert into bestie.completions (id, member_id, suggestion_id, proof_kind, comple
   -- Undone on the 27th: never counts.
   ('00000000-0000-0000-0000-0000000008f3', '00000000-0000-0000-0000-0000000008a1', '00000000-0000-0000-0000-0000000008e3', 'reach_out', '2026-11-27T08:00:00Z', '2026-11-27T08:05:00Z');
 
--- 1. The line checks accept a full row, then refuse what breaks them. The seed is in, unsigned.
+-- 1. The line checks accept a full row, then refuse what breaks them. The seed is in, signed Ren (2026-11-22).
 set role service_role;
-select pg_temp.check((select count(*) >= 60 and bool_and(author = 'bestie') from bestie.daily_lines), 'the seed bank is in: 60 or more lines, all unsigned drafts');
+select pg_temp.check((select count(*) >= 60 and bool_and(author = 'ren') from bestie.daily_lines), 'the seed bank is in: 60 or more lines, all approved by Ren');
 insert into bestie.daily_lines (id, body, author, goal, pillar, energy, moment, show_on) values
   ('00000000-0000-0000-0000-000000000801', 'Small and steady still counts.', 'bestie', null, null, null, 'any', null),
   ('00000000-0000-0000-0000-000000000802', 'Three days in a row. Look at you.', 'ren', 'glow', 'move', 'high', 'streak', null),
@@ -123,4 +123,8 @@ rollback;
 delete from auth.users where id = '00000000-0000-0000-0000-0000000008a1';
 select pg_temp.check(not exists (select 1 from bestie.member_lines where member_id = '00000000-0000-0000-0000-0000000008a1'), 'her lines shown go with her account');
 select pg_temp.check(exists (select 1 from bestie.member_lines where member_id = '00000000-0000-0000-0000-0000000008a2'), 'another Member''s stay');
+
+-- 9. Ren's approval (2026-11-22): the 64 seeded lines are hers; the fixtures above stay as written.
+select pg_temp.check((select count(*) from bestie.daily_lines where author = 'ren' and id::text not like '00000000-%') = 64, 'the 64 approved lines are signed Ren');
+select pg_temp.check(not exists (select 1 from bestie.daily_lines where author = 'bestie' and id::text not like '00000000-%'), 'no seeded line is left unsigned');
 \echo MORNING LINES TESTS PASSED
