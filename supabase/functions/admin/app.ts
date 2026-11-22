@@ -6,9 +6,11 @@
  */
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
+import { requestSignInLink, redirectToFor, SIGN_IN_FLOOR_MS, type SignInLinkDeps } from './signInLink.ts'
 
-// Placeholders: Tasks 2 to 4 replace these with the real dependency shapes.
-export interface SignInLinkDeps {}
+export type { SignInLinkDeps }
+
+// Placeholders: Tasks 3 and 4 replace these with the real dependency shapes.
 export interface OverviewDeps {}
 export interface MeDeps {}
 
@@ -59,12 +61,28 @@ export async function requireAdmin(
   return { user }
 }
 
-export function createAdminApp(_deps: AdminDeps): Hono {
+export function createAdminApp(deps: AdminDeps): Hono {
   const app = new Hono()
   app.use('*', cors({
     origin: (origin) => allowedOrigin(origin),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
   }))
+
+  // Always the same 200, after a fixed floor, whatever happened. Reveals nothing about who is an admin.
+  app.post('/admin/sign-in-link', async (c) => {
+    const now = deps.signInLink.now ?? Date.now
+    const start = now()
+    const body = await c.req.json().catch(() => null)
+    const email = body && typeof body === 'object' ? (body as { email?: unknown }).email : undefined
+    const ip =
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('cf-connecting-ip')?.trim() || 'unknown'
+    await requestSignInLink(email, ip, {
+      ...deps.signInLink,
+      redirectTo: redirectToFor(c.req.header('Origin')),
+    })
+    await deps.signInLink.sleep(Math.max(0, SIGN_IN_FLOOR_MS - (now() - start)))
+    return c.json({ success: true, data: { sent: true } })
+  })
   return app
 }
