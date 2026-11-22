@@ -73,7 +73,17 @@ const app = createAdminApp({
     },
   },
   overview: {},
-  me: {},
+  me: {
+    displayName: async (id) => {
+      try {
+        const { data, error } = await supabase.from('profiles').select('display_name').eq('id', id).maybeSingle()
+        if (error) return null
+        return (data as { display_name?: string | null } | null)?.display_name ?? null
+      } catch {
+        return null
+      }
+    },
+  },
 })
 
 Deno.serve(app.fetch)

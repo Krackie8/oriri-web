@@ -6,13 +6,15 @@
  */
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
+import { meHandler, type MeDeps } from './me.ts'
 import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
 
 export type { SignInLinkDeps }
 
-// Placeholders: Tasks 3 and 4 replace these with the real dependency shapes.
+export type { MeDeps }
+
+// Placeholder: Task 4 replaces this with the real dependency shape.
 export interface OverviewDeps {}
-export interface MeDeps {}
 
 export interface AdminUser {
   id: string
@@ -90,5 +92,6 @@ export function createAdminApp(deps: AdminDeps): Hono {
     await deps.signInLink.sleep(Math.max(0, SIGN_IN_FLOOR_MS - (now() - start)))
     return c.json({ success: true, data: { sent: true } })
   })
+  app.get('/admin/me', (c) => meHandler(c, deps))
   return app
 }
