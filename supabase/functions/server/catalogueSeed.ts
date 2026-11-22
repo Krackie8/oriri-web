@@ -21,16 +21,22 @@ export interface SeedItem {
   outdoor: boolean
   light: boolean
   fallback: boolean
+  /** Done at a place (a studio, spa or restaurant) rather than anywhere. Never true for a light version. */
+  needsPlace: boolean
+  intensity: 1 | 2 | 3
+  timeNote: string | null
+  endsOn: string | null
 }
 
 const ALL: Energy[] = ['low', 'steady', 'high']
 const item = (
   slug: string, title: string, pillars: Pillar[], kind: string, costAed: number, durationMin: number,
-  energyFit: Energy[], goals: Goal[], extra: Partial<Pick<SeedItem, 'outdoor' | 'light' | 'fallback'>> = {},
-): SeedItem => ({ slug, title, pillars, kind, costAed, durationMin, energyFit, goals, outdoor: false, light: false, fallback: false, ...extra })
+  energyFit: Energy[], goals: Goal[], extra: Partial<Pick<SeedItem, 'outdoor' | 'light' | 'fallback' | 'timeNote' | 'endsOn'>> = {},
+): SeedItem => ({ slug, title, pillars, kind, costAed, durationMin, energyFit, goals, outdoor: false, light: false, fallback: false,
+  needsPlace: false, intensity: 1, timeNote: null, endsOn: null, ...extra })
 const light = { light: true, fallback: true }
 
-export const CATALOGUE_SEED: SeedItem[] = [
+const RAW_SEED: SeedItem[] = [
   // Move
   item('matpilates', 'Mat Pilates flow', ['move'], 'workout', 0, 15, ['steady', 'high'], ['focus', 'glow']),
   item('runclub', 'Community run club', ['move', 'meet_up'], 'workout', 0, 45, ['steady', 'high'], ['connect', 'focus'], { outdoor: true }),
@@ -66,6 +72,14 @@ export const CATALOGUE_SEED: SeedItem[] = [
   item('reachout', "Message a Stepsister you haven't seen", ['meet_up'], 'reach_out', 0, 5, ALL, ['connect'], light),
 ]
 
+const NEEDS_PLACE = new Set('hotclass reformer strength swim yoga sauna soundbath massage spaday bowl brunch lunch juice'.split(' '))
+const INTENSITY: Record<string, 2 | 3> = { hotclass: 3, strength: 3, runclub: 3, matpilates: 2, reformer: 2, swim: 2 }
+
+/** The seed with its activity fields: which items need a place, and how hard each one is. */
+export const CATALOGUE_SEED: SeedItem[] = RAW_SEED.map((i) => ({
+  ...i, needsPlace: NEEDS_PLACE.has(i.slug), intensity: INTENSITY[i.slug] ?? 1,
+}))
+
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`
 const arr = (xs: string[], type: string) => `${q(`{${xs.join(',')}}`)}::bestie.${type}[]`
 
@@ -78,5 +92,26 @@ export function catalogueSeedSql(): string {
   (slug, title, pillars, kind, cost_aed, duration_min, energy_fit, goals, is_outdoor, is_light, is_fallback)
 values
 ${rows.join(',\n')};
+`
+}
+
+/** The shape migration's updates: each seed item's activity fields, in seed order, then a drift guard. */
+export function catalogueShapeSql(): string {
+  const updates = CATALOGUE_SEED.map((i) =>
+    `update bestie.catalogue_items set needs_place = ${i.needsPlace}, intensity = ${i.intensity} where slug = ${q(i.slug)};
+`).join('')
+  const slugs = `array[${CATALOGUE_SEED.map((i) => q(i.slug)).join(', ')}]`
+  const needing = CATALOGUE_SEED.filter((i) => i.needsPlace).length
+  return `${updates}
+-- Abort (and roll the whole migration back) if the table has drifted from the seed.
+do $$
+begin
+  if (select count(*) from bestie.catalogue_items where slug = any(${slugs})) <> ${CATALOGUE_SEED.length} then
+    raise exception 'catalogue shape: expected ${CATALOGUE_SEED.length} seed items, found a different number';
+  end if;
+  if (select count(*) from bestie.catalogue_items where needs_place) <> ${needing} then
+    raise exception 'catalogue shape: expected ${needing} items needing a place, found a different number';
+  end if;
+end $$;
 `
 }

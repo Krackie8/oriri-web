@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { CATALOGUE_SEED, catalogueSeedSql } from './catalogueSeed'
+import { CATALOGUE_SEED, catalogueSeedSql, catalogueShapeSql } from './catalogueSeed'
 import { checkIn, createMemoryBestieStore, BESTIE_ENGINE_VERSION, PILLARS } from './bestie'
 import { OPTION_KEYS } from '../../../src/app/wellness/bestie/engine'
 
@@ -10,6 +10,34 @@ const migration = () => {
   if (!f) throw new Error('no catalogue seed migration')
   return readFileSync(`supabase/migrations/${f}`, 'utf8').replace(/\r\n/g, '\n')
 }
+
+const shapeMigration = () => {
+  const f = readdirSync('supabase/migrations').find((n) => n.endsWith('_bestie_catalogue_shape.sql'))
+  if (!f) throw new Error('no catalogue shape migration')
+  return readFileSync(`supabase/migrations/${f}`, 'utf8').replace(/\r\n/g, '\n')
+}
+
+describe('the Catalogue seed activity fields', () => {
+  it("the shape migration sets exactly the seed's activity fields", () => {
+    const body = shapeMigration().replace(/^(--[^\n]*\n)+/, '')
+    expect(body).toBe(catalogueShapeSql())
+  })
+
+  it('13 items need a place, and no light version does', () => {
+    const want = 'hotclass reformer strength swim yoga sauna soundbath massage spaday bowl brunch lunch juice'.split(' ').sort()
+    expect(CATALOGUE_SEED.filter((i) => i.needsPlace).map((i) => i.slug).sort()).toEqual(want)
+    expect(CATALOGUE_SEED.some((i) => i.light && i.needsPlace)).toBe(false)
+  })
+
+  it('intensity is 3 for hotclass, strength and runclub, 2 for matpilates, reformer and swim, else 1', () => {
+    for (const i of CATALOGUE_SEED) {
+      const want = ['hotclass', 'strength', 'runclub'].includes(i.slug) ? 3 : ['matpilates', 'reformer', 'swim'].includes(i.slug) ? 2 : 1
+      expect([i.slug, i.intensity]).toEqual([i.slug, want])
+      expect(i.timeNote).toBeNull()
+      expect(i.endsOn).toBeNull()
+    }
+  })
+})
 
 describe('the Catalogue seed', () => {
   it('the migration inserts exactly the seed rows', () => {

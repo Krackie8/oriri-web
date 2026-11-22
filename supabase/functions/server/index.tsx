@@ -8538,13 +8538,18 @@ const postgresBestieStore: BestieStore = {
       await tx`set local role service_role`;
       return tx`
         select id, coalesce(slug, id::text) as slug, title, pillars::text[] as pillars, kind, cost_aed::float8 as cost_aed,
-               duration_min, energy_fit::text[] as energy_fit, goals::text[] as goals, is_outdoor, is_light, is_fallback
-        from bestie.catalogue_items where city = ${city} and retired_at is null order by slug`;
+               duration_min, energy_fit::text[] as energy_fit, goals::text[] as goals, is_outdoor, is_light, is_fallback,
+               needs_place, intensity, time_note, to_char(ends_on, 'YYYY-MM-DD') as ends_on
+        from bestie.catalogue_items
+        where city = ${city} and retired_at is null and status = 'approved'
+          and (ends_on is null or ends_on >= (now() at time zone 'Asia/Dubai')::date)
+        order by slug`;
     });
     return rows.map((r: any) => ({
       id: r.id, slug: r.slug, title: r.title, pillars: r.pillars, kind: r.kind, costAed: r.cost_aed,
       durationMin: r.duration_min, energyFit: r.energy_fit, goals: r.goals, outdoor: r.is_outdoor,
       light: r.is_light, fallback: r.is_fallback,
+      needsPlace: r.needs_place, intensity: r.intensity, timeNote: r.time_note, endsOn: r.ends_on,
     }));
   },
   async activePlan(memberId, planDate) {

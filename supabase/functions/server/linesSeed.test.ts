@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { DAILY_LINES_SEED, linesSeedSql, lineProblems, type SeedLine } from './linesSeed'
+import { DAILY_LINES_SEED, RENS_APPROVALS, linesSeedSql, lineProblems, renApprovalSql, type SeedLine } from './linesSeed'
 import { LINE_MOMENTS } from './morning'
 import { PILLARS } from './bestie'
 
@@ -43,6 +43,17 @@ describe('the daily lines seed (DEC-013)', () => {
   it('emoji on at most 40% of the lines', () => {
     const withEmoji = DAILY_LINES_SEED.filter((l) => /[✨🌸]$/u.test(l.body)).length
     expect(withEmoji / DAILY_LINES_SEED.length).toBeLessThanOrEqual(0.4)
+  })
+
+  it("Ren's approvals: the migration signs exactly the approved bodies, and each is a seed line", () => {
+    const f = readdirSync('supabase/migrations').find((n) => n.endsWith('_bestie_daily_lines_ren_approved.sql'))
+    if (!f) throw new Error('no Ren approval migration')
+    const sql = readFileSync(`supabase/migrations/${f}`, 'utf8').replace(/\r\n/g, '\n')
+    expect(sql).toContain(renApprovalSql())
+    const seed = new Set(DAILY_LINES_SEED.map((l) => l.body))
+    expect(RENS_APPROVALS.filter((b) => !seed.has(b))).toEqual([])
+    expect(new Set(RENS_APPROVALS).size).toBe(RENS_APPROVALS.length)
+    expect(RENS_APPROVALS.length).toBe(64)
   })
 
   it('the rules catch what they guard (red-proof)', () => {

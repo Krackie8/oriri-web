@@ -1,5 +1,7 @@
 # Daily lines in Ren's voice: review with Ren (#74, DEC-013)
 
+> **2026-11-22: Ren approved all 64 lines, unchanged.** They're hers now (`author = 'ren'`, signed "· Ren") by migration `20261122000100_bestie_daily_lines_ren_approved.sql`.
+
 These are the first lines Morning with Bestie shows. They're **drafts in Ren's voice**, so each one shows **without a name** until Ren approves it. Once she does, it becomes hers and is signed "· Ren".
 
 **How to review:**
