@@ -1,9 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import postgres from 'npm:postgres@3.4.5'
-import { hasAdminRole, type RolesReader } from '../server/adminRole.ts'
+import { hasAdminRole, adminUserIds, type RolesReader } from '../server/adminRole.ts'
 import * as kv from '../server/kv_store.tsx'
 import { createAdminApp } from './app.ts'
 import { createKvLimiter } from './signInLink.ts'
+import { OVERVIEW_SQL } from './overviewQuery.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -72,7 +73,15 @@ const app = createAdminApp({
       else p.catch(() => {})
     },
   },
-  overview: {},
+  overview: {
+    kv,
+    adminIds: async () => [...(await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0]))],
+    // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
+    queryRow: async (ids, emails) => {
+      const rows = await db().begin('read only', (tx: any) => tx.unsafe(OVERVIEW_SQL, [ids, emails]))
+      return rows[0] as Record<string, unknown> | undefined
+    },
+  },
   me: {
     displayName: async (id) => {
       try {

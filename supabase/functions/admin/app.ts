@@ -7,14 +7,14 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { meHandler, type MeDeps } from './me.ts'
+import { loadOverview, type OverviewDeps } from './overview.ts'
 import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
 
 export type { SignInLinkDeps }
 
 export type { MeDeps }
 
-// Placeholder: Task 4 replaces this with the real dependency shape.
-export interface OverviewDeps {}
+export type { OverviewDeps }
 
 export interface AdminUser {
   id: string
@@ -93,5 +93,15 @@ export function createAdminApp(deps: AdminDeps): Hono {
     return c.json({ success: true, data: { sent: true } })
   })
   app.get('/admin/me', (c) => meHandler(c, deps))
+  app.get('/admin/overview', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    try {
+      return c.json({ success: true, data: await loadOverview(deps.overview) })
+    } catch {
+      console.error('admin/overview: failed')
+      return c.json({ success: false, error: 'Could not load the overview' }, 500)
+    }
+  })
   return app
 }

@@ -11,7 +11,11 @@ function fakeDeps(): AdminDeps {
     userFromToken: async (token) =>
       token === 'member-token' ? MEMBER : token === 'admin-token' ? ADMIN : null,
     signInLink: {} as AdminDeps["signInLink"],
-    overview: {},
+    overview: {
+      kv: { get: async () => null, getByPrefix: async () => [] },
+      adminIds: async () => [],
+      queryRow: async () => ({ members_total: '2', members_week: '1', members_month: '2', active_week: '1', member_emails: null }),
+    },
     me: {},
   }
 }
@@ -21,6 +25,39 @@ describe('createAdminApp', () => {
     const app = createAdminApp(fakeDeps())
     const res = await app.request('/admin/nope')
     expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /admin/overview', () => {
+  const get = (token?: string) =>
+    createAdminApp(fakeDeps()).request('/admin/overview', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+
+  it('no token is 401', async () => {
+    expect((await get()).status).toBe(401)
+  })
+  it('a Member is 403', async () => {
+    expect((await get('member-token')).status).toBe(403)
+  })
+  it('an admin gets the Overview', async () => {
+    const res = await get('admin-token')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      success: true,
+      data: {
+        visits: { week: 0, weekBefore: 0, month: 0, monthBefore: 0 },
+        members: { total: 2, week: 1, month: 2 },
+        activeWeek: 1,
+        leads: 0,
+        paying: null,
+      },
+    })
+  })
+  it('a failure answers 500 with no detail', async () => {
+    const deps = fakeDeps()
+    deps.overview.queryRow = async () => { throw new Error('secret db detail') }
+    const res = await createAdminApp(deps).request('/admin/overview', { headers: { Authorization: 'Bearer admin-token' } })
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(await res.json())).not.toContain('secret')
   })
 })
 
