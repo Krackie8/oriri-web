@@ -1,10 +1,21 @@
 name: Deploy edge function
 # Run by hand only (Actions tab -> "Deploy edge function" -> Run workflow).
-# Deploys supabase/functions/server from the chosen branch as make-server-a278ea32,
-# the name the site calls. Changing it affects the live site, so run it only
-# after the change has been approved in the project thread.
+# Pick the function:
+#   make-server-a278ea32 (default): deploys supabase/functions/server from the chosen branch as
+#     make-server-a278ea32, the name the site calls. Changing it affects the live site, so run it
+#     only after the change has been approved in the project thread.
+#   admin: deploys supabase/functions/admin as admin (the Admin API). It never touches the live
+#     Member function.
 on:
   workflow_dispatch:
+    inputs:
+      function:
+        description: Which function to deploy
+        type: choice
+        options:
+          - make-server-a278ea32
+          - admin
+        default: make-server-a278ea32
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,17 +23,23 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: lemtlurqzmjdahbhunhz
-      FUNCTION: make-server-a278ea32
+      FUNCTION: ${{ inputs.function || 'make-server-a278ea32' }}
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
           version: latest
       - name: Stage the function under its deployed name
+        if: env.FUNCTION == 'make-server-a278ea32'
         run: |
           mkdir -p supabase/functions/$FUNCTION
           cp -r supabase/functions/server/. supabase/functions/$FUNCTION/
           # The Supabase CLI now looks for index.ts; ours is index.tsx, so point to it.
           [ -f supabase/functions/$FUNCTION/index.ts ] || echo "import './index.tsx';" > supabase/functions/$FUNCTION/index.ts
+      - name: Prepare the admin function in place
+        if: env.FUNCTION == 'admin'
+        run: |
+          # Deployed in place, not copied: it imports ../server/adminRole.ts by relative path.
+          [ -f supabase/functions/admin/index.ts ] || echo "import './index.tsx';" > supabase/functions/admin/index.ts
       - name: Deploy
         run: supabase functions deploy $FUNCTION --project-ref $PROJECT_REF --use-api --yes

@@ -1,0 +1,70 @@
+/**
+ * The Admin function's app. Kept free of Deno-only things (Deno.env, Deno.serve) so vitest can
+ * import it under Node; index.tsx builds the real deps and serves it.
+ *
+ * Every route lives under /admin/ because the function is named `admin`.
+ */
+import { Hono, type Context } from 'hono'
+import { cors } from 'hono/cors'
+
+// Placeholders: Tasks 2 to 4 replace these with the real dependency shapes.
+export interface SignInLinkDeps {}
+export interface OverviewDeps {}
+export interface MeDeps {}
+
+export interface AdminUser {
+  id: string
+  email: string
+}
+
+export interface AdminDeps {
+  isAdmin(userId: string): Promise<boolean>
+  userFromToken(token: string | undefined): Promise<AdminUser | null>
+  signInLink: SignInLinkDeps
+  overview: OverviewDeps
+  me: MeDeps
+}
+
+const ALLOWED_ORIGINS = [
+  'https://oriri.me',
+  'https://www.oriri.me',
+  'https://new.oriri.me', // staging
+]
+
+/** Same allow-list as the Member function `server`. */
+function allowedOrigin(origin: string | undefined): string | null {
+  if (!origin) return ALLOWED_ORIGINS[0]
+  if (ALLOWED_ORIGINS.includes(origin)) return origin
+  try {
+    const { protocol, hostname } = new URL(origin)
+    if (
+      protocol === 'https:' &&
+      (hostname === 'figma.com' || /\.(figma\.com|figma\.site|figma\.net|figmausercontent\.com)$/.test(hostname))
+    ) return origin
+  } catch { /* malformed origin */ }
+  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return origin
+  return null
+}
+
+/** 401 with no signed-in user, 403 for a signed-in non-admin, otherwise the user. */
+export async function requireAdmin(
+  c: Context,
+  deps: Pick<AdminDeps, 'isAdmin' | 'userFromToken'>,
+): Promise<{ user: AdminUser } | Response> {
+  const header = c.req.header('Authorization')
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() || undefined : undefined
+  const user = token ? await deps.userFromToken(token) : null
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  if (!(await deps.isAdmin(user.id))) return c.json({ error: 'Forbidden' }, 403)
+  return { user }
+}
+
+export function createAdminApp(_deps: AdminDeps): Hono {
+  const app = new Hono()
+  app.use('*', cors({
+    origin: (origin) => allowedOrigin(origin),
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  }))
+  return app
+}
