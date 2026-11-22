@@ -19,7 +19,8 @@ const shapeMigration = () => {
 
 describe('the Catalogue seed activity fields', () => {
   it("the shape migration sets exactly the seed's activity fields", () => {
-    expect(shapeMigration()).toContain(catalogueShapeSql())
+    const body = shapeMigration().replace(/^(--[^\n]*\n)+/, '')
+    expect(body).toBe(catalogueShapeSql())
   })
 
   it('13 items need a place, and no light version does', () => {

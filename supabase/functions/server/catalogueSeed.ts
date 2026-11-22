@@ -31,7 +31,7 @@ export interface SeedItem {
 const ALL: Energy[] = ['low', 'steady', 'high']
 const item = (
   slug: string, title: string, pillars: Pillar[], kind: string, costAed: number, durationMin: number,
-  energyFit: Energy[], goals: Goal[], extra: Partial<Pick<SeedItem, 'outdoor' | 'light' | 'fallback' | 'needsPlace' | 'intensity' | 'timeNote' | 'endsOn'>> = {},
+  energyFit: Energy[], goals: Goal[], extra: Partial<Pick<SeedItem, 'outdoor' | 'light' | 'fallback' | 'timeNote' | 'endsOn'>> = {},
 ): SeedItem => ({ slug, title, pillars, kind, costAed, durationMin, energyFit, goals, outdoor: false, light: false, fallback: false,
   needsPlace: false, intensity: 1, timeNote: null, endsOn: null, ...extra })
 const light = { light: true, fallback: true }
@@ -95,9 +95,23 @@ ${rows.join(',\n')};
 `
 }
 
-/** The shape migration's updates: each seed item's activity fields, in seed order. */
+/** The shape migration's updates: each seed item's activity fields, in seed order, then a drift guard. */
 export function catalogueShapeSql(): string {
-  return CATALOGUE_SEED.map((i) =>
+  const updates = CATALOGUE_SEED.map((i) =>
     `update bestie.catalogue_items set needs_place = ${i.needsPlace}, intensity = ${i.intensity} where slug = ${q(i.slug)};
 `).join('')
+  const slugs = `array[${CATALOGUE_SEED.map((i) => q(i.slug)).join(', ')}]`
+  const needing = CATALOGUE_SEED.filter((i) => i.needsPlace).length
+  return `${updates}
+-- Abort (and roll the whole migration back) if the table has drifted from the seed.
+do $$
+begin
+  if (select count(*) from bestie.catalogue_items where slug = any(${slugs})) <> ${CATALOGUE_SEED.length} then
+    raise exception 'catalogue shape: expected ${CATALOGUE_SEED.length} seed items, found a different number';
+  end if;
+  if (select count(*) from bestie.catalogue_items where needs_place) <> ${needing} then
+    raise exception 'catalogue shape: expected ${needing} items needing a place, found a different number';
+  end if;
+end $$;
+`
 }

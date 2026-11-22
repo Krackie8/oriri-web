@@ -10,6 +10,10 @@ import { describe, expect, it } from 'vitest'
 const src = readFileSync(new URL('./index.tsx', import.meta.url), 'utf8')
 
 describe('the Postgres store binds JSON the way postgres.js expects', () => {
+  it('the Catalogue read gates on approval and end date', () => {
+    expect(src).toContain("status = 'approved'")
+    expect(src).toContain("ends_on >= (now() at time zone 'Asia/Dubai')::date")
+  })
   it('never casts a JSON.stringify(...) parameter to jsonb', () => {
     expect(src.match(/\$\{JSON\.stringify\([^}]*\)\}::jsonb/g) ?? []).toEqual([])
   })

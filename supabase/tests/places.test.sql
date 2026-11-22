@@ -7,9 +7,13 @@ begin
   if ok is not true then raise exception 'FAIL: %', what; end if;
   raise notice 'ok - %', what;
 end $$;
-create or replace function pg_temp.raises(stmt text, what text) returns void language plpgsql as $$
+create or replace function pg_temp.raises(stmt text, state text, what text) returns void language plpgsql as $$
 begin
-  begin execute stmt; exception when others then raise notice 'ok - % (%)', what, sqlerrm; return; end;
+  begin execute stmt;
+  exception when others then
+    if sqlstate <> state then raise exception 'FAIL: % (wanted %, got %: %)', what, state, sqlstate, sqlerrm; end if;
+    raise notice 'ok - % (%)', what, sqlerrm; return;
+  end;
   raise exception 'FAIL: % (statement succeeded: %)', what, stmt;
 end $$;
 set client_min_messages = notice;
@@ -35,40 +39,55 @@ insert into bestie.places (id, source, source_id, name, lat, lng)
 select pg_temp.check((select status = 'pending' and fetched_at is not null and created_at is not null from bestie.places where id = '00000000-0000-0000-0000-0000000009e2'), 'a new place defaults to pending and gets timestamps');
 delete from bestie.places where id = '00000000-0000-0000-0000-0000000009e2';
 
-select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('google', 'g-123', 'Dupe', 25, 55)$q$, 'the same (source, source_id) twice is refused');
+select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('google', 'g-123', 'Dupe', 25, 55)$q$, '23505', 'the same (source, source_id) twice is refused');
 select pg_temp.raises($q$insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed)
-  select '00000000-0000-0000-0000-0000000009e1', id, 100, 50 from bestie.catalogue_items where slug = 'walk'$q$, 'a max price below the min is refused');
+  select '00000000-0000-0000-0000-0000000009e1', id, 100, 50 from bestie.catalogue_items where slug = 'walk'$q$, '23514', 'a max price below the min is refused');
 select pg_temp.raises($q$insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed)
-  select '00000000-0000-0000-0000-0000000009e1', id, -1, 50 from bestie.catalogue_items where slug = 'walk'$q$, 'a negative min price is refused');
-select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng, status) values ('google', 'g-9', 'X', 25, 55, 'live')$q$, 'an unknown status is refused');
-select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('tripadvisor', 't-1', 'X', 25, 55)$q$, 'an unknown source is refused');
-select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('manual', 'm-1', '   ', 25, 55)$q$, 'a blank name is refused');
-select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('manual', 'm-2', 'X', 91, 55)$q$, 'a latitude out of range is refused');
+  select '00000000-0000-0000-0000-0000000009e1', id, -1, 50 from bestie.catalogue_items where slug = 'walk'$q$, '23514', 'a negative min price is refused');
+select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng, status) values ('google', 'g-9', 'X', 25, 55, 'live')$q$, '23514', 'an unknown status is refused');
+select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('tripadvisor', 't-1', 'X', 25, 55)$q$, '23514', 'an unknown source is refused');
+select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('manual', 'm-1', '   ', 25, 55)$q$, '23514', 'a blank name is refused');
+select pg_temp.raises($q$insert into bestie.places (source, source_id, name, lat, lng) values ('manual', 'm-2', 'X', 91, 55)$q$, '23514', 'a latitude out of range is refused');
 
 insert into bestie.content_items (id, catalogue_item_id, source, source_id, title, url)
   values ('00000000-0000-0000-0000-0000000009f1', '00000000-0000-0000-0000-0000000009b1', 'youtube', 'yt-1', 'Wheel basics', 'https://example.test/v');
 select pg_temp.check((select screen = 'held' and tags = '{}' from bestie.content_items where id = '00000000-0000-0000-0000-0000000009f1'), 'a content item defaults to held with no tags');
 select pg_temp.raises($q$insert into bestie.content_items (catalogue_item_id, source, source_id, title, url)
-  values ('00000000-0000-0000-0000-0000000009b1', 'youtube', 'yt-1', 'Dupe', 'https://example.test/d')$q$, 'the same content (source, source_id) twice is refused');
+  values ('00000000-0000-0000-0000-0000000009b1', 'youtube', 'yt-1', 'Dupe', 'https://example.test/d')$q$, '23505', 'the same content (source, source_id) twice is refused');
 select pg_temp.raises($q$insert into bestie.content_items (catalogue_item_id, source, source_id, title, url, screen)
-  values ('00000000-0000-0000-0000-0000000009b1', 'youtube', 'yt-2', 'X', 'https://example.test/x', 'maybe')$q$, 'an unknown screen is refused');
+  values ('00000000-0000-0000-0000-0000000009b1', 'youtube', 'yt-2', 'X', 'https://example.test/x', 'maybe')$q$, '23514', 'an unknown screen is refused');
 
 -- Defaults on a freshly inserted catalogue item (the seed rows are tuned by a later migration).
 select pg_temp.check((select needs_place = false and intensity = 1 and time_note is null and ends_on is null and place_id is null
   from bestie.catalogue_items where id = '00000000-0000-0000-0000-0000000009b1'), 'a new catalogue item defaults to needs_place false, intensity 1');
-select pg_temp.raises($q$update bestie.catalogue_items set intensity = 4 where id = '00000000-0000-0000-0000-0000000009b1'$q$, 'intensity above 3 is refused');
-select pg_temp.raises($q$update bestie.catalogue_items set time_note = repeat('a', 61) where id = '00000000-0000-0000-0000-0000000009b1'$q$, 'a time note over 60 characters is refused');
+select pg_temp.raises($q$update bestie.catalogue_items set intensity = 4 where id = '00000000-0000-0000-0000-0000000009b1'$q$, '23514', 'intensity above 3 is refused');
+select pg_temp.raises($q$update bestie.catalogue_items set time_note = repeat('a', 61) where id = '00000000-0000-0000-0000-0000000009b1'$q$, '23514', 'a time note over 60 characters is refused');
+select pg_temp.check((select status = 'approved' from bestie.catalogue_items where id = '00000000-0000-0000-0000-0000000009b1'), 'a new catalogue item defaults to approved');
+select pg_temp.raises($q$update bestie.catalogue_items set status = 'live' where id = '00000000-0000-0000-0000-0000000009b1'$q$, '23514', 'an unknown catalogue status is refused');
+select pg_temp.check((select fetched_at is not null and updated_at is not null from bestie.content_items where id = '00000000-0000-0000-0000-0000000009f1'), 'a content item gets fetched_at and updated_at');
+select pg_temp.check((select count(*) from pg_indexes where schemaname = 'bestie' and indexname in ('suggestions_content_item_idx', 'catalogue_items_place_idx')) = 2, 'both new foreign-key indexes exist');
+
+-- The store read: approved, and not past its end date (Dubai time).
+insert into bestie.catalogue_items (title, pillars, kind, status) values ('Pending thing', '{mindset}', 'class', 'pending');
+insert into bestie.catalogue_items (title, pillars, kind, ends_on) values ('Ended yesterday', '{mindset}', 'class', (now() at time zone 'Asia/Dubai')::date - 1);
+insert into bestie.catalogue_items (title, pillars, kind, ends_on) values ('Ends today', '{mindset}', 'class', (now() at time zone 'Asia/Dubai')::date);
+select pg_temp.check((select count(*) from bestie.catalogue_items where slug is not null and city = 'dubai' and retired_at is null and status = 'approved'
+  and (ends_on is null or ends_on >= (now() at time zone 'Asia/Dubai')::date)) = 29, 'the store read returns the 29 seed rows');
+select pg_temp.check(not exists (select 1 from bestie.catalogue_items where city = 'dubai' and retired_at is null and status = 'approved'
+  and (ends_on is null or ends_on >= (now() at time zone 'Asia/Dubai')::date) and title in ('Pending thing', 'Ended yesterday')), 'the store read excludes a pending row and an ended one');
+select pg_temp.check(exists (select 1 from bestie.catalogue_items where city = 'dubai' and retired_at is null and status = 'approved'
+  and (ends_on is null or ends_on >= (now() at time zone 'Asia/Dubai')::date) and title = 'Ends today'), 'the store read includes a row ending today');
 reset role;
 
 -- A signed-in Member reads none of it and cannot write it.
 begin;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000009a1', true);
-select pg_temp.raises($q$select count(*) from bestie.places$q$, 'she cannot read places (no grant at all)');
+select pg_temp.raises($q$select count(*) from bestie.places$q$, '42501', 'she cannot read places (no grant at all)');
 select pg_temp.check(not has_table_privilege('bestie.places', 'select'), 'she has no select privilege on places');
-select pg_temp.raises($q$select count(*) from bestie.place_activities$q$, 'she cannot read place activities (no grant at all)');
+select pg_temp.raises($q$select count(*) from bestie.place_activities$q$, '42501', 'she cannot read place activities (no grant at all)');
 select pg_temp.check(not has_table_privilege('bestie.place_activities', 'select'), 'she has no select privilege on place activities');
-select pg_temp.raises($q$select count(*) from bestie.content_items$q$, 'she cannot read content items (no grant at all)');
+select pg_temp.raises($q$select count(*) from bestie.content_items$q$, '42501', 'she cannot read content items (no grant at all)');
 select pg_temp.check(not has_table_privilege('bestie.content_items', 'select'), 'she has no select privilege on content items');
 select pg_temp.check(not has_table_privilege('bestie.places', 'insert'), 'she cannot insert places');
 select pg_temp.check(not has_table_privilege('bestie.place_activities', 'insert'), 'she cannot insert place activities');

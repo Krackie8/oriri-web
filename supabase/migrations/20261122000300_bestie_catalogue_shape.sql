@@ -29,3 +29,14 @@ update bestie.catalogue_items set needs_place = false, intensity = 1 where slug 
 update bestie.catalogue_items set needs_place = false, intensity = 1 where slug = 'journal';
 update bestie.catalogue_items set needs_place = false, intensity = 1 where slug = 'stepsisters';
 update bestie.catalogue_items set needs_place = false, intensity = 1 where slug = 'reachout';
+
+-- Abort (and roll the whole migration back) if the table has drifted from the seed.
+do $$
+begin
+  if (select count(*) from bestie.catalogue_items where slug = any(array['matpilates', 'runclub', 'hotclass', 'reformer', 'strength', 'swim', 'stretch', 'walk', 'yoga', 'sauna', 'soundbath', 'massage', 'spaday', 'friendwalk', 'fridge', 'oats', 'glowbowl', 'bowl', 'brunch', 'lunch', 'smoothiehome', 'juice', 'teafortwo', 'podcast', 'book', 'sleep', 'journal', 'stepsisters', 'reachout'])) <> 29 then
+    raise exception 'catalogue shape: expected 29 seed items, found a different number';
+  end if;
+  if (select count(*) from bestie.catalogue_items where needs_place) <> 13 then
+    raise exception 'catalogue shape: expected 13 items needing a place, found a different number';
+  end if;
+end $$;
