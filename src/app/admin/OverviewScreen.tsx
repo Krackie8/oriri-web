@@ -38,7 +38,7 @@ export default function OverviewScreen({ state, onRetry }: Props) {
     return (
       <div role="alert">
         <p className="text-base text-wb-ink">Couldn't load the numbers. Try again.</p>
-        <button type="button" onClick={onRetry} className="mt-4 rounded-full px-6 py-2.5 text-base text-white" style={{ backgroundColor: '#C98A90' }}>
+        <button type="button" onClick={onRetry} className="mt-4 rounded-full px-6 py-2.5 text-base text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#C98A90]" style={{ backgroundColor: '#C98A90' }}>
           Try again
         </button>
       </div>

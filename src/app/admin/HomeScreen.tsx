@@ -21,19 +21,20 @@ export default function HomeScreen({ firstName, overview, onOpen }: Props) {
               key={t.key}
               type="button"
               onClick={() => onOpen(t.key)}
-              className="aspect-square rounded-2xl bg-wb-shell border border-wb-sand px-2 flex items-center justify-center text-center text-base text-wb-ink hover:border-wb-taupe transition-colors"
+              className="aspect-square rounded-2xl bg-wb-shell border border-wb-sand px-2 flex items-center justify-center text-center text-base text-wb-ink hover:border-wb-taupe transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C98A90]"
             >
               {t.label}
             </button>
           ) : (
-            <div
+            <button
               key={t.key}
-              aria-disabled="true"
+              type="button"
+              disabled
               className="aspect-square rounded-2xl bg-wb-stone border border-transparent px-2 flex flex-col items-center justify-center gap-1 text-center text-wb-taupe opacity-60 cursor-default"
             >
               <span className="text-base">{t.label}</span>
               <span className="text-sm">Coming soon</span>
-            </div>
+            </button>
           ),
         )}
       </div>

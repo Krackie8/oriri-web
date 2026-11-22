@@ -120,7 +120,7 @@ export default function SideMenu({
                 <Button
                   variant="ghost"
                   className="w-full justify-start gap-3 h-10 bg-primary/5 hover:bg-primary/10 border border-primary/20"
-                  onClick={() => handleNavigation('/admin/dashboard')}
+                  onClick={() => handleNavigation('/admin/legacy')}
                 >
                   <BarChart3 className="w-5 h-5 text-primary" />
                   <span className="text-primary font-medium">Admin Dashboard</span>
@@ -146,7 +146,7 @@ export default function SideMenu({
                 <Button
                   variant="ghost"
                   className="w-full justify-start gap-3 h-10 bg-primary/5 hover:bg-primary/10 border border-primary/20"
-                  onClick={() => handleNavigation('/admin/dashboard')}
+                  onClick={() => handleNavigation('/admin/legacy')}
                 >
                   <BarChart3 className="w-5 h-5 text-primary" />
                   <span className="text-primary font-medium">Admin Dashboard</span>

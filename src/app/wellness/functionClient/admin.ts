@@ -21,17 +21,17 @@ export interface AdminMe {
 export function createAdmin(core: Core) {
   return {
     async requestLink(email: string): Promise<Result<void>> {
-      const r = await core.request('POST', '/admin/sign-in-link', { body: { email } })
+      const r = await core.request('POST', '/sign-in-link', { body: { email } })
       return r.ok ? { ok: true, data: undefined } : r
     },
 
     async me(): Promise<Result<AdminMe>> {
-      const r = await core.request<{ data: AdminMe }>('GET', '/admin/me')
+      const r = await core.request<{ data: AdminMe }>('GET', '/me')
       return r.ok ? { ok: true, data: r.data.data } : r
     },
 
     async overview(): Promise<Result<Overview>> {
-      const r = await core.request<{ data: Overview }>('GET', '/admin/overview')
+      const r = await core.request<{ data: Overview }>('GET', '/overview')
       return r.ok ? { ok: true, data: r.data.data } : r
     },
   }

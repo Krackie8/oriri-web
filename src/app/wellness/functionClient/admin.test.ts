@@ -21,27 +21,27 @@ const overview: Overview = {
 }
 
 describe('admin.requestLink', () => {
-  it('posts the email to /admin/sign-in-link', async () => {
-    const { admin, fake } = build({ 'POST /admin/sign-in-link': reply(200, { success: true, data: { sent: true } }) })
+  it('posts the email to /sign-in-link', async () => {
+    const { admin, fake } = build({ 'POST /sign-in-link': reply(200, { success: true, data: { sent: true } }) })
     expect(await admin.requestLink('ren@example.test')).toEqual({ ok: true, data: undefined })
-    expect(fake.calls).toEqual([{ method: 'POST', path: '/admin/sign-in-link', body: { email: 'ren@example.test' }, form: undefined, token: 'user-token' }])
+    expect(fake.calls).toEqual([{ method: 'POST', path: '/sign-in-link', body: { email: 'ren@example.test' }, form: undefined, token: 'user-token' }])
   })
 
   it('passes a failure on', async () => {
-    const { admin } = build({ 'POST /admin/sign-in-link': reply(500, { success: false, error: 'x' }) })
+    const { admin } = build({ 'POST /sign-in-link': reply(500, { success: false, error: 'x' }) })
     expect((await admin.requestLink('a@example.test')).ok).toBe(false)
   })
 })
 
 describe('admin.me', () => {
-  it('reads /admin/me', async () => {
-    const { admin, fake } = build({ 'GET /admin/me': reply(200, { success: true, data: { isAdmin: true, firstName: 'Ren' } }) })
+  it('reads /me', async () => {
+    const { admin, fake } = build({ 'GET /me': reply(200, { success: true, data: { isAdmin: true, firstName: 'Ren' } }) })
     expect(await admin.me()).toEqual({ ok: true, data: { isAdmin: true, firstName: 'Ren' } })
-    expect(fake.calls[0].path).toBe('/admin/me')
+    expect(fake.calls[0].path).toBe('/me')
   })
 
   it('a 401 is a failure the screen can read', async () => {
-    const { admin } = build({ 'GET /admin/me': reply(401, { success: false, error: 'no' }) })
+    const { admin } = build({ 'GET /me': reply(401, { success: false, error: 'no' }) })
     const r = await admin.me()
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error.status).toBe(401)
@@ -49,14 +49,14 @@ describe('admin.me', () => {
 })
 
 describe('admin.overview', () => {
-  it('reads /admin/overview', async () => {
-    const { admin, fake } = build({ 'GET /admin/overview': reply(200, { success: true, data: overview }) })
+  it('reads /overview', async () => {
+    const { admin, fake } = build({ 'GET /overview': reply(200, { success: true, data: overview }) })
     expect(await admin.overview()).toEqual({ ok: true, data: overview })
-    expect(fake.calls[0].path).toBe('/admin/overview')
+    expect(fake.calls[0].path).toBe('/overview')
   })
 
   it('a 403 is a failure', async () => {
-    const { admin } = build({ 'GET /admin/overview': reply(403, { success: false, error: 'no' }) })
+    const { admin } = build({ 'GET /overview': reply(403, { success: false, error: 'no' }) })
     expect((await admin.overview()).ok).toBe(false)
   })
 })

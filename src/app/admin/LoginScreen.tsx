@@ -11,9 +11,14 @@ export default function LoginScreen() {
     if (busy || !email.trim()) return
     setBusy(true)
     // The answer is the same whoever asks, so the screen never says whether the email is on the team.
-    await adminClient.requestLink(email.trim())
-    setBusy(false)
-    setSent(true)
+    try {
+      await adminClient.requestLink(email.trim())
+    } catch {
+      /* same answer either way */
+    } finally {
+      setBusy(false)
+      setSent(true)
+    }
   }
 
   return (
@@ -24,6 +29,13 @@ export default function LoginScreen() {
         {sent ? (
           <div className="mt-10 rounded-2xl bg-wb-shell border border-wb-sand px-6 py-8" role="status">
             <p className="text-base text-wb-ink">Check your inbox. If this email is on Oriri's team, a sign-in link is on its way.</p>
+            <button
+              type="button"
+              onClick={() => setSent(false)}
+              className="mt-5 text-sm text-wb-taupe underline underline-offset-4 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C98A90]"
+            >
+              Use a different email
+            </button>
           </div>
         ) : (
           <form onSubmit={submit} className="mt-10 space-y-4">
@@ -37,12 +49,12 @@ export default function LoginScreen() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-full border border-wb-sand bg-wb-shell px-5 py-3 text-base text-wb-ink outline-none focus:border-wb-taupe"
+              className="w-full rounded-full border border-wb-sand bg-wb-shell px-5 py-3 text-base text-wb-ink outline-none focus:border-wb-taupe focus-visible:ring-2 focus-visible:ring-[#C98A90]"
             />
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-full px-6 py-3 text-base font-medium text-white disabled:opacity-60"
+              className="w-full rounded-full px-6 py-3 text-base font-medium text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#C98A90]"
               style={{ backgroundColor: '#C98A90' }}
             >
               {busy ? 'Sending…' : 'Send me a sign-in link'}

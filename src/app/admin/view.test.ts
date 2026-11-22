@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { greeting, summaryLine, trendWord } from './view'
+import { decideScreen, greeting, summaryLine, trendWord } from './view'
 import type { Overview } from '../wellness/functionClient/admin'
 
 const overview = (o: Partial<{ members: number; week: number }> = {}): Overview => ({
@@ -46,4 +46,22 @@ describe('summaryLine', () => {
   it('shortens thousands', () => expect(summaryLine(overview({ members: 248, week: 3120 }))).toBe('248 Members · 3.1k visits this week'))
   it('does not show .0', () => expect(summaryLine(overview({ week: 3000 }))).toBe('0 Members · 3k visits this week'))
   it('keeps 999 whole', () => expect(summaryLine(overview({ week: 999 }))).toBe('0 Members · 999 visits this week'))
+})
+
+describe('decideScreen', () => {
+  it('waits while the session is unknown', () => expect(decideScreen(null, 0, { kind: 'pending' })).toBe('checking'))
+  it('no session is the login, whatever the last result said', () => {
+    expect(decideScreen(false, 2, { kind: 'ok', gen: 1, isAdmin: true })).toBe('login')
+  })
+  it('a session with no answer yet is checking', () => expect(decideScreen(true, 1, { kind: 'pending' })).toBe('checking'))
+  it('an admin gets Home', () => expect(decideScreen(true, 1, { kind: 'ok', gen: 1, isAdmin: true })).toBe('home'))
+  it('a signed-in Member gets the login, not an error', () => {
+    expect(decideScreen(true, 1, { kind: 'ok', gen: 1, isAdmin: false })).toBe('login')
+  })
+  it('a 401 gets the login', () => expect(decideScreen(true, 1, { kind: 'unauthorised', gen: 1 })).toBe('login'))
+  it('any other failure gets the retry line', () => expect(decideScreen(true, 1, { kind: 'failed', gen: 1 })).toBe('retry'))
+  it('a result from an older session never shows Home', () => {
+    expect(decideScreen(true, 2, { kind: 'ok', gen: 1, isAdmin: true })).toBe('checking')
+    expect(decideScreen(true, 2, { kind: 'failed', gen: 1 })).toBe('checking')
+  })
 })
