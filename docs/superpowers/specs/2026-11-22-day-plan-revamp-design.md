@@ -20,6 +20,15 @@ Ren can't keep a real Catalogue up to date by hand. It has to fill itself.
 1. **Plans match her Check-in.** Every Suggestion she can act on is near her, the whole plan fits her time (travel included), stays within her budget and makes good use of it, leans towards her Goal and suits her energy. These are automatic checks, run over thousands of made-up Check-ins.
 2. **She completes more.** The Completion rate per Suggestion goes up compared with `bestie-3`, and the swap-and-skip rate goes down. Take a `bestie-3` baseline before anything changes. Live numbers are small, so (1) carries the weight at first.
 
+   **Baseline, 2026-11-22.** From `supabase/queries/engine_baseline.sql`, read-only on `lemtlurqzmjdahbhunhz`. It excludes the test Member, and Suggestions that were replaced or not picked.
+
+   | Engine | Suggestions | Members | Completion | Swap | Skip |
+   |---|---|---|---|---|---|
+   | `bestie-2` | 11 | 2 | 0.000 | 0.000 | 0.000 |
+   | `bestie-3` | 6 | 2 | 0.000 | 0.000 | 0.000 |
+
+   No real Member has completed, swapped or skipped a Suggestion yet: every one is still `shown`. All recorded activity so far is the test Member's. So **there is no usable before-number**. The comparison has to come from Members' first weeks on `bestie-4` against a fresh `bestie-3` sample, or from the automatic checks in (1). Re-run the query before switching engines.
+
 ## Goals
 
 - Bestie suggests **activities** (Yoga at a studio, a sound bath, a slow brunch), each with **up to 3 real places nearby** she can pick from.
