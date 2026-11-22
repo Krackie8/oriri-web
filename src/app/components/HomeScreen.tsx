@@ -977,7 +977,7 @@ export default function HomeScreen(_props: HomeScreenProps) {
       {isAdmin && (
         <button
           type="button"
-          onClick={() => navigate('/admin/dashboard?tab=calendar')}
+          onClick={() => navigate('/admin/legacy?tab=calendar')}
           className="fixed bottom-24 right-5 z-40 flex items-center gap-2 rounded-full bg-foreground py-3 pl-4 pr-5 text-sm font-medium text-background shadow-[0_12px_28px_-8px_rgba(78,59,64,0.5)] transition-transform active:scale-95"
         >
           <Plus className="h-4 w-4" /> Post

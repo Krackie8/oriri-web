@@ -155,25 +155,16 @@ function AppRoutes({
             </ErrorBoundary>
           } />
           
-          {/* Admin Dashboard - Protected - Only accessible by admin users */}
-          <Route path="/admin" element={
+          {/* Old /admin/dashboard bookmarks keep their query (?tab=...) */}
+          <Route path="/admin/dashboard" element={<DashboardRedirect />} />
+
+          {/* Old admin dashboard (the new Admin lives at /admin) - Protected - Only accessible by admin users */}
+          <Route path="/admin/legacy" element={
             <AdminProtectedRoute onShowLogin={onShowLogin}>
               <AdminDashboard />
             </AdminProtectedRoute>
           } />
-          
-          <Route path="/admin/dashboard" element={
-            <AdminProtectedRoute onShowLogin={onShowLogin}>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          } />
-          
-          <Route path="/admin/*" element={
-            <AdminProtectedRoute onShowLogin={onShowLogin}>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          } />
-          
+
           {/* OAuth callback — handles Google/Apple sign-in redirect */}
           <Route path="/auth/callback" element={<AuthCallback />} />
 
@@ -194,6 +185,11 @@ function AppRoutes({
 }
 
 // Main Router Component (no BrowserRouter wrapper since it's handled in main.tsx)
+function DashboardRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/admin/legacy${search}`} replace />;
+}
+
 export default function AppRouter(props: {
   onPlayEpisode: (episode: any) => void;
   onShowLogin: () => void;
