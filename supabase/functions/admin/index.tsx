@@ -48,7 +48,7 @@ const app = createAdminApp({
     // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
     findUserIdByEmail: async (email) => {
       const rows = await db().begin('read only', (tx: any) =>
-        tx`select id from auth.users where lower(email) = ${email}`)
+        tx`select id from auth.users where lower(email) = ${email} and deleted_at is null limit 1`)
       return (rows[0] as { id: string } | undefined)?.id ?? null
     },
     isAdmin: (id) => hasAdminRole(supabase as unknown as RolesReader, id),
@@ -66,6 +66,11 @@ const app = createAdminApp({
     limiter: createKvLimiter(kv),
     redirectTo: 'https://www.oriri.me/admin', // replaced per request by the route
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    background: (p) => {
+      const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+      if (rt) rt.waitUntil(p)
+      else p.catch(() => {})
+    },
   },
   overview: {},
   me: {},

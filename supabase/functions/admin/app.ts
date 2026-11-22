@@ -6,7 +6,7 @@
  */
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
-import { requestSignInLink, redirectToFor, SIGN_IN_FLOOR_MS, type SignInLinkDeps } from './signInLink.ts'
+import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
 
 export type { SignInLinkDeps }
 
@@ -75,12 +75,18 @@ export function createAdminApp(deps: AdminDeps): Hono {
     const start = now()
     const body = await c.req.json().catch(() => null)
     const email = body && typeof body === 'object' ? (body as { email?: unknown }).email : undefined
-    const ip =
-      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('cf-connecting-ip')?.trim() || 'unknown'
-    await requestSignInLink(email, ip, {
+    const ip = ipKey(c.req.header('x-forwarded-for'), c.req.header('cf-connecting-ip'))
+    // The work runs in the background and is bounded, so the answer time never depends on it.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const work = requestSignInLink(email, ip, {
       ...deps.signInLink,
       redirectTo: redirectToFor(c.req.header('Origin')),
     })
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGN_IN_WORK_TIMEOUT_MS)
+      ;(timer as { unref?: () => void }).unref?.()
+    })
+    deps.signInLink.background(Promise.race([work, timeout]).finally(() => clearTimeout(timer)))
     await deps.signInLink.sleep(Math.max(0, SIGN_IN_FLOOR_MS - (now() - start)))
     return c.json({ success: true, data: { sent: true } })
   })

@@ -10,7 +10,7 @@ function fakeDeps(): AdminDeps {
     isAdmin: async (id) => id === ADMIN.id,
     userFromToken: async (token) =>
       token === 'member-token' ? MEMBER : token === 'admin-token' ? ADMIN : null,
-    signInLink: {},
+    signInLink: {} as AdminDeps["signInLink"],
     overview: {},
     me: {},
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createAdminApp } from './app'
-import { requestSignInLink, createKvLimiter, redirectToFor, type SignInLinkDeps } from './signInLink'
+import { requestSignInLink, createKvLimiter, redirectToFor, ipKey, type SignInLinkDeps } from './signInLink'
 
 const ADMIN_ID = 'admin-1'
 const MEMBER_ID = 'member-1'
@@ -20,6 +20,8 @@ function memoryLimiter() {
   }
 }
 
+const pending: Promise<unknown>[] = []
+
 function deps(over: Partial<SignInLinkDeps> = {}) {
   const clock = { t: 1_000_000 }
   const d = {
@@ -31,6 +33,7 @@ function deps(over: Partial<SignInLinkDeps> = {}) {
     redirectTo: 'https://www.oriri.me/admin',
     sleep: vi.fn(async (ms: number) => { clock.t += ms }),
     now: () => clock.t,
+    background: (p: Promise<unknown>) => { pending.push(p) },
     ...over,
   }
   return { d: d as typeof d & SignInLinkDeps, clock }
@@ -91,6 +94,14 @@ describe('requestSignInLink', () => {
     expect(d.sendMail).toHaveBeenCalledTimes(10)
   })
 
+  it('unknown email and Member write no email-limiter key', async () => {
+    const keys: string[] = []
+    const { d } = deps({ limiter: { hit: async (k: string) => { keys.push(k); return true } } })
+    await requestSignInLink('nobody@example.test', '1.1.1.1', d)
+    await requestSignInLink('mem@example.test', '1.1.1.1', d)
+    expect(keys.every((k) => k.startsWith('ip:'))).toBe(true)
+  })
+
   it('makeLink or sendMail throws: still resolves', async () => {
     const a = deps({ makeLink: vi.fn(async () => { throw new Error('boom') }) })
     await expect(requestSignInLink('ren@example.test', 'ip', a.d)).resolves.toBeUndefined()
@@ -106,6 +117,16 @@ describe('redirectToFor', () => {
     expect(redirectToFor('https://evil.example.test')).toBe('https://www.oriri.me/admin')
     expect(redirectToFor('https://www.oriri.me.evil.test')).toBe('https://www.oriri.me/admin')
     expect(redirectToFor(undefined)).toBe('https://www.oriri.me/admin')
+  })
+})
+
+describe('ipKey', () => {
+  it('takes the first forwarded entry, then cf, and rejects junk', () => {
+    expect(ipKey(' 1.2.3.4 , 5.6.7.8', undefined)).toBe('1.2.3.4')
+    expect(ipKey(undefined, '2001:db8::1')).toBe('2001:db8::1')
+    expect(ipKey('evil key!', '1.1.1.1')).toBe('unknown')
+    expect(ipKey('a'.repeat(65), undefined)).toBe('unknown')
+    expect(ipKey(undefined, undefined)).toBe('unknown')
   })
 })
 
@@ -127,8 +148,11 @@ describe('createKvLimiter', () => {
 })
 
 describe('POST /admin/sign-in-link', () => {
-  async function call(email: unknown, raw?: string) {
-    const { d, clock } = deps()
+  async function call(email: unknown, raw?: string, over: Partial<SignInLinkDeps> = {}) {
+    const { d, clock } = deps(over)
+    const sleeps: number[] = []
+    const origSleep = d.sleep
+    d.sleep = async (ms: number) => { sleeps.push(ms); await origSleep(ms) }
     const app = createAdminApp({
       isAdmin: async () => false,
       userFromToken: async () => null,
@@ -142,10 +166,18 @@ describe('POST /admin/sign-in-link', () => {
       headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example.test' },
       body: raw ?? JSON.stringify({ email }),
     })
-    return { status: res.status, body: await res.text(), waited: clock.t - start, d }
+    const waitedAtAnswer = clock.t - start
+    return {
+      status: res.status,
+      body: await res.text(),
+      headers: Object.fromEntries(res.headers),
+      sleeps,
+      waitedAtAnswer,
+      d,
+    }
   }
 
-  it('unknown, Member and admin get byte-identical answers, each after >= 1200 ms', async () => {
+  it('unknown, Member and admin get byte-identical answers and headers, each after >= 1200 ms', async () => {
     const results = [
       await call('nobody@example.test'),
       await call('mem@example.test'),
@@ -155,9 +187,28 @@ describe('POST /admin/sign-in-link', () => {
     for (const r of results) {
       expect(r.status).toBe(200)
       expect(r.body).toBe('{"success":true,"data":{"sent":true}}')
-      expect(r.waited).toBeGreaterThanOrEqual(1200)
+      expect(r.headers).toEqual(results[0].headers)
+      expect(r.sleeps).toEqual([1200])
     }
+    await Promise.all(pending)
     // The link never takes its origin from the request.
     expect(results[2].d.makeLink).toHaveBeenCalledWith('ren@example.test', 'https://www.oriri.me/admin')
+  })
+
+  it('a slow or hung makeLink / sendMail does not change the answer', async () => {
+    const base = await call('nobody@example.test')
+    const slow = await call('ren@example.test', undefined, {
+      sendMail: vi.fn(async () => { await new Promise((r) => setTimeout(r, 50)) }),
+    })
+    const hung = await call('ren@example.test', undefined, {
+      makeLink: vi.fn(() => new Promise<string>(() => {})),
+    })
+    for (const r of [slow, hung]) {
+      expect(r.status).toBe(base.status)
+      expect(r.body).toBe(base.body)
+      expect(r.headers).toEqual(base.headers)
+      expect(r.sleeps).toEqual([1200])
+      expect(r.waitedAtAnswer).toBe(base.waitedAtAnswer)
+    }
   })
 })

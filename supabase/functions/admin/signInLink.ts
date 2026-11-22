@@ -11,11 +11,14 @@ export interface SignInLinkDeps {
   limiter: { hit(key: string, max: number, windowMs: number): Promise<boolean> }
   redirectTo: string
   sleep(ms: number): Promise<void>
+  /** Hands the work to the runtime so the route can answer without waiting for it. */
+  background(p: Promise<unknown>): void
   /** Clock in ms; defaults to Date.now. Injected so tests run on a fake clock. */
   now?: () => number
 }
 
 export const SIGN_IN_FLOOR_MS = 1200
+export const SIGN_IN_WORK_TIMEOUT_MS = 10_000
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_PER_EMAIL = 3
 const MAX_PER_IP = 10
@@ -37,12 +40,13 @@ export async function requestSignInLink(email: unknown, ip: string, deps: SignIn
     const clean = email.trim().toLowerCase()
     if (clean.length > 200 || !EMAIL_RE.test(clean)) return
 
-    if (!(await deps.limiter.hit(`email:${clean}`, MAX_PER_EMAIL, WINDOW_MS))) return
     if (!(await deps.limiter.hit(`ip:${ip}`, MAX_PER_IP, WINDOW_MS))) return
 
     const id = await deps.findUserIdByEmail(clean)
     if (!id) return
     if (!(await deps.isAdmin(id))) return
+    // Recorded only for admin emails, so strangers cannot fill the store with email keys.
+    if (!(await deps.limiter.hit(`email:${clean}`, MAX_PER_EMAIL, WINDOW_MS))) return
 
     const link = await deps.makeLink(clean, deps.redirectTo)
     const text =
@@ -77,4 +81,10 @@ export function createKvLimiter(
       return true
     },
   }
+}
+
+/** Client IP for the limiter key: first x-forwarded-for entry, else cf-connecting-ip; junk becomes 'unknown'. */
+export function ipKey(forwardedFor: string | undefined, cfIp: string | undefined): string {
+  const raw = (forwardedFor?.split(',')[0] ?? '').trim() || (cfIp ?? '').trim()
+  return /^[0-9A-Fa-f:.]{1,64}$/.test(raw) ? raw : 'unknown'
 }
