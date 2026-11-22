@@ -219,3 +219,23 @@ git commit -m "feat(day-plan): bestie-3 baseline: completion, swap and skip rate
 3. Apply `bestie_places`, then `bestie_catalogue_shape`.
 4. Check that live matches the twin (column lists and the 13 `needs_place` rows).
 5. Merge. Redeploying `server` isn't needed, since `bestie-3` ignores the new fields. But `catalogue()` now selects the new columns, so any later deploy of `server` from `main` must come **after** these migrations are on live, never before, or every Check-in fails.
+
+---
+
+## Carried forward (from the reviews, 2026-11-22)
+
+**For Plan 2 (engine `bestie-4`):**
+- "Nearby" is `<= NEARBY_KM` (5 km). The `NEARBY_KM` comment in `areas.ts` says "closer than"; fix the comment and add a known-value `distanceKm` check (1° of latitude ≈ 111.19 km).
+- postgres.js returns `numeric` as a string: read `lat`, `lng`, `price_min_aed`, `price_max_aed` with `::float8`, as `cost_aed` is.
+- The `(status, area)` index on `places` won't serve a 5 km radius search that crosses areas. Use a bounding-box prefilter on `lat`/`lng` (or an index for it).
+- `catalogue()` now returns only `status = 'approved'` rows with no past `ends_on`. Keep that gate in the new engine.
+
+**For Plan 3 (Saturday sweep, after the Admin scoping):**
+- Opening hours aren't stored yet. Add them once the source is chosen and its caching terms are known.
+- If the source is Google: `name`, `lat` and `lng` are `not null` on `places`, and expiring them means deleting the row, which cascades away the venue-site prices in `place_activities`. Re-check the shape against the chosen source's terms first.
+- `content_items.fetched_at` exists for refresh or expiry within each source's limit (YouTube: 30 days).
+
+**Release checks to add (Plan 1):**
+- **Before the apply:** `select defaclrole::regrole, defaclnamespace::regnamespace, defaclobjtype, defaclacl from pg_default_acl;`
+- **After the apply:** `information_schema.role_table_grants` for the three new tables. Expect only `postgres` and `service_role`.
+- **Deploy order:** `catalogue()` selects the new columns. Deploying `server` (`make-server-a278ea32`) before the migrations breaks Check-in, swap, complete and the journal.
