@@ -16,7 +16,7 @@ export interface OverviewRow {
   members_week?: unknown
   members_month?: unknown
   active_week?: unknown
-  member_emails?: string[] | null
+  non_lead_emails?: string[] | null
 }
 
 export interface OverviewKv {
@@ -76,11 +76,11 @@ export function buildOverview(input: {
   testEmails: Set<string>
 }): Overview {
   const { today, dayVisits, row, leadEmails, testEmails } = input
-  const memberEmails = new Set((row.member_emails ?? []).map((e) => String(e).trim().toLowerCase()))
+  const nonLeads = new Set((row.non_lead_emails ?? []).map((e) => String(e).trim().toLowerCase()))
   const leads = new Set<string>()
   for (const raw of leadEmails) {
     const email = String(raw ?? '').trim().toLowerCase()
-    if (!email || memberEmails.has(email) || testEmails.has(email)) continue
+    if (!email.includes('@') || nonLeads.has(email) || testEmails.has(email)) continue
     leads.add(email)
   }
   return {

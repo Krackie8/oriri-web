@@ -98,8 +98,8 @@ export function createAdminApp(deps: AdminDeps): Hono {
     if (auth instanceof Response) return auth
     try {
       return c.json({ success: true, data: await loadOverview(deps.overview) })
-    } catch {
-      console.error('admin/overview: failed')
+    } catch (err) {
+      console.error('admin/overview: failed', (err as { message?: string } | null)?.message)
       return c.json({ success: false, error: 'Could not load the overview' }, 500)
     }
   })

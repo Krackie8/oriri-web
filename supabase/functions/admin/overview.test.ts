@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildOverview, visitsForDay, loadOverview, daysBefore, type OverviewKv } from './overview'
 
-const row = { members_total: '3', members_week: 1n, members_month: 2, active_week: '1', member_emails: ['m@example.test'] }
+const row = { members_total: '3', members_week: 1n, members_month: 2, active_week: '1', non_lead_emails: ['m@example.test'] }
 const base = { today: '2026-11-22', dayVisits: {}, row, leadEmails: [], testEmails: new Set<string>() }
 
 describe('buildOverview', () => {
@@ -24,8 +24,8 @@ describe('buildOverview', () => {
     expect(o.visits.monthBefore).toBe(7)
     expect(o.visits.week).toBe(0)
   })
-  it('dedupes leads across case and padding', () => {
-    expect(buildOverview({ ...base, leadEmails: ['A@x.test', 'a@x.test ', 'b@x.test', '', 'nope'] }).leads).toBe(3)
+  it('dedupes leads across case and padding, and needs an @', () => {
+    expect(buildOverview({ ...base, leadEmails: ['A@x.test', 'a@x.test ', 'b@x.test', '', 'nope'] }).leads).toBe(2)
   })
   it('drops a lead who is a Member, and a test-flagged lead', () => {
     const o = buildOverview({
@@ -35,12 +35,20 @@ describe('buildOverview', () => {
     })
     expect(o.leads).toBe(1)
   })
+  it('drops a lead who is an admin (admin emails arrive in non_lead_emails)', () => {
+    const o = buildOverview({
+      ...base,
+      row: { ...row, non_lead_emails: ['m@example.test', 'admin@example.test'] },
+      leadEmails: ['Admin@Example.test', 'real@example.test'],
+    })
+    expect(o.leads).toBe(1)
+  })
   it('coerces counts from the driver', () => {
     expect(buildOverview(base).members).toEqual({ total: 3, week: 1, month: 2 })
     expect(buildOverview(base).activeWeek).toBe(1)
   })
-  it('gives all zeros and paying null for empty input, with null member_emails', () => {
-    const o = buildOverview({ today: '2026-11-22', dayVisits: {}, row: { member_emails: null, members_total: null, active_week: 'x' }, leadEmails: [], testEmails: new Set() })
+  it('gives all zeros and paying null for empty input, with null non_lead_emails', () => {
+    const o = buildOverview({ today: '2026-11-22', dayVisits: {}, row: { non_lead_emails: null, members_total: null, active_week: 'x' }, leadEmails: [], testEmails: new Set() })
     expect(o).toEqual({
       visits: { week: 0, weekBefore: 0, month: 0, monthBefore: 0 },
       members: { total: 0, week: 0, month: 0 },
@@ -98,7 +106,7 @@ describe('loadOverview', () => {
     const o = await loadOverview({
       kv,
       adminIds: async () => ['admin-1'],
-      queryRow: async (ids, emails) => { args = [ids, emails]; return { ...row, member_emails: ['s@example.test'] } },
+      queryRow: async (ids, emails) => { args = [ids, emails]; return { ...row, non_lead_emails: ['s@example.test'] } },
       now: () => new Date('2026-11-22T20:30:00Z'),
     })
     expect(args).toEqual([['admin-1'], ['t@example.test']])

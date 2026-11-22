@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createAdminApp, requireAdmin, type AdminDeps } from './app'
 
@@ -14,7 +14,7 @@ function fakeDeps(): AdminDeps {
     overview: {
       kv: { get: async () => null, getByPrefix: async () => [] },
       adminIds: async () => [],
-      queryRow: async () => ({ members_total: '2', members_week: '1', members_month: '2', active_week: '1', member_emails: null }),
+      queryRow: async () => ({ members_total: '2', members_week: '1', members_month: '2', active_week: '1', non_lead_emails: null }),
     },
     me: {},
   }
@@ -55,9 +55,12 @@ describe('GET /admin/overview', () => {
   it('a failure answers 500 with no detail', async () => {
     const deps = fakeDeps()
     deps.overview.queryRow = async () => { throw new Error('secret db detail') }
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await createAdminApp(deps).request('/admin/overview', { headers: { Authorization: 'Bearer admin-token' } })
     expect(res.status).toBe(500)
     expect(JSON.stringify(await res.json())).not.toContain('secret')
+    expect(spy.mock.calls.flat().join(' ')).toContain('secret db detail')
+    spy.mockRestore()
   })
 })
 
