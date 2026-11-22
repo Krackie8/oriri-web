@@ -155,6 +155,9 @@ function AppRoutes({
             </ErrorBoundary>
           } />
           
+          {/* Old /admin/dashboard bookmarks keep their query (?tab=...) */}
+          <Route path="/admin/dashboard" element={<DashboardRedirect />} />
+
           {/* Old admin dashboard (the new Admin lives at /admin) - Protected - Only accessible by admin users */}
           <Route path="/admin/legacy" element={
             <AdminProtectedRoute onShowLogin={onShowLogin}>
@@ -182,6 +185,11 @@ function AppRoutes({
 }
 
 // Main Router Component (no BrowserRouter wrapper since it's handled in main.tsx)
+function DashboardRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/admin/legacy${search}`} replace />;
+}
+
 export default function AppRouter(props: {
   onPlayEpisode: (episode: any) => void;
   onShowLogin: () => void;

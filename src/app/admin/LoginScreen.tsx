@@ -61,9 +61,6 @@ export default function LoginScreen() {
             </button>
           </form>
         )}
-        <a href="/admin/legacy" className="mt-12 inline-block text-sm text-wb-taupe underline underline-offset-4">
-          Old admin
-        </a>
       </div>
     </main>
   )
