@@ -43,6 +43,15 @@ describe('HTTP transport: host rule', () => {
   })
 })
 
+describe('HTTP transport: custom relay', () => {
+  it('uses the custom relay on oriri.me', async () => {
+    const f = stubFetch({})
+    const t = createHttpTransport({ fetch: f.fetch, hostname: 'www.oriri.me', fnBase: FN, relay: '/api/admin' })
+    await t.send({ method: 'GET', path: '/admin/me', token: 'tok' })
+    expect(f.calls.map((c) => c.url)).toEqual(['/api/admin/admin/me'])
+  })
+})
+
 describe('HTTP transport: Relay fallback', () => {
   const onOriri = (f: ReturnType<typeof stubFetch>) => createHttpTransport({ fetch: f.fetch, hostname: 'www.oriri.me', fnBase: FN })
 

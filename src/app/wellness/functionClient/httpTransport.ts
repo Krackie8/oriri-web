@@ -10,7 +10,7 @@
  */
 import type { Transport, TransportRequest, TransportResponse } from './types'
 
-const RELAY = '/api/fn'
+const DEFAULT_RELAY = '/api/fn'
 const ORIRI_HOST = /(^|\.)oriri\.me$/i
 
 export interface HttpTransportOptions {
@@ -19,9 +19,11 @@ export interface HttpTransportOptions {
   hostname: string
   /** Edge function base URL, without a trailing slash. */
   fnBase: string
+  /** Same-origin Relay prefix. Defaults to '/api/fn'. */
+  relay?: string
 }
 
-export function createHttpTransport({ fetch, hostname, fnBase }: HttpTransportOptions): Transport {
+export function createHttpTransport({ fetch, hostname, fnBase, relay = DEFAULT_RELAY }: HttpTransportOptions): Transport {
   let relayBroken = !ORIRI_HOST.test(hostname)
 
   const call = async (base: string, req: TransportRequest): Promise<Response> => {
@@ -49,7 +51,7 @@ export function createHttpTransport({ fetch, hostname, fnBase }: HttpTransportOp
       if (relayBroken) return read(await call(fnBase, req))
       let res: Response
       try {
-        res = await call(RELAY, req)
+        res = await call(relay, req)
       } catch {
         return read(await call(fnBase, req))
       }

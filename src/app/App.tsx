@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
 import WellnessSite, { isWellnessPath } from './wellness/WellnessSite';
 import AppAnalytics from './wellness/analytics/AppAnalytics';
@@ -23,6 +23,8 @@ import { useAuth } from './hooks/useAuth';
 import { useAdmin } from './hooks/useAdmin';
 import { profileView } from './wellness/profile/profileView';
 import OririLoader from './components/OririLoader';
+
+const AdminSite = lazy(() => import('./admin/AdminSite'));
 
 console.log('[App] Starting App component...');
 
@@ -75,6 +77,17 @@ function AppContent() {
   const handleGlobalError = (error: Error, errorInfo: any) => {
     DebugUtils.error('Global error caught by boundary:', error, errorInfo);
   };
+
+  // Admin (/admin only; /admin/legacy stays with the old dashboard): the team's own page, no podcast chrome.
+  if ((location.pathname.replace(/\/+$/, '') || '/') === '/admin') {
+    return (
+      <ErrorBoundary onError={handleGlobalError}>
+        <Suspense fallback={<OririLoader variant="screen" />}>
+          <AdminSite />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   if (!isReady) {
     // This should never show since isReady starts as true

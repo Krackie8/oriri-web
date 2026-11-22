@@ -155,25 +155,13 @@ function AppRoutes({
             </ErrorBoundary>
           } />
           
-          {/* Admin Dashboard - Protected - Only accessible by admin users */}
-          <Route path="/admin" element={
+          {/* Old admin dashboard (the new Admin lives at /admin) - Protected - Only accessible by admin users */}
+          <Route path="/admin/legacy" element={
             <AdminProtectedRoute onShowLogin={onShowLogin}>
               <AdminDashboard />
             </AdminProtectedRoute>
           } />
-          
-          <Route path="/admin/dashboard" element={
-            <AdminProtectedRoute onShowLogin={onShowLogin}>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          } />
-          
-          <Route path="/admin/*" element={
-            <AdminProtectedRoute onShowLogin={onShowLogin}>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          } />
-          
+
           {/* OAuth callback — handles Google/Apple sign-in redirect */}
           <Route path="/auth/callback" element={<AuthCallback />} />
 
