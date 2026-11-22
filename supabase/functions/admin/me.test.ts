@@ -32,9 +32,11 @@ const get = (app: ReturnType<typeof build>['app'], token?: string) =>
 
 describe('GET /admin/me', () => {
   it('admin gets isAdmin and first name', async () => {
-    const res = await get(build().app, 'admin-token')
+    const { app, calls } = build()
+    const res = await get(app, 'admin-token')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { isAdmin: true, firstName: 'Renee' } })
+    expect(calls).toEqual([ADMIN.id])
   })
   it('a Member gets 200 isAdmin false, and no name lookup', async () => {
     const { app, calls } = build()

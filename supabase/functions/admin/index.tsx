@@ -76,10 +76,15 @@ const app = createAdminApp({
   me: {
     displayName: async (id) => {
       try {
-        const { data, error } = await supabase.from('profiles').select('display_name').eq('id', id).maybeSingle()
-        if (error) return null
+        // user_id is the auth-user link; profiles.id is not the auth user id.
+        const { data, error } = await supabase.from('profiles').select('display_name').eq('user_id', id).maybeSingle()
+        if (error) {
+          console.error('admin/me: display name lookup failed')
+          return null
+        }
         return (data as { display_name?: string | null } | null)?.display_name ?? null
       } catch {
+        console.error('admin/me: display name lookup failed')
         return null
       }
     },
