@@ -88,4 +88,7 @@ select pg_temp.check((select places_shown = array['00000000-0000-0000-0000-00000
 delete from bestie.content_items where id = '00000000-0000-0000-0000-0000000009f1';
 select pg_temp.check((select content_item_id is null from bestie.suggestions where id = '00000000-0000-0000-0000-0000000009a9'), 'deleting a content item clears the Suggestion link only');
 reset role;
+-- Today's catalogue got its activity fields from the shape migration.
+select pg_temp.check((select count(*) from bestie.catalogue_items where needs_place) = 13, '13 catalogue items need a place');
+select pg_temp.check((select intensity = 3 from bestie.catalogue_items where slug = 'hotclass'), 'hotclass has intensity 3');
 \echo PLACES TESTS PASSED
