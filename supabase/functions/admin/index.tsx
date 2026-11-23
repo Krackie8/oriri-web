@@ -3,6 +3,7 @@ import postgres from 'npm:postgres@3.4.5'
 import { hasAdminRole, adminUserIds, type RolesReader } from '../server/adminRole.ts'
 import * as kv from '../server/kv_store.tsx'
 import { createAdminApp } from './app.ts'
+import { signedInAt } from './fresh.ts'
 import { createKvLimiter } from './signInLink.ts'
 import { OVERVIEW_SQL } from './overviewQuery.ts'
 
@@ -30,6 +31,15 @@ async function sendMail(to: string, subject: string, text: string, html: string)
     await client.send({ from: SMTP.from, to, subject, content: text, html })
   } finally {
     await client.close()
+  }
+}
+
+function decodePayload(token: string): unknown {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')))
+  } catch {
+    return null
   }
 }
 

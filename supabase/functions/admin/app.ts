@@ -19,6 +19,7 @@ export type { OverviewDeps }
 export interface AdminUser {
   id: string
   email: string
+  signedInAt: number | null
 }
 
 export interface AdminDeps {

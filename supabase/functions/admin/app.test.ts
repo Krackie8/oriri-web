@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createAdminApp, requireAdmin, type AdminDeps } from './app'
 
-const MEMBER = { id: 'member-1', email: 'member@example.test' }
-const ADMIN = { id: 'admin-1', email: 'admin@example.test' }
+const MEMBER = { id: 'member-1', email: 'member@example.test', signedInAt: null }
+const ADMIN = { id: 'admin-1', email: 'admin@example.test', signedInAt: null }
 
 function fakeDeps(): AdminDeps {
   return {
