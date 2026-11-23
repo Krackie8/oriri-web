@@ -6,6 +6,8 @@ import { createAdminApp } from './app.ts'
 import { signedInAt, decodePayload } from './fresh.ts'
 import { createKvLimiter } from './signInLink.ts'
 import { OVERVIEW_SQL } from './overviewQuery.ts'
+import { testEmailsFrom } from './overview.ts'
+import { MEMBERS_LIST_SQL, MEMBER_DETAIL_SQL } from './membersQuery.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -36,6 +38,8 @@ async function sendMail(to: string, subject: string, text: string, html: string)
 
 let sqlClient: ReturnType<typeof postgres> | null = null
 const db = () => (sqlClient ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }))
+
+const adminIds = async () => [...(await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0]))]
 
 const app = createAdminApp({
   // Admin = a live admin row in public.user_roles, read as service_role (adminRole.ts).
@@ -77,12 +81,22 @@ const app = createAdminApp({
   },
   overview: {
     kv,
-    adminIds: async () => [...(await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0]))],
+    adminIds,
     // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
     queryRow: async (ids, emails) => {
       const rows = await db().begin('read only', (tx: any) => tx.unsafe(OVERVIEW_SQL, [ids, emails]))
       return rows[0] as Record<string, unknown> | undefined
     },
+  },
+  members: {
+    // Both run as the connection user in a read-only transaction: service_role cannot select auth.users.
+    list: async (q) => await db().begin('read only', (tx: any) => tx.unsafe(MEMBERS_LIST_SQL, [q])) as Record<string, unknown>[],
+    detail: async (id) => {
+      const rows = await db().begin('read only', (tx: any) => tx.unsafe(MEMBER_DETAIL_SQL, [id]))
+      return rows[0] as Record<string, unknown> | undefined
+    },
+    adminIds,
+    testEmails: () => testEmailsFrom(kv),
   },
   me: {
     displayName: async (id) => {
