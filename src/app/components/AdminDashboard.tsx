@@ -28,14 +28,10 @@ import {
   MessageCircle,
   Eye,
   Clock,
-  Download,
-  Bell,
   RefreshCw,
   Activity,
-  Share2,
-  ArrowLeft
+  Share2
 } from 'lucide-react';
-import CommunityManagement from './admin/CommunityManagement';
 import WellnessCalendarManagement from './admin/WellnessCalendarManagement';
 import WellnessGuideManagement from './admin/WellnessGuideManagement';
 import TrafficDashboard from './admin/TrafficDashboard';
@@ -44,7 +40,6 @@ import EventBookings from './admin/EventBookings';
 import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
 import WaitlistLeadsManagement from './admin/WaitlistLeadsManagement';
-import AdminManagement from './admin/AdminManagement';
 
 interface MetricCardProps {
   title: string;
@@ -140,7 +135,7 @@ function TopItemsList({ items, title, valuePrefix = '', valueSuffix = '' }: TopI
   );
 }
 
-const LEGACY_TABS = ['overview', 'stepsisters', 'guide', 'traffic', 'shop', 'plan', 'users', 'admin'];
+const LEGACY_TABS = ['overview', 'stepsisters', 'guide', 'traffic', 'shop', 'plan'];
 
 export default function AdminDashboard() {
   const {
@@ -155,8 +150,6 @@ export default function AdminDashboard() {
     setSelectedTimeframe,
     refreshAnalytics,
     lastUpdated,
-    exportData,
-    sendNotification,
     isRealTimeEnabled,
     toggleRealTime
   } = useAdmin();
@@ -167,34 +160,6 @@ export default function AdminDashboard() {
     const t = new URLSearchParams(window.location.search).get('tab');
     return t && LEGACY_TABS.includes(t) ? t : 'stepsisters';
   });
-  const [showCommunityManagementPage, setShowCommunityManagementPage] = useState(false);
-
-  // Show full-page community management
-  if (showCommunityManagementPage) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center space-x-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowCommunityManagementPage(false)}
-              className="flex items-center space-x-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Dashboard</span>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">Community Management</h1>
-              <p className="text-muted-foreground">Moderate content, manage challenges, and track community health</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-6">
-          <CommunityManagement />
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -300,8 +265,6 @@ export default function AdminDashboard() {
           <TabsTrigger value="traffic">Traffic</TabsTrigger>
           <TabsTrigger value="shop">Shop</TabsTrigger>
           <TabsTrigger value="plan">Sign-ups</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="admin">Admin</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -527,79 +490,6 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* User Stats */}
-            <Card className="bg-card/50 backdrop-blur border-border/50">
-              <CardHeader>
-                <CardTitle>User Analytics</CardTitle>
-                <CardDescription>Track user growth and engagement</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span>Total Users</span>
-                  <Badge variant="secondary">{analytics?.totalUsers.toLocaleString() || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Active Today</span>
-                  <Badge variant="secondary">{analytics?.activeUsers.toLocaleString() || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>New Users Today</span>
-                  <Badge variant="secondary">{analytics?.newUsersToday || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>VIP Subscribers</span>
-                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-300">
-                    {analytics?.vipSubscribers.toLocaleString() || 0}
-                  </Badge>
-                </div>
-                <Button 
-                  size="sm" 
-                  onClick={() => sendNotification('Welcome to our community! 🎉')}
-                  className="w-full flex items-center space-x-2"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span>Send Notification</span>
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* User Actions */}
-            <Card className="bg-card/50 backdrop-blur border-border/50">
-              <CardHeader>
-                <CardTitle>User Management</CardTitle>
-                <CardDescription>Manage your community and subscribers</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => exportData('users')}
-                  className="w-full flex items-center space-x-2"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Export User Data</span>
-                </Button>
-                <Button size="sm" variant="outline" className="w-full">
-                  View User Details
-                </Button>
-                <Button size="sm" variant="outline" className="w-full">
-                  Manage VIP Subscribers
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => setShowCommunityManagementPage(true)}
-                >
-                  Community Moderation
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
         <TabsContent value="guide" className="space-y-6">
           <WellnessGuideManagement />
         </TabsContent>
@@ -623,10 +513,6 @@ export default function AdminDashboard() {
           <PlanSignupsManagement source="nourish" />
         </TabsContent>
 
-        <TabsContent value="admin" className="space-y-6">
-          {/* Admin Management Section */}
-          <AdminManagement />
-        </TabsContent>
       </Tabs>
 
     </div>
