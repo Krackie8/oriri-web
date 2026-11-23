@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideScreen, greeting, summaryLine, trendWord } from './view'
+import { AFTER_SIGN_IN_KEY, consentWord, countWord, CONSENT_LABELS, dayWord, decideScreen, greeting, lastSeenWord, signsInWithWord, summaryLine, teamProblemWord, timeWord, trendWord } from './view'
 import type { Overview } from '../wellness/functionClient/admin'
 
 const overview = (o: Partial<{ members: number; week: number }> = {}): Overview => ({
@@ -63,5 +63,84 @@ describe('decideScreen', () => {
   it('a result from an older session never shows Home', () => {
     expect(decideScreen(true, 2, { kind: 'ok', gen: 1, isAdmin: true })).toBe('checking')
     expect(decideScreen(true, 2, { kind: 'failed', gen: 1 })).toBe('checking')
+  })
+})
+
+describe('dayWord', () => {
+  const now = new Date('2026-11-22T21:30:00Z') // 23 Nov, 01:30 in Dubai
+  it('says today across the UTC/Dubai midnight edge', () => {
+    expect(dayWord('2026-11-22T20:00:00Z', now)).toBe('today') // 00:00 on 23 Nov in Dubai
+    expect(dayWord('2026-11-23T05:00:00Z', now)).toBe('today')
+  })
+  it('says yesterday', () => {
+    expect(dayWord('2026-11-22T19:59:00Z', now)).toBe('yesterday') // 23:59 on 22 Nov in Dubai
+    expect(dayWord('2026-11-21T20:00:00Z', now)).toBe('yesterday')
+  })
+  it('shows a date this year without the year', () => expect(dayWord('2026-11-14T08:00:00Z', now)).toBe('14 Nov'))
+  it('adds the year for another year', () => expect(dayWord('2025-11-14T08:00:00Z', now)).toBe('14 Nov 2025'))
+  it('uses the Dubai date, not the UTC one', () => expect(dayWord('2026-11-13T21:00:00Z', now)).toBe('14 Nov'))
+  it('handles the new year edge', () => {
+    expect(dayWord('2026-12-31T19:30:00Z', new Date('2027-01-01T10:00:00Z'))).toBe('yesterday')
+  })
+})
+
+describe('timeWord', () => {
+  it('shows Dubai time with two digits', () => {
+    expect(timeWord('2026-11-23T05:12:00Z')).toBe('09:12')
+    expect(timeWord('2026-11-22T20:05:00Z')).toBe('00:05')
+  })
+})
+
+describe('lastSeenWord', () => {
+  const now = new Date('2026-11-23T08:00:00Z')
+  it('says Never', () => expect(lastSeenWord(null)).toBe('Never'))
+  it('says when', () => {
+    expect(lastSeenWord('2026-11-23T05:00:00Z', now)).toBe('Last seen today')
+    expect(lastSeenWord('2026-11-14T05:00:00Z', now)).toBe('Last seen 14 Nov')
+  })
+})
+
+describe('consentWord', () => {
+  it('maps the three states', () => {
+    expect(consentWord(true)).toBe('✓')
+    expect(consentWord(false)).toBe('✗')
+    expect(consentWord(null)).toBe('Not asked')
+  })
+})
+
+describe('CONSENT_LABELS', () => {
+  it('names each purpose', () => {
+    expect(CONSENT_LABELS).toEqual({ terms: 'Terms', location: 'Location', wellness_signals: 'Wellness', personalisation: 'Personalisation', push: 'Push', marketing: 'Marketing' })
+  })
+})
+
+describe('signsInWithWord', () => {
+  it('joins the ways in plain words', () => {
+    expect(signsInWithWord(['email', 'google'])).toBe('email link and Google')
+    expect(signsInWithWord(['email'])).toBe('email link')
+    expect(signsInWithWord(['apple'])).toBe('another way')
+    expect(signsInWithWord([])).toBe('')
+  })
+})
+
+describe('teamProblemWord', () => {
+  it('says each problem plainly', () => {
+    expect(teamProblemWord('reauth')).toBe('For safety, sign in again to change the team.')
+    expect(teamProblemWord('invalid')).toBe("That doesn't look like an email address.")
+    expect(teamProblemWord('self')).toBe("You can't remove yourself.")
+    expect(teamProblemWord('last')).toBe('The team needs at least one admin.')
+    expect(teamProblemWord('other')).toBe("That didn't work. Try again.")
+  })
+})
+
+describe('AFTER_SIGN_IN_KEY', () => {
+  it('is the agreed key', () => expect(AFTER_SIGN_IN_KEY).toBe('oriri-admin-after'))
+})
+
+describe('countWord', () => {
+  it('uses the singular for one only', () => {
+    expect(countWord(1, 'admin', 'admins')).toBe('1 admin')
+    expect(countWord(0, 'admin', 'admins')).toBe('0 admins')
+    expect(countWord(3, 'Member', 'Members')).toBe('3 Members')
   })
 })

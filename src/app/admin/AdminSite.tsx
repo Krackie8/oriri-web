@@ -4,8 +4,10 @@ import { adminClient } from '../wellness/functionClient/adminClient'
 import type { Overview } from '../wellness/functionClient/admin'
 import HomeScreen from './HomeScreen'
 import LoginScreen from './LoginScreen'
+import MembersScreen from './MembersScreen'
 import OverviewScreen from './OverviewScreen'
-import { decideScreen, type MeResult } from './view'
+import TeamScreen from './TeamScreen'
+import { AFTER_SIGN_IN_KEY, decideScreen, type MeResult } from './view'
 
 type Numbers = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; gen: number; overview: Overview }
 
@@ -16,7 +18,8 @@ export default function AdminSite() {
   const [gen, setGen] = useState(0)
   const [me, setMe] = useState<MeResult>({ kind: 'pending' })
   const [firstName, setFirstName] = useState<string | null>(null)
-  const [screen, setScreen] = useState<'home' | 'overview'>('home')
+  const [screen, setScreen] = useState<'home' | 'overview' | 'members' | 'team'>('home')
+  const [teamCount, setTeamCount] = useState<number | null>(null)
   const [numbers, setNumbers] = useState<Numbers>({ kind: 'loading' })
   const [menu, setMenu] = useState(false)
   // Counts session changes. A late answer for an older session is dropped.
@@ -48,6 +51,7 @@ export default function AdminSite() {
     setHasSession(userId !== null)
     setMe({ kind: 'pending' })
     setNumbers({ kind: 'loading' })
+    setTeamCount(null)
     if (userId === null) {
       setScreen('home')
       setMenu(false)
@@ -98,6 +102,34 @@ export default function AdminSite() {
     if (where === 'home') void loadOverview()
   }, [where, gen, loadOverview])
 
+  // The Team tile's count, asked once each time Home shows. Stays "Team" until it answers or if it fails.
+  useEffect(() => {
+    if (where !== 'home' || screen !== 'home') return
+    const g = genRef.current
+    let live = true
+    void adminClient.team().then((r) => {
+      if (live && g === genRef.current) setTeamCount(r.ok ? r.data.members.length : null)
+    })
+    return () => {
+      live = false
+    }
+  }, [where, screen, gen])
+
+  // Coming back from the "sign in again" link: open Team once.
+  useEffect(() => {
+    if (where !== 'home') return
+    try {
+      if (localStorage.getItem(AFTER_SIGN_IN_KEY) === 'team') {
+        localStorage.removeItem(AFTER_SIGN_IN_KEY)
+        setScreen('team')
+      }
+    } catch {
+      /* no storage, no reopening */
+    }
+  }, [where])
+
+  const currentGen = useCallback(() => genRef.current, [])
+
   // Numbers from an older session are never shown.
   const current = numbers.kind === 'ready' && numbers.gen === gen ? numbers.overview : null
 
@@ -133,8 +165,17 @@ export default function AdminSite() {
     body =
       screen === 'overview' ? (
         <OverviewScreen state={overviewState} onRetry={() => void loadOverview()} />
+      ) : screen === 'members' ? (
+        <MembersScreen currentGen={currentGen} />
+      ) : screen === 'team' ? (
+        <TeamScreen currentGen={currentGen} />
       ) : (
-        <HomeScreen firstName={firstName} overview={current} onOpen={(key) => key === 'overview' && setScreen('overview')} />
+        <HomeScreen
+          firstName={firstName}
+          overview={current}
+          teamCount={teamCount}
+          onOpen={(key) => (key === 'overview' || key === 'members' || key === 'team') && setScreen(key)}
+        />
       )
   }
 
@@ -145,7 +186,7 @@ export default function AdminSite() {
       ) : (
         <div className="mx-auto max-w-3xl px-6 py-8 sm:py-12">
           <header className="mb-10 flex items-center justify-between">
-            {where === 'home' && screen === 'overview' ? (
+            {where === 'home' && screen !== 'home' ? (
               <button type="button" onClick={() => setScreen('home')} className={`text-base text-wb-taupe rounded ${FOCUS}`}>
                 ← Home
               </button>
