@@ -9,13 +9,20 @@ end $$;
 
 -- Part 1: grants, the user_roles lock and the append-only Team record.
 begin;
-select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','insert'), 'authenticated cannot insert user_roles');
-select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','update'), 'authenticated cannot update user_roles');
-select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','delete'), 'authenticated cannot delete user_roles');
-select pg_temp.check(not has_table_privilege('anon','public.user_roles','insert'), 'anon cannot insert user_roles');
-select pg_temp.check(not has_table_privilege('anon','public.user_roles','update'), 'anon cannot update user_roles');
-select pg_temp.check(not has_table_privilege('anon','public.user_roles','delete'), 'anon cannot delete user_roles');
 select pg_temp.check(has_table_privilege('authenticated','public.user_roles','select'), 'authenticated can still select user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','insert'), 'authenticated has no insert on user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','update'), 'authenticated has no update on user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','delete'), 'authenticated has no delete on user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','truncate'), 'authenticated has no truncate on user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','references'), 'authenticated has no references on user_roles');
+select pg_temp.check(not has_table_privilege('authenticated','public.user_roles','trigger'), 'authenticated has no trigger on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','insert'), 'anon has no insert on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','update'), 'anon has no update on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','delete'), 'anon has no delete on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','truncate'), 'anon has no truncate on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','references'), 'anon has no references on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','trigger'), 'anon has no trigger on user_roles');
+select pg_temp.check(not has_table_privilege('anon','public.user_roles','select'), 'anon has no select on user_roles');
 
 select pg_temp.check(has_table_privilege('service_role','bestie.team_changes','insert'), 'service_role can insert team_changes');
 select pg_temp.check(has_table_privilege('service_role','bestie.team_changes','select'), 'service_role can select team_changes');

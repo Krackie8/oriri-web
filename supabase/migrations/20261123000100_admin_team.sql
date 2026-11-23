@@ -1,11 +1,14 @@
 -- Admin piece 2 (Members + Team), Task 1.
 -- Why: DEC-015 second lock. The Team (public.user_roles rows with role 'admin') is changed only by
--- the admin edge function, running as service_role. The "Only admins can manage user roles" policy
--- is the first lock; revoking the write privileges is the second, so no client can write roles
--- even if a policy is ever loosened. Sign-up still works: handle_new_user is security definer.
+-- the admin edge function, running as service_role. The first lock is that public.user_roles has RLS
+-- on and no write policy (only the own-row read policy; the old "Only admins can manage user roles"
+-- policy was dropped in 20261116000200). This migration adds the second lock: no write grants, so no
+-- client can write roles even if a policy is ever added. Sign-up still works: handle_new_user is
+-- security definer.
 -- Also adds bestie.team_changes, an append-only record of who added or removed whom.
 
-revoke insert, update, delete, truncate on public.user_roles from anon, authenticated;
+revoke all on public.user_roles from anon, authenticated;
+grant select on public.user_roles to authenticated;
 
 create table bestie.team_changes (
   id bigint generated always as identity primary key,

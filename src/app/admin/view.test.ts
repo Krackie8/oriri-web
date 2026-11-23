@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AFTER_SIGN_IN_KEY, consentWord, countWord, CONSENT_LABELS, dayWord, decideScreen, greeting, lastSeenWord, signsInWithWord, summaryLine, teamProblemWord, timeWord, trendWord } from './view'
+import { AFTER_SIGN_IN_KEY, consentWord, countWord, CONSENT_LABELS, dayWord, decideScreen, greeting, lastSignInWord, memberLoadProblem, signsInWithWord, summaryLine, teamProblemWord, timeWord, trendWord } from './view'
 import type { Overview } from '../wellness/functionClient/admin'
 
 const overview = (o: Partial<{ members: number; week: number }> = {}): Overview => ({
@@ -91,12 +91,12 @@ describe('timeWord', () => {
   })
 })
 
-describe('lastSeenWord', () => {
+describe('lastSignInWord', () => {
   const now = new Date('2026-11-23T08:00:00Z')
-  it('says Never', () => expect(lastSeenWord(null)).toBe('Never'))
+  it('says Never signed in', () => expect(lastSignInWord(null)).toBe('Never signed in'))
   it('says when', () => {
-    expect(lastSeenWord('2026-11-23T05:00:00Z', now)).toBe('Last seen today')
-    expect(lastSeenWord('2026-11-14T05:00:00Z', now)).toBe('Last seen 14 Nov')
+    expect(lastSignInWord('2026-11-23T05:00:00Z', now)).toBe('Last sign-in today')
+    expect(lastSignInWord('2026-11-14T05:00:00Z', now)).toBe('Last sign-in 14 Nov')
   })
 })
 
@@ -116,8 +116,8 @@ describe('CONSENT_LABELS', () => {
 
 describe('signsInWithWord', () => {
   it('joins the ways in plain words', () => {
-    expect(signsInWithWord(['email', 'google'])).toBe('email link and Google')
-    expect(signsInWithWord(['email'])).toBe('email link')
+    expect(signsInWithWord(['email', 'google'])).toBe('email and Google')
+    expect(signsInWithWord(['email'])).toBe('email')
     expect(signsInWithWord(['apple'])).toBe('another way')
     expect(signsInWithWord([])).toBe('')
   })
@@ -142,5 +142,14 @@ describe('countWord', () => {
     expect(countWord(1, 'admin', 'admins')).toBe('1 admin')
     expect(countWord(0, 'admin', 'admins')).toBe('0 admins')
     expect(countWord(3, 'Member', 'Members')).toBe('3 Members')
+  })
+})
+
+describe('memberLoadProblem', () => {
+  it('a 404 says the Member is gone and offers no retry', () => {
+    expect(memberLoadProblem(404)).toEqual({ message: "This Member isn't here any more.", canRetry: false })
+  })
+  it.each([[500], [0], [403], [undefined]])('status %s keeps the generic message and a retry', (status) => {
+    expect(memberLoadProblem(status)).toEqual({ message: "Couldn't load Members.", canRetry: true })
   })
 })

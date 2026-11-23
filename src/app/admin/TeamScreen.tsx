@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../utils/supabase/client'
 import { adminClient } from '../wellness/functionClient/adminClient'
 import { teamProblem, type TeamChange, type TeamMember, type TeamProblem } from '../wellness/functionClient/admin'
-import { AFTER_SIGN_IN_KEY, dayWord, teamProblemWord, timeWord } from './view'
+import { AFTER_SIGN_IN_KEY, dayWord, lastSignInWord, teamProblemWord, timeWord } from './view'
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C98A90]'
 const PILL = `rounded-full px-6 py-2.5 text-base text-white disabled:opacity-60 ${FOCUS} focus-visible:ring-offset-2`
@@ -189,7 +189,7 @@ export default function TeamScreen({ currentGen }: Props) {
               <p className="text-base text-wb-ink break-words">{label}</p>
               {m.name && <p className="text-sm text-wb-soft break-words">{m.email}</p>}
               <p className="text-sm text-wb-taupe">
-                Admin since {dayWord(m.since)} · Last sign-in {m.lastSignIn ? dayWord(m.lastSignIn) : 'never'}
+                Admin since {dayWord(m.since)} · {lastSignInWord(m.lastSignIn)}
               </p>
               {!m.isYou &&
                 (confirming === m.userId ? (

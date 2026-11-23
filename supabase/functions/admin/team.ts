@@ -9,8 +9,9 @@
  * - The actor is re-checked as a live admin under the same lock as the change ('notActor' -> 403),
  *   so an admin removed while her requests are in flight can't make one more change.
  * - Every change is recorded in bestie.team_changes by the same statement that makes it.
- * - Every admin is told by email after the change. A mail failure is logged (never with an address)
- *   and never undoes or fails the change.
+ * - Every admin is told by email after the change. The mail is sent in the background (bounded by
+ *   TEAM_MAIL_TIMEOUT_MS) so slow SMTP never holds the answer; a mail failure is logged (never with
+ *   an address) and never undoes or fails the change.
  */
 import type { Context } from 'hono'
 import type { AdminUser } from './app.ts'
@@ -36,8 +37,23 @@ export interface TeamDeps {
   /** Runs TEAM_REMOVE_SQL as service_role. 'notActor' when the actor is no longer a live admin. */
   remove(actorId: string, targetId: string, targetEmail: string): Promise<'removed' | 'last' | 'notAdmin' | 'notActor'>
   sendMail(to: string, subject: string, text: string, html: string): Promise<void>
+  /** Keeps the mail work running after the answer is sent (EdgeRuntime.waitUntil, as in signInLink). */
+  background(p: Promise<unknown>): void
   /** Clock in ms; defaults to Date.now. */
   now?: () => number
+}
+
+/** The most the mail work may run for in the background. */
+export const TEAM_MAIL_TIMEOUT_MS = 10_000
+
+/** Hands the mail work to deps.background, raced against the timeout so it can't linger. */
+function inBackground(deps: TeamDeps, work: Promise<unknown>) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, TEAM_MAIL_TIMEOUT_MS)
+    ;(timer as { unref?: () => void }).unref?.()
+  })
+  deps.background(Promise.race([work, timeout]).finally(() => clearTimeout(timer)))
 }
 
 /** Subjects can't carry a line break into the mail headers. */
@@ -114,13 +130,15 @@ async function sendNotices(deps: TeamDeps, admins: Row[], who: string, verb: 'ad
   const text = `${subject}.\n\n${NOTICE_LINE}`
   const html = `<p>${noticeLine(who, verb, whom, esc)}.</p><p>${esc(NOTICE_LINE)}</p>`
   const seen = new Set<string>()
+  const sends: Promise<void>[] = []
   for (const r of admins) {
     const to = str(r.email)
     const key = to.trim().toLowerCase()
     if (!key || seen.has(key)) continue
     seen.add(key)
-    await sendOne(deps, to, subject, text, html)
+    sends.push(sendOne(deps, to, subject, text, html))
   }
+  await Promise.allSettled(sends)
 }
 
 const reauth = (c: Context) => c.json({ success: false, error: 'reauth' }, 403)
@@ -185,17 +203,19 @@ export async function addToTeam(c: Context, deps: TeamDeps, user: AdminUser): Pr
   }
 
   // The change is made and recorded. From here nothing changes the answer, and it is never silent.
-  await sendOne(deps, email, TEAM_MAIL.addedSubject, WELCOME_TEXT, WELCOME_HTML)
-  let admins: Row[]
-  try {
-    admins = await deps.list()
-  } catch (err) {
-    logFailure('notice list failed, using the one from before', err)
-    admins = [...before, { user_id: targetId, email }]
-  }
-  const who = labelOf(admins.find((r) => idOf(r) === user.id.toLowerCase()), user.email || 'An admin')
-  const whom = labelOf(admins.find((r) => idOf(r) === targetId.toLowerCase()), email)
-  await sendNotices(deps, admins, who, 'added', whom)
+  inBackground(deps, (async () => {
+    const welcome = sendOne(deps, email, TEAM_MAIL.addedSubject, WELCOME_TEXT, WELCOME_HTML)
+    let admins: Row[]
+    try {
+      admins = await deps.list()
+    } catch (err) {
+      logFailure('notice list failed, using the one from before', err)
+      admins = [...before, { user_id: targetId, email }]
+    }
+    const who = labelOf(admins.find((r) => idOf(r) === user.id.toLowerCase()), user.email || 'An admin')
+    const whom = labelOf(admins.find((r) => idOf(r) === targetId.toLowerCase()), email)
+    await Promise.allSettled([welcome, sendNotices(deps, admins, who, 'added', whom)])
+  })())
   return c.json({ success: true, data: { result: 'added' } })
 }
 
@@ -230,6 +250,6 @@ export async function removeFromTeam(c: Context, deps: TeamDeps, user: AdminUser
 
   const who = labelOf(before.find((r) => idOf(r) === user.id.toLowerCase()), user.email || 'An admin')
   const whom = labelOf(before.find((r) => idOf(r) === targetId), 'an admin')
-  await sendNotices(deps, before, who, 'removed', whom)
+  inBackground(deps, sendNotices(deps, before, who, 'removed', whom))
   return c.json({ success: true, data: { result: 'removed' } })
 }

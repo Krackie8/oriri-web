@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createAdminApp, type AdminDeps } from './app'
-import { TEAM_MAIL, toChange, type TeamDeps } from './team'
+import { TEAM_MAIL, TEAM_MAIL_TIMEOUT_MS, toChange, type TeamDeps } from './team'
 
 const NOW = Date.parse('2026-11-23T10:00:00Z')
 const FRESH = NOW - 60_000
@@ -21,6 +21,8 @@ function build(opts: { over?: Partial<TeamDeps>; signedInAt?: number | null; adm
     ['ren@example.test', REN],
     ['new@example.test', NEW],
   ])
+  const pending: Promise<unknown>[] = []
+  const settle = async () => { await Promise.allSettled(pending) }
   const team: TeamDeps = {
     list: vi.fn(async () => admins.map((a) => ({ ...a }))),
     changes: vi.fn(async () => []),
@@ -38,6 +40,7 @@ function build(opts: { over?: Partial<TeamDeps>; signedInAt?: number | null; adm
       return 'removed' as const
     }),
     sendMail: vi.fn(async () => {}),
+    background: vi.fn((p: Promise<unknown>) => { pending.push(p) }),
     now: () => NOW,
     ...opts.over,
   }
@@ -54,7 +57,7 @@ function build(opts: { over?: Partial<TeamDeps>; signedInAt?: number | null; adm
       headers: { ...(auth ? { Authorization: 'Bearer t' } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
     })
-  return { team, admins, call }
+  return { team, admins, call, settle }
 }
 
 const sentTo = (team: TeamDeps) => (team.sendMail as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string)
@@ -167,9 +170,10 @@ describe('POST /admin/team', () => {
     expect(team.sendMail).not.toHaveBeenCalled()
   })
   it('the new admin gets a welcome, then every admin (her too) gets a notice', async () => {
-    const { call, team, admins } = build()
+    const { call, team, admins, settle } = build()
     const before = admins.length
     await call('POST', '/admin/team', { email: 'new@example.test' })
+    await settle()
     const calls = (team.sendMail as ReturnType<typeof vi.fn>).mock.calls
     expect(calls).toHaveLength(1 + before + 1)
     expect(calls[0][0]).toBe('new@example.test')
@@ -185,18 +189,42 @@ describe('POST /admin/team', () => {
       expect(c[3]).toContain('<p>Khairul added new@example.test to Oriri Admin.</p>')
     }
   })
+  it('answers 200 while a mail is still pending, and hands the mail work to background', async () => {
+    vi.useFakeTimers()
+    try {
+      const { call, team, settle } = build({ over: { sendMail: vi.fn(() => new Promise<void>(() => {})) } })
+      const res = await call('POST', '/admin/team', { email: 'new@example.test' })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ success: true, data: { result: 'added' } })
+      expect(team.background).toHaveBeenCalledTimes(1)
+      // The work is bounded: it is let go after the timeout even though no mail ever finishes.
+      const done = settle()
+      await vi.advanceTimersByTimeAsync(TEAM_MAIL_TIMEOUT_MS)
+      await done
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('removing answers 200 while a mail is still pending', async () => {
+    const { call, team } = build({ over: { sendMail: vi.fn(() => new Promise<void>(() => {})) } })
+    const res = await call('DELETE', `/admin/team/${REN}`)
+    expect(res.status).toBe(200)
+    expect(team.background).toHaveBeenCalledTimes(1)
+  })
   it('escapes names in the html', async () => {
-    const { call, team, admins } = build()
+    const { call, team, admins, settle } = build()
     admins[0].display_name = '<b>Kh&ru'
     await call('POST', '/admin/team', { email: 'new@example.test' })
+    await settle()
     const notice = (team.sendMail as ReturnType<typeof vi.fn>).mock.calls[1]
     expect(notice[3]).toContain('&#60;b&#62;Kh&#38;ru')
     expect(notice[3]).not.toContain('<b>')
   })
   it('a failing mail still answers 200 added, logs no address, and the other mails still go', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { call, team } = build({ over: { sendMail: vi.fn(async () => { throw new Error('smtp said no to new@example.test') }) } })
+    const { call, team, settle } = build({ over: { sendMail: vi.fn(async () => { throw new Error('smtp said no to new@example.test') }) } })
     const res = await call('POST', '/admin/team', { email: 'new@example.test' })
+    await settle()
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { result: 'added' } })
     expect(team.sendMail).toHaveBeenCalledTimes(4)
@@ -206,11 +234,12 @@ describe('POST /admin/team', () => {
   it('a failing notice list after the grant still answers 200 added, and notices go to the list from before plus her', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     let n = 0
-    const { call, team } = build()
+    const { call, team, settle } = build()
     const original = team.list as ReturnType<typeof vi.fn>
     const impl = original.getMockImplementation()!
     original.mockImplementation(async () => { n++; if (n > 1) throw new Error('db down'); return impl() })
     const res = await call('POST', '/admin/team', { email: 'new@example.test' })
+    await settle()
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { result: 'added' } })
     expect(sentTo(team)).toEqual(['new@example.test', 'khairul@example.test', 'ren@example.test', 'new@example.test'])
@@ -218,9 +247,10 @@ describe('POST /admin/team', () => {
     expect(JSON.stringify(spy.mock.calls)).not.toMatch(/@|00000000-/)
   })
   it('notices go once per address', async () => {
-    const { call, team, admins } = build()
+    const { call, team, admins, settle } = build()
     admins.push(row('00000000-0000-0000-0000-00000000a004', 'REN@example.test', null))
     await call('POST', '/admin/team', { email: 'new@example.test' })
+    await settle()
     expect(sentTo(team).slice(1).map((e) => e.toLowerCase()).sort()).toEqual(['khairul@example.test', 'new@example.test', 'ren@example.test'])
   })
   it('a grant answering notActor is 403 Forbidden, and no mail is sent', async () => {
@@ -299,8 +329,9 @@ describe('DELETE /admin/team/:userId', () => {
     expect(team.sendMail).not.toHaveBeenCalled()
   })
   it('removes, passing the actor, the lower-cased id and her email, and tells every admin including her', async () => {
-    const { call, team } = build()
+    const { call, team, settle } = build()
     const res = await call('DELETE', `/admin/team/${REN.toUpperCase()}`)
+    await settle()
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { result: 'removed' } })
     expect(team.remove).toHaveBeenCalledWith(ME, REN, 'ren@example.test')
@@ -318,8 +349,9 @@ describe('DELETE /admin/team/:userId', () => {
   })
   it('a failing mail still answers 200 removed', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { call } = build({ over: { sendMail: vi.fn(async () => { throw new Error('smtp ren@example.test') }) } })
+    const { call, settle } = build({ over: { sendMail: vi.fn(async () => { throw new Error('smtp ren@example.test') }) } })
     const res = await call('DELETE', `/admin/team/${REN}`)
+    await settle()
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { result: 'removed' } })
     expect(JSON.stringify(spy.mock.calls)).not.toMatch(/@|00000000-/)

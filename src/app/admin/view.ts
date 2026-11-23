@@ -81,8 +81,9 @@ export function timeWord(iso: string): string {
   return `${String(x.getUTCHours()).padStart(2, '0')}:${String(x.getUTCMinutes()).padStart(2, '0')}`
 }
 
-export function lastSeenWord(iso: string | null, now: Date = new Date()): string {
-  return iso ? `Last seen ${dayWord(iso, now)}` : 'Never'
+/** "Last sign-in today" / "Never signed in": built from the last sign-in time, so it says so. */
+export function lastSignInWord(iso: string | null, now: Date = new Date()): string {
+  return iso ? `Last sign-in ${dayWord(iso, now)}` : 'Never signed in'
 }
 
 export function consentWord(v: boolean | null): '✓' | '✗' | 'Not asked' {
@@ -98,8 +99,16 @@ export const CONSENT_LABELS = {
   marketing: 'Marketing',
 } as const
 
+/** 'email' covers the sign-in link and the password alike. */
 export function signsInWithWord(providers: string[]): string {
-  return providers.map((p) => (p === 'email' ? 'email link' : p === 'google' ? 'Google' : 'another way')).join(' and ')
+  return providers.map((p) => (p === 'email' ? 'email' : p === 'google' ? 'Google' : 'another way')).join(' and ')
+}
+
+/** What the Member page says when it can't load: a 404 means she is gone, so there is nothing to retry. */
+export function memberLoadProblem(status: number | undefined): { message: string; canRetry: boolean } {
+  return status === 404
+    ? { message: "This Member isn't here any more.", canRetry: false }
+    : { message: "Couldn't load Members.", canRetry: true }
 }
 
 export function teamProblemWord(p: 'reauth' | 'invalid' | 'self' | 'last' | 'other'): string {

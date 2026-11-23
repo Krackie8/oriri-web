@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { adminClient } from '../wellness/functionClient/adminClient'
 import { CONSENT_PURPOSES, type MemberDetail, type MemberListItem, type MemberTag } from '../wellness/functionClient/admin'
-import { CONSENT_LABELS, consentWord, countWord, dayWord, lastSeenWord, signsInWithWord, timeWord } from './view'
+import { CONSENT_LABELS, consentWord, countWord, dayWord, lastSignInWord, memberLoadProblem, signsInWithWord, timeWord } from './view'
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C98A90]'
 
@@ -10,7 +10,7 @@ interface Props {
   currentGen: () => number
 }
 
-type Load<T> = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: T }
+type Load<T> = { kind: 'loading' } | { kind: 'error'; status?: number } | { kind: 'ready'; data: T }
 
 function Tag({ tag }: { tag: MemberTag }) {
   return (
@@ -20,13 +20,13 @@ function Tag({ tag }: { tag: MemberTag }) {
   )
 }
 
-function Retry({ message, onRetry }: { message: string; onRetry: () => void }) {
+function Retry({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div role="alert">
       <p className="text-base text-wb-ink">{message}</p>
-      <button type="button" onClick={onRetry} className={`mt-4 rounded-full px-6 py-2.5 text-base text-white ${FOCUS} focus-visible:ring-offset-2`} style={{ backgroundColor: '#C98A90' }}>
+      {onRetry && <button type="button" onClick={onRetry} className={`mt-4 rounded-full px-6 py-2.5 text-base text-white ${FOCUS} focus-visible:ring-offset-2`} style={{ backgroundColor: '#C98A90' }}>
         Try again
-      </button>
+      </button>}
     </div>
   )
 }
@@ -129,7 +129,7 @@ export default function MembersScreen({ currentGen }: Props) {
     setDetail({ kind: 'loading' })
     void adminClient.member(selected).then((r) => {
       if (n !== detailReq.current || g !== currentGen()) return
-      setDetail(r.ok ? { kind: 'ready', data: r.data } : { kind: 'error' })
+      setDetail(r.ok ? { kind: 'ready', data: r.data } : { kind: 'error', status: r.error.status })
     })
   }, [selected, retryTick, currentGen])
 
@@ -149,7 +149,10 @@ export default function MembersScreen({ currentGen }: Props) {
           ← Members
         </button>
         {detail.kind === 'loading' && <p className="text-base text-wb-soft">One moment…</p>}
-        {detail.kind === 'error' && <Retry message="Couldn't load Members." onRetry={() => setRetryTick((t) => t + 1)} />}
+        {detail.kind === 'error' && (() => {
+          const p = memberLoadProblem(detail.status)
+          return <Retry message={p.message} onRetry={p.canRetry ? () => setRetryTick((t) => t + 1) : undefined} />
+        })()}
         {detail.kind === 'ready' && <Detail d={detail.data} />}
       </div>
     )
@@ -157,7 +160,8 @@ export default function MembersScreen({ currentGen }: Props) {
 
   return (
     <div>
-      <h1 className="text-2xl sm:text-3xl text-wb-ink">Members{list.kind === 'ready' ? ` · ${list.data.length}` : ''}</h1>
+      <h1 className="text-2xl sm:text-3xl text-wb-ink">Members</h1>
+      {list.kind === 'ready' && applied && list.data.length > 0 && <p className="mt-1 text-base text-wb-soft">{list.data.length} found</p>}
       <input
         type="search"
         value={q}
@@ -187,7 +191,7 @@ export default function MembersScreen({ currentGen }: Props) {
                   </span>
                   {m.name && <span className="block text-sm text-wb-soft break-words">{m.email}</span>}
                   <span className="block text-sm text-wb-taupe">
-                    Joined {dayWord(m.joined)} · {lastSeenWord(m.lastSeen)}
+                    Joined {dayWord(m.joined)} · {lastSignInWord(m.lastSeen)}
                   </span>
                 </button>
               </li>

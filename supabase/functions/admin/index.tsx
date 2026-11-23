@@ -38,6 +38,13 @@ async function sendMail(to: string, subject: string, text: string, html: string)
 }
 
 let sqlClient: ReturnType<typeof postgres> | null = null
+/** Keeps work running after the answer is sent when the runtime allows it. */
+const background = (p: Promise<unknown>): void => {
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  if (rt) rt.waitUntil(p)
+  else p.catch(() => {})
+}
+
 const db = () => (sqlClient ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }))
 
 // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
@@ -84,11 +91,7 @@ const app = createAdminApp({
     limiter: createKvLimiter(kv),
     redirectTo: 'https://www.oriri.me/admin', // replaced per request by the route
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    background: (p) => {
-      const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
-      if (rt) rt.waitUntil(p)
-      else p.catch(() => {})
-    },
+    background,
   },
   overview: {
     kv,
@@ -135,6 +138,7 @@ const app = createAdminApp({
       return result
     },
     sendMail,
+    background,
   },
   me: {
     displayName: async (id) => {
