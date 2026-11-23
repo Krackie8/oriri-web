@@ -282,14 +282,24 @@ where r.role = 'admin' and (r.expires_at is null or r.expires_at > now())
 order by r.created_at, r.user_id;
 
 prepare tg(uuid, uuid, text) as
-with granted as (
-  insert into public.user_roles (user_id, role, expires_at)
-  values ($2::uuid, 'admin', null)
-  on conflict (user_id, role) do update set expires_at = null
-  returning user_id
+with actor as (
+  select user_id from public.user_roles
+  where user_id = $1::uuid and role = 'admin' and (expires_at is null or expires_at > now())
+  for share
+),
+granted as (
+  insert into public.user_roles as r (user_id, role, expires_at)
+  select $2::uuid, 'admin', null where exists (select 1 from actor)
+  on conflict (user_id, role) do update
+    set expires_at = null,
+      created_at = case when r.expires_at is null or r.expires_at > now() then r.created_at else now() end
+  returning r.user_id
+),
+recorded as (
+  insert into bestie.team_changes (actor_id, target_id, target_email, action)
+  select $1::uuid, g.user_id, $3::text, 'add' from granted g
 )
-insert into bestie.team_changes (actor_id, target_id, target_email, action)
-select $1::uuid, g.user_id, $3::text, 'add' from granted g;
+select case when exists (select 1 from actor) then 'granted' else 'notActor' end as result;
 
 prepare tr(uuid, uuid, text) as
 with live as (
@@ -299,6 +309,7 @@ with live as (
 ),
 verdict as (
   select case
+    when not coalesce(bool_or(user_id = $1::uuid), false) then 'notActor'
     when not coalesce(bool_or(user_id = $2::uuid), false) then 'notAdmin'
     when count(*) < 2 then 'last'
     else 'removed'
@@ -327,7 +338,7 @@ limit 20;
 
 -- The only admin can't be removed (Cy's expired row doesn't count), and nothing is written.
 set local role service_role;
-execute tr('00000000-0000-0000-0000-0000000d0002', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r1_
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r1_
 reset role;
 select pg_temp.check(:'r1_result' = 'last', 'removing the only live admin answers last');
 select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0001' and role = 'admin') = 1,
@@ -344,11 +355,23 @@ select pg_temp.check(:'r3_result' = 'notAdmin', 'removing a non-admin answers no
 select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') = 1,
   'notAdmin deletes nothing');
 
+-- A grant by someone who is not a live admin (never one, or expired) is notActor and writes nothing.
+set local role service_role;
+execute tg('00000000-0000-0000-0000-0000000d0004', '00000000-0000-0000-0000-0000000d0004', 'dee@example.test') \gset g0_
+execute tg('00000000-0000-0000-0000-0000000d0003', '00000000-0000-0000-0000-0000000d0004', 'dee@example.test') \gset gx_
+reset role;
+select pg_temp.check(:'g0_result' = 'notActor', 'a grant by a non-admin answers notActor');
+select pg_temp.check(:'gx_result' = 'notActor', 'a grant by an expired admin answers notActor');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0004' and role = 'admin') = 0,
+  'notActor creates no admin row');
+select pg_temp.check((select count(*) from bestie.team_changes where action = 'add') = 0, 'notActor records no add');
+
 -- Granting Bea twice: one admin row, two add records.
 set local role service_role;
-execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test');
-execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test');
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test') \gset g1_
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test') \gset g2_
 reset role;
+select pg_temp.check(:'g1_result' = 'granted' and :'g2_result' = 'granted', 'a grant by a live admin answers granted');
 select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'admin' and expires_at is null) = 1,
   'granting twice leaves one live admin row');
 select pg_temp.check((select count(*) from bestie.team_changes
@@ -358,18 +381,32 @@ select pg_temp.check((select count(*) from bestie.team_changes
 select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'user') = 1,
   'granting leaves the user role alone');
 
--- Granting Cy clears her expiry.
+-- A remove by someone who is not a live admin is notActor: nothing deleted, nothing recorded.
+set local role service_role;
+execute tr('00000000-0000-0000-0000-0000000d0004', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test') \gset ra_
+reset role;
+select pg_temp.check(:'ra_result' = 'notActor', 'a remove by a non-admin answers notActor');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'admin') = 1,
+  'notActor deletes nothing');
+select pg_temp.check((select count(*) from bestie.team_changes where action = 'remove') = 0, 'notActor records no remove');
+
+-- Granting Cy clears her expiry and restarts her created_at; re-granting Ada (live) keeps hers.
 set local role service_role;
 execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0003', 'cy@example.test');
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test');
 reset role;
 select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') = 1
   and (select expires_at from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') is null,
   'granting an expired admin makes her live again, in the same row');
+select pg_temp.check((select created_at from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') = now(),
+  'granting an expired admin restarts her admin-since date');
+select pg_temp.check((select created_at from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0001' and role = 'admin') = now() - interval '2 days',
+  're-granting a live admin keeps her admin-since date');
 
--- The list: Cy, Ada, Bea by since (Cy's row keeps its old created_at).
+-- The list: Ada (2 days ago), then Bea and Cy (both now, so by id).
 create temp table t_list as execute tl;
 select pg_temp.check((select array_agg(user_id order by ord) from (select user_id, row_number() over () as ord from t_list) x)
-  = array['00000000-0000-0000-0000-0000000d0003', '00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002']::uuid[],
+  = array['00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', '00000000-0000-0000-0000-0000000d0003']::uuid[],
   'the list is the live admins, oldest first');
 select pg_temp.check((select email from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') = 'ada@example.test'
   and (select display_name from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') = 'Ada Lovelace'
@@ -393,12 +430,14 @@ select pg_temp.check((select count(*) from bestie.team_changes where action = 'r
     and actor_id = '00000000-0000-0000-0000-0000000d0001' and target_email = 'bea@example.test') = 1,
   'one remove is recorded');
 
--- Down to two (Ada, Cy): removing Cy works, then Ada is the last one.
+-- Down to two (Ada, Cy): removing Cy works; then removed Cy can't remove Ada, and Ada is the last one.
 set local role service_role;
 execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0003', 'cy@example.test') \gset r6_
 execute tr('00000000-0000-0000-0000-0000000d0003', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r7_
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r8_
 reset role;
-select pg_temp.check(:'r6_result' = 'removed' and :'r7_result' = 'last', 'with two admins one can go, then the last stays');
+select pg_temp.check(:'r6_result' = 'removed' and :'r8_result' = 'last', 'with two admins one can go, then the last stays');
+select pg_temp.check(:'r7_result' = 'notActor', 'a just-removed admin can no longer remove anyone');
 select pg_temp.check((select count(*) from public.user_roles where role = 'admin' and (expires_at is null or expires_at > now())) = 1,
   'one live admin is left');
 

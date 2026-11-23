@@ -121,12 +121,17 @@ const app = createAdminApp({
       return data.user.id
     },
     grant: async (actorId, targetId, targetEmail) => {
-      await asServiceRole(TEAM_GRANT_SQL, [actorId, targetId, targetEmail])
+      const rows = await asServiceRole(TEAM_GRANT_SQL, [actorId, targetId, targetEmail])
+      const result = (rows[0] as { result?: unknown } | undefined)?.result
+      if (result !== 'granted' && result !== 'notActor') throw new Error('grant gave no result')
+      return result
     },
     remove: async (actorId, targetId, targetEmail) => {
       const rows = await asServiceRole(TEAM_REMOVE_SQL, [actorId, targetId, targetEmail])
       const result = (rows[0] as { result?: unknown } | undefined)?.result
-      if (result !== 'removed' && result !== 'last' && result !== 'notAdmin') throw new Error('remove gave no result')
+      if (result !== 'removed' && result !== 'last' && result !== 'notAdmin' && result !== 'notActor') {
+        throw new Error('remove gave no result')
+      }
       return result
     },
     sendMail,

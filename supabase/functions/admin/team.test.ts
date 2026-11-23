@@ -28,6 +28,7 @@ function build(opts: { over?: Partial<TeamDeps>; signedInAt?: number | null; adm
     createAccount: vi.fn(async () => '00000000-0000-0000-0000-00000000a0ff'),
     grant: vi.fn(async (_actor: string, target: string, email: string) => {
       if (!admins.some((a) => a.user_id === target)) admins.push(row(target, email, email))
+      return 'granted' as const
     }),
     remove: vi.fn(async (_actor: string, target: string) => {
       const i = admins.findIndex((a) => a.user_id === target)
@@ -179,8 +180,9 @@ describe('POST /admin/team', () => {
     expect(notices.map((c) => c[0]).sort()).toEqual(['khairul@example.test', 'new@example.test', 'ren@example.test'])
     // Who is the first name; the new account's display name is her email, so whom is the email.
     for (const c of notices) {
-      expect(c[1]).toBe('Khairul added new@example.test on Oriri Admin')
-      expect(c[2]).toContain("If you didn't expect this, tell the team.")
+      expect(c[1]).toBe('Khairul added new@example.test to Oriri Admin')
+      expect(c[2]).toBe("Khairul added new@example.test to Oriri Admin.\n\nIf you didn't expect this, tell the team.")
+      expect(c[3]).toContain('<p>Khairul added new@example.test to Oriri Admin.</p>')
     }
   })
   it('escapes names in the html', async () => {
@@ -201,7 +203,7 @@ describe('POST /admin/team', () => {
     expect(spy).toHaveBeenCalled()
     expect(JSON.stringify(spy.mock.calls)).not.toMatch(/@|00000000-/)
   })
-  it('a failing notice list after the grant still answers 200 added', async () => {
+  it('a failing notice list after the grant still answers 200 added, and notices go to the list from before plus her', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     let n = 0
     const { call, team } = build()
@@ -211,8 +213,35 @@ describe('POST /admin/team', () => {
     const res = await call('POST', '/admin/team', { email: 'new@example.test' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { result: 'added' } })
-    expect(sentTo(team)).toEqual(['new@example.test'])
+    expect(sentTo(team)).toEqual(['new@example.test', 'khairul@example.test', 'ren@example.test', 'new@example.test'])
+    expect(subjects(team).slice(1)).toEqual(Array(3).fill('Khairul added new@example.test to Oriri Admin'))
     expect(JSON.stringify(spy.mock.calls)).not.toMatch(/@|00000000-/)
+  })
+  it('notices go once per address', async () => {
+    const { call, team, admins } = build()
+    admins.push(row('00000000-0000-0000-0000-00000000a004', 'REN@example.test', null))
+    await call('POST', '/admin/team', { email: 'new@example.test' })
+    expect(sentTo(team).slice(1).map((e) => e.toLowerCase()).sort()).toEqual(['khairul@example.test', 'new@example.test', 'ren@example.test'])
+  })
+  it('a grant answering notActor is 403 Forbidden, and no mail is sent', async () => {
+    const { call, team } = build({ over: { grant: vi.fn(async () => 'notActor' as const) } })
+    const res = await call('POST', '/admin/team', { email: 'new@example.test' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ success: false, error: 'Forbidden' })
+    expect(team.sendMail).not.toHaveBeenCalled()
+  })
+  it('a createAccount that fails because a concurrent add just made the account uses that account', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const find = vi.fn(async () => null as string | null)
+    find.mockResolvedValueOnce(null).mockResolvedValueOnce('00000000-0000-0000-0000-00000000a0aa')
+    const { call, team } = build({
+      over: { findUserIdByEmail: find, createAccount: vi.fn(async () => { throw new Error('already registered') }) },
+    })
+    const res = await call('POST', '/admin/team', { email: 'stranger@example.test' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { result: 'added' } })
+    expect(find).toHaveBeenCalledTimes(2)
+    expect(team.grant).toHaveBeenCalledWith(ME, '00000000-0000-0000-0000-00000000a0aa', 'stranger@example.test')
   })
   it('a failing grant is 500, sends nothing and logs no address', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -228,6 +257,7 @@ describe('POST /admin/team', () => {
     const { call, team } = build({ over: { createAccount: vi.fn(async () => { throw new Error('createUser failed') }) } })
     const res = await call('POST', '/admin/team', { email: 'stranger@example.test' })
     expect(res.status).toBe(500)
+    expect(team.findUserIdByEmail).toHaveBeenCalledTimes(2)
     expect(team.grant).not.toHaveBeenCalled()
     expect(team.sendMail).not.toHaveBeenCalled()
   })
@@ -275,7 +305,16 @@ describe('DELETE /admin/team/:userId', () => {
     expect(await res.json()).toEqual({ success: true, data: { result: 'removed' } })
     expect(team.remove).toHaveBeenCalledWith(ME, REN, 'ren@example.test')
     expect(sentTo(team).sort()).toEqual(['khairul@example.test', 'ren@example.test'])
-    expect(new Set(subjects(team))).toEqual(new Set(['Khairul removed Ren on Oriri Admin']))
+    expect(new Set(subjects(team))).toEqual(new Set(['Khairul removed Ren from Oriri Admin']))
+    const html = (team.sendMail as ReturnType<typeof vi.fn>).mock.calls[0][3] as string
+    expect(html).toContain('<p>Khairul removed Ren from Oriri Admin.</p>')
+  })
+  it('remove answering notActor is 403 Forbidden, and no mail is sent', async () => {
+    const { call, team } = build({ over: { remove: vi.fn(async () => 'notActor' as const) } })
+    const res = await call('DELETE', `/admin/team/${REN}`)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ success: false, error: 'Forbidden' })
+    expect(team.sendMail).not.toHaveBeenCalled()
   })
   it('a failing mail still answers 200 removed', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

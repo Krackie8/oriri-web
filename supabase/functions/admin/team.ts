@@ -6,6 +6,8 @@
  * - A change needs a sign-in under 10 minutes old (isFresh). It is checked before anything else runs.
  * - You can't remove yourself, and the last admin is never removed (TEAM_REMOVE_SQL decides that
  *   under a lock).
+ * - The actor is re-checked as a live admin under the same lock as the change ('notActor' -> 403),
+ *   so an admin removed while her requests are in flight can't make one more change.
  * - Every change is recorded in bestie.team_changes by the same statement that makes it.
  * - Every admin is told by email after the change. A mail failure is logged (never with an address)
  *   and never undoes or fails the change.
@@ -29,10 +31,10 @@ export interface TeamDeps {
   findUserIdByEmail(email: string): Promise<string | null>
   /** auth.admin.createUser({ email, email_confirm: true }); returns the new id. Throws on error. */
   createAccount(email: string): Promise<string>
-  /** Runs TEAM_GRANT_SQL as service_role. */
-  grant(actorId: string, targetId: string, targetEmail: string): Promise<void>
-  /** Runs TEAM_REMOVE_SQL as service_role. */
-  remove(actorId: string, targetId: string, targetEmail: string): Promise<'removed' | 'last' | 'notAdmin'>
+  /** Runs TEAM_GRANT_SQL as service_role. 'notActor' when the actor is no longer a live admin. */
+  grant(actorId: string, targetId: string, targetEmail: string): Promise<'granted' | 'notActor'>
+  /** Runs TEAM_REMOVE_SQL as service_role. 'notActor' when the actor is no longer a live admin. */
+  remove(actorId: string, targetId: string, targetEmail: string): Promise<'removed' | 'last' | 'notAdmin' | 'notActor'>
   sendMail(to: string, subject: string, text: string, html: string): Promise<void>
   /** Clock in ms; defaults to Date.now. */
   now?: () => number
@@ -43,7 +45,12 @@ const oneLine = (s: string) => s.replace(/[\r\n\t]+/g, ' ')
 
 export const TEAM_MAIL = {
   addedSubject: "You've been added to Oriri Admin",
-  noticeSubject: (who: string, verb: 'added' | 'removed', whom: string) => oneLine(`${who} ${verb} ${whom} on Oriri Admin`),
+  noticeSubject: (who: string, verb: 'added' | 'removed', whom: string) => noticeLine(who, verb, whom),
+}
+
+/** "Ren added Sara to Oriri Admin" / "Ren removed Sara from Oriri Admin"; h escapes the names for html. */
+function noticeLine(who: string, verb: 'added' | 'removed', whom: string, h: (s: string) => string = (s) => s): string {
+  return `${h(oneLine(who))} ${verb} ${h(oneLine(whom))} ${verb === 'added' ? 'to' : 'from'} Oriri Admin`
 }
 
 const ADMIN_URL = `${SIGN_IN_ORIGINS[0]}/admin`
@@ -105,11 +112,19 @@ async function sendOne(deps: TeamDeps, to: string, subject: string, text: string
 async function sendNotices(deps: TeamDeps, admins: Row[], who: string, verb: 'added' | 'removed', whom: string) {
   const subject = TEAM_MAIL.noticeSubject(who, verb, whom)
   const text = `${subject}.\n\n${NOTICE_LINE}`
-  const html = `<p>${esc(oneLine(who))} ${verb} ${esc(oneLine(whom))} on Oriri Admin.</p><p>${esc(NOTICE_LINE)}</p>`
-  for (const r of admins) await sendOne(deps, str(r.email), subject, text, html)
+  const html = `<p>${noticeLine(who, verb, whom, esc)}.</p><p>${esc(NOTICE_LINE)}</p>`
+  const seen = new Set<string>()
+  for (const r of admins) {
+    const to = str(r.email)
+    const key = to.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    await sendOne(deps, to, subject, text, html)
+  }
 }
 
 const reauth = (c: Context) => c.json({ success: false, error: 'reauth' }, 403)
+const notActor = (c: Context) => c.json({ success: false, error: 'Forbidden' }, 403)
 const changeFailed = (c: Context) => c.json({ success: false, error: 'Could not change the team' }, 500)
 const fresh = (deps: TeamDeps, user: AdminUser) => isFresh(user.signedInAt, (deps.now ?? Date.now)())
 
@@ -127,6 +142,17 @@ export async function getTeam(c: Context, deps: TeamDeps, user: AdminUser): Prom
   }
 }
 
+/** Creates the account; if that fails, looks once more in case a concurrent add just created it. */
+async function createOrFind(deps: TeamDeps, email: string): Promise<string> {
+  try {
+    return await deps.createAccount(email)
+  } catch (err) {
+    const found = await deps.findUserIdByEmail(email)
+    if (found) return found
+    throw err
+  }
+}
+
 /** POST /admin/team { email }. */
 export async function addToTeam(c: Context, deps: TeamDeps, user: AdminUser): Promise<Response> {
   if (!fresh(deps, user)) return reauth(c)
@@ -137,28 +163,39 @@ export async function addToTeam(c: Context, deps: TeamDeps, user: AdminUser): Pr
   if (!email || email.length > 200 || !EMAIL_RE.test(email)) return c.json({ error: 'invalid' }, 400)
 
   let targetId: string
+  let before: Row[]
+  let result: string
   try {
     const found = await deps.findUserIdByEmail(email)
-    if (found && (await deps.list()).some((r) => idOf(r) === found.toLowerCase())) {
+    // Read before the grant in every case: the notices fall back to it if the list after fails.
+    before = await deps.list()
+    if (found && before.some((r) => idOf(r) === found.toLowerCase())) {
       return c.json({ success: true, data: { result: 'already' } })
     }
-    targetId = found ?? (await deps.createAccount(email))
-    await deps.grant(user.id, targetId, email)
+    targetId = found ?? (await createOrFind(deps, email))
+    result = await deps.grant(user.id, targetId, email)
   } catch (err) {
     logFailure('add failed', err)
     return changeFailed(c)
   }
-
-  // The change is made and recorded. From here nothing changes the answer.
-  await sendOne(deps, email, TEAM_MAIL.addedSubject, WELCOME_TEXT, WELCOME_HTML)
-  try {
-    const after = await deps.list()
-    const who = labelOf(after.find((r) => idOf(r) === user.id.toLowerCase()), user.email || 'An admin')
-    const whom = labelOf(after.find((r) => idOf(r) === targetId.toLowerCase()), email)
-    await sendNotices(deps, after, who, 'added', whom)
-  } catch (err) {
-    logFailure('notices failed', err)
+  if (result === 'notActor') return notActor(c)
+  if (result !== 'granted') {
+    logFailure('grant gave no result', null)
+    return changeFailed(c)
   }
+
+  // The change is made and recorded. From here nothing changes the answer, and it is never silent.
+  await sendOne(deps, email, TEAM_MAIL.addedSubject, WELCOME_TEXT, WELCOME_HTML)
+  let admins: Row[]
+  try {
+    admins = await deps.list()
+  } catch (err) {
+    logFailure('notice list failed, using the one from before', err)
+    admins = [...before, { user_id: targetId, email }]
+  }
+  const who = labelOf(admins.find((r) => idOf(r) === user.id.toLowerCase()), user.email || 'An admin')
+  const whom = labelOf(admins.find((r) => idOf(r) === targetId.toLowerCase()), email)
+  await sendNotices(deps, admins, who, 'added', whom)
   return c.json({ success: true, data: { result: 'added' } })
 }
 
@@ -183,6 +220,7 @@ export async function removeFromTeam(c: Context, deps: TeamDeps, user: AdminUser
     logFailure('remove failed', err)
     return changeFailed(c)
   }
+  if (result === 'notActor') return notActor(c)
   if (result === 'last') return c.json({ error: 'last' }, 409)
   if (result === 'notAdmin') return c.json({ error: 'Not found' }, 404)
   if (result !== 'removed') {

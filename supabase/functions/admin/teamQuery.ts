@@ -7,12 +7,16 @@
  * TEAM_CHANGES_SQL: no parameters. The last 20 Team changes, newest first. The actor's email and name
  *   come from a left join, so a deleted account still shows; the target is the email recorded at the
  *   time. Read-only, as the connection user.
- * TEAM_GRANT_SQL: $1::uuid actor, $2::uuid target, $3::text target email. One statement: give the
- *   target a live admin row (insert, or clear the expiry of an existing one) and record an 'add'.
+ * TEAM_GRANT_SQL: $1::uuid actor, $2::uuid target, $3::text target email. One statement, one column
+ *   `result`. The actor's own live admin row is taken FOR SHARE (so it waits for a concurrent remove's
+ *   FOR UPDATE); without it the answer is 'notActor' and nothing is written. Otherwise 'granted': the
+ *   target gets a live admin row (insert, or clear the expiry of an existing one; an expired row also
+ *   restarts its created_at, a live one keeps it) and an 'add' is recorded.
  *   Runs as service_role, so it never touches auth.users; the email is passed in.
  * TEAM_REMOVE_SQL: $1::uuid actor, $2::uuid target, $3::text target email. One statement, one column
- *   `result`: 'notAdmin' when the target has no live admin row, 'last' when she is the only live
- *   admin, otherwise 'removed' after deleting her admin row and recording a 'remove'. The live admin
+ *   `result`: 'notActor' when the actor herself has no live admin row, 'notAdmin' when the target has
+ *   none, 'last' when she is the only live admin, otherwise 'removed' after deleting her admin row
+ *   and recording a 'remove'. The live admin
  *   rows are locked FOR UPDATE first (in a CTE: FOR UPDATE can't sit on an aggregate), so two removes
  *   at once are serialised and the second one counts what the first left: the last admin is never
  *   removed. Runs as service_role.
@@ -26,14 +30,24 @@ left join public.profiles p on p.user_id = r.user_id
 where r.role = 'admin' and (r.expires_at is null or r.expires_at > now())
 order by r.created_at, r.user_id`
 
-export const TEAM_GRANT_SQL = `with granted as (
-  insert into public.user_roles (user_id, role, expires_at)
-  values ($2::uuid, 'admin', null)
-  on conflict (user_id, role) do update set expires_at = null
-  returning user_id
+export const TEAM_GRANT_SQL = `with actor as (
+  select user_id from public.user_roles
+  where user_id = $1::uuid and role = 'admin' and (expires_at is null or expires_at > now())
+  for share
+),
+granted as (
+  insert into public.user_roles as r (user_id, role, expires_at)
+  select $2::uuid, 'admin', null where exists (select 1 from actor)
+  on conflict (user_id, role) do update
+    set expires_at = null,
+      created_at = case when r.expires_at is null or r.expires_at > now() then r.created_at else now() end
+  returning r.user_id
+),
+recorded as (
+  insert into bestie.team_changes (actor_id, target_id, target_email, action)
+  select $1::uuid, g.user_id, $3::text, 'add' from granted g
 )
-insert into bestie.team_changes (actor_id, target_id, target_email, action)
-select $1::uuid, g.user_id, $3::text, 'add' from granted g`
+select case when exists (select 1 from actor) then 'granted' else 'notActor' end as result`
 
 export const TEAM_REMOVE_SQL = `with live as (
   select user_id from public.user_roles
@@ -42,6 +56,7 @@ export const TEAM_REMOVE_SQL = `with live as (
 ),
 verdict as (
   select case
+    when not coalesce(bool_or(user_id = $1::uuid), false) then 'notActor'
     when not coalesce(bool_or(user_id = $2::uuid), false) then 'notAdmin'
     when count(*) < 2 then 'last'
     else 'removed'
