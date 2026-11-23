@@ -63,7 +63,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 
 /** The whole trimmed display name (at most 60 characters); null when empty or it looks like an email. */
-function nameOf(displayName: unknown): string | null {
+export function nameOf(displayName: unknown): string | null {
   const raw = typeof displayName === 'string' ? displayName : null
   if (firstNameOf(raw) === null) return null
   return raw!.trim().slice(0, 60)

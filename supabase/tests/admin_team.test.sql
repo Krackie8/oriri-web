@@ -251,3 +251,175 @@ select pg_temp.check((select count(*) from d_none) = 0, 'an auth user who is not
 create temp table d_unknown as execute md('00000000-0000-0000-0000-0000000cffff');
 select pg_temp.check((select count(*) from d_unknown) = 0, 'an unknown uuid returns no row');
 rollback;
+
+-- Part 3: the Team statements (TEAM_LIST_SQL, TEAM_GRANT_SQL, TEAM_REMOVE_SQL and TEAM_CHANGES_SQL in
+-- supabase/functions/admin/teamQuery.ts). The statements are embedded unchanged;
+-- supabase/functions/admin/teamQuery.test.ts keeps them identical to the TypeScript strings.
+-- Grant and remove run after `set local role service_role`, as on live; the reads run as the
+-- connection user.
+begin;
+-- Start from no admins; it all rolls back.
+delete from public.user_roles where role = 'admin';
+
+-- d1 Ada (the only admin to begin with), d2 Bea, d3 Cy (an expired admin row), d4 Dee (never an admin).
+insert into auth.users (id, email, last_sign_in_at) values
+  ('00000000-0000-0000-0000-0000000d0001', 'ada@example.test', now() - interval '1 day'),
+  ('00000000-0000-0000-0000-0000000d0002', 'bea@example.test', null),
+  ('00000000-0000-0000-0000-0000000d0003', 'cy@example.test', null),
+  ('00000000-0000-0000-0000-0000000d0004', 'dee@example.test', null);
+update public.profiles set display_name = 'Ada Lovelace' where user_id = '00000000-0000-0000-0000-0000000d0001';
+insert into public.user_roles (user_id, role, created_at) values
+  ('00000000-0000-0000-0000-0000000d0001', 'admin', now() - interval '2 days');
+insert into public.user_roles (user_id, role, expires_at, created_at) values
+  ('00000000-0000-0000-0000-0000000d0003', 'admin', now() - interval '1 day', now() - interval '3 days');
+
+prepare tl as
+select r.user_id, u.email, p.display_name, r.created_at as since, u.last_sign_in_at
+from public.user_roles r
+join auth.users u on u.id = r.user_id
+left join public.profiles p on p.user_id = r.user_id
+where r.role = 'admin' and (r.expires_at is null or r.expires_at > now())
+order by r.created_at, r.user_id;
+
+prepare tg(uuid, uuid, text) as
+with granted as (
+  insert into public.user_roles (user_id, role, expires_at)
+  values ($2::uuid, 'admin', null)
+  on conflict (user_id, role) do update set expires_at = null
+  returning user_id
+)
+insert into bestie.team_changes (actor_id, target_id, target_email, action)
+select $1::uuid, g.user_id, $3::text, 'add' from granted g;
+
+prepare tr(uuid, uuid, text) as
+with live as (
+  select user_id from public.user_roles
+  where role = 'admin' and (expires_at is null or expires_at > now())
+  for update
+),
+verdict as (
+  select case
+    when not coalesce(bool_or(user_id = $2::uuid), false) then 'notAdmin'
+    when count(*) < 2 then 'last'
+    else 'removed'
+  end as result
+  from live
+),
+gone as (
+  delete from public.user_roles
+  where user_id = $2::uuid and role = 'admin'
+    and (select result from verdict) = 'removed'
+  returning user_id
+),
+recorded as (
+  insert into bestie.team_changes (actor_id, target_id, target_email, action)
+  select $1::uuid, g.user_id, $3::text, 'remove' from gone g
+)
+select result from verdict;
+
+prepare tc as
+select c.actor_id, a.email as actor_email, p.display_name as actor_name, c.target_email, c.action, c.created_at
+from bestie.team_changes c
+left join auth.users a on a.id = c.actor_id
+left join public.profiles p on p.user_id = c.actor_id
+order by c.created_at desc, c.id desc
+limit 20;
+
+-- The only admin can't be removed (Cy's expired row doesn't count), and nothing is written.
+set local role service_role;
+execute tr('00000000-0000-0000-0000-0000000d0002', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r1_
+reset role;
+select pg_temp.check(:'r1_result' = 'last', 'removing the only live admin answers last');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0001' and role = 'admin') = 1,
+  'the only admin is still an admin');
+select pg_temp.check((select count(*) from bestie.team_changes where action = 'remove') = 0, 'a refused remove records nothing');
+
+-- An expired admin and a never-admin are notAdmin.
+set local role service_role;
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0003', 'cy@example.test') \gset r2_
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0004', 'dee@example.test') \gset r3_
+reset role;
+select pg_temp.check(:'r2_result' = 'notAdmin', 'removing an expired admin answers notAdmin');
+select pg_temp.check(:'r3_result' = 'notAdmin', 'removing a non-admin answers notAdmin');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') = 1,
+  'notAdmin deletes nothing');
+
+-- Granting Bea twice: one admin row, two add records.
+set local role service_role;
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test');
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test');
+reset role;
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'admin' and expires_at is null) = 1,
+  'granting twice leaves one live admin row');
+select pg_temp.check((select count(*) from bestie.team_changes
+  where target_id = '00000000-0000-0000-0000-0000000d0002' and action = 'add'
+    and actor_id = '00000000-0000-0000-0000-0000000d0001' and target_email = 'bea@example.test') = 2,
+  'granting twice records two adds');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'user') = 1,
+  'granting leaves the user role alone');
+
+-- Granting Cy clears her expiry.
+set local role service_role;
+execute tg('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0003', 'cy@example.test');
+reset role;
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') = 1
+  and (select expires_at from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0003' and role = 'admin') is null,
+  'granting an expired admin makes her live again, in the same row');
+
+-- The list: Cy, Ada, Bea by since (Cy's row keeps its old created_at).
+create temp table t_list as execute tl;
+select pg_temp.check((select array_agg(user_id order by ord) from (select user_id, row_number() over () as ord from t_list) x)
+  = array['00000000-0000-0000-0000-0000000d0003', '00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002']::uuid[],
+  'the list is the live admins, oldest first');
+select pg_temp.check((select email from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') = 'ada@example.test'
+  and (select display_name from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') = 'Ada Lovelace'
+  and (select last_sign_in_at from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') is not null
+  and (select since from t_list where user_id = '00000000-0000-0000-0000-0000000d0001') = now() - interval '2 days',
+  'the list carries email, name, since and last sign-in');
+
+-- With more than one admin, removing Bea works and records one remove; removing her again is notAdmin.
+set local role service_role;
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test') \gset r4_
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0002', 'bea@example.test') \gset r5_
+reset role;
+select pg_temp.check(:'r4_result' = 'removed', 'removing one of several admins answers removed');
+select pg_temp.check(:'r5_result' = 'notAdmin', 'removing her again answers notAdmin');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'admin') = 0,
+  'her admin row is gone');
+select pg_temp.check((select count(*) from public.user_roles where user_id = '00000000-0000-0000-0000-0000000d0002' and role = 'user') = 1,
+  'her user role and account stay');
+select pg_temp.check((select count(*) from bestie.team_changes where action = 'remove') = 1
+  and (select count(*) from bestie.team_changes where action = 'remove' and target_id = '00000000-0000-0000-0000-0000000d0002'
+    and actor_id = '00000000-0000-0000-0000-0000000d0001' and target_email = 'bea@example.test') = 1,
+  'one remove is recorded');
+
+-- Down to two (Ada, Cy): removing Cy works, then Ada is the last one.
+set local role service_role;
+execute tr('00000000-0000-0000-0000-0000000d0001', '00000000-0000-0000-0000-0000000d0003', 'cy@example.test') \gset r6_
+execute tr('00000000-0000-0000-0000-0000000d0003', '00000000-0000-0000-0000-0000000d0001', 'ada@example.test') \gset r7_
+reset role;
+select pg_temp.check(:'r6_result' = 'removed' and :'r7_result' = 'last', 'with two admins one can go, then the last stays');
+select pg_temp.check((select count(*) from public.user_roles where role = 'admin' and (expires_at is null or expires_at > now())) = 1,
+  'one live admin is left');
+
+-- Changes: 21 more, all after the ones above; the last 20 come back newest first. One is by an actor
+-- whose account is gone, so only the recorded target email shows.
+insert into bestie.team_changes (actor_id, target_id, target_email, action, created_at)
+select case when n = 21 then '00000000-0000-0000-0000-0000000dffff'::uuid else '00000000-0000-0000-0000-0000000d0001'::uuid end,
+  '00000000-0000-0000-0000-0000000d0004', 'seed' || n || '@example.test', case when n % 2 = 0 then 'add' else 'remove' end,
+  now() + n * interval '1 minute'
+from generate_series(1, 21) n;
+create temp table t_changes as execute tc;
+select pg_temp.check((select count(*) from t_changes) = 20, 'changes are capped at 20');
+select pg_temp.check((select array_agg(target_email order by ord) from (select target_email, row_number() over () as ord from t_changes) x)
+  = (select array_agg('seed' || n || '@example.test' order by n desc) from generate_series(2, 21) n),
+  'changes are newest first');
+select pg_temp.check((select actor_email from t_changes where target_email = 'seed21@example.test') is null
+  and (select actor_name from t_changes where target_email = 'seed21@example.test') is null,
+  'a deleted actor still lists, with no email or name');
+select pg_temp.check((select actor_email from t_changes where target_email = 'seed20@example.test') = 'ada@example.test'
+  and (select actor_name from t_changes where target_email = 'seed20@example.test') = 'Ada Lovelace'
+  and (select action from t_changes where target_email = 'seed20@example.test') = 'add'
+  and (select actor_id from t_changes where target_email = 'seed20@example.test') = '00000000-0000-0000-0000-0000000d0001',
+  'a change carries the actor email, name and action');
+rollback;

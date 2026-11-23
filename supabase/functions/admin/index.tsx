@@ -8,6 +8,7 @@ import { createKvLimiter } from './signInLink.ts'
 import { OVERVIEW_SQL } from './overviewQuery.ts'
 import { testEmailsFrom } from './overview.ts'
 import { MEMBERS_LIST_SQL, MEMBER_DETAIL_SQL } from './membersQuery.ts'
+import { TEAM_LIST_SQL, TEAM_GRANT_SQL, TEAM_REMOVE_SQL, TEAM_CHANGES_SQL } from './teamQuery.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -39,6 +40,21 @@ async function sendMail(to: string, subject: string, text: string, html: string)
 let sqlClient: ReturnType<typeof postgres> | null = null
 const db = () => (sqlClient ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }))
 
+// Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
+const findUserIdByEmail = async (email: string): Promise<string | null> => {
+  const rows = await db().begin('read only', (tx: any) =>
+    tx`select id from auth.users where lower(email) = ${email} and deleted_at is null limit 1`)
+  return (rows[0] as { id: string } | undefined)?.id ?? null
+}
+
+// Team writes: public.user_roles and bestie.team_changes, as service_role, in one transaction.
+// The statements never read auth.users (service_role can't); the email is passed in.
+const asServiceRole = (sql: string, params: unknown[]) =>
+  db().begin(async (tx: any) => {
+    await tx`set local role service_role`
+    return tx.unsafe(sql, params)
+  })
+
 const adminIds = async () => [...(await adminUserIds(supabase as unknown as Parameters<typeof adminUserIds>[0]))]
 
 const app = createAdminApp({
@@ -52,12 +68,7 @@ const app = createAdminApp({
     return { id: user.id, email: user.email ?? '', signedInAt: signedInAt(decodePayload(token)) }
   },
   signInLink: {
-    // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.
-    findUserIdByEmail: async (email) => {
-      const rows = await db().begin('read only', (tx: any) =>
-        tx`select id from auth.users where lower(email) = ${email} and deleted_at is null limit 1`)
-      return (rows[0] as { id: string } | undefined)?.id ?? null
-    },
+    findUserIdByEmail,
     isAdmin: (id) => hasAdminRole(supabase as unknown as RolesReader, id),
     // Only called once the account is known to exist, so this never creates a user.
     makeLink: async (email, redirectTo) => {
@@ -97,6 +108,28 @@ const app = createAdminApp({
     },
     adminIds,
     testEmails: () => testEmailsFrom(kv),
+  },
+  team: {
+    // Both reads run as the connection user in a read-only transaction: service_role cannot select auth.users.
+    list: async () => await db().begin('read only', (tx: any) => tx.unsafe(TEAM_LIST_SQL)) as Record<string, unknown>[],
+    changes: async () => await db().begin('read only', (tx: any) => tx.unsafe(TEAM_CHANGES_SQL)) as Record<string, unknown>[],
+    findUserIdByEmail,
+    // Only called once findUserIdByEmail found no account. A plain sign-in account: email confirmed, no password.
+    createAccount: async (email) => {
+      const { data, error } = await supabase.auth.admin.createUser({ email, email_confirm: true })
+      if (error || !data?.user?.id) throw new Error('createUser failed')
+      return data.user.id
+    },
+    grant: async (actorId, targetId, targetEmail) => {
+      await asServiceRole(TEAM_GRANT_SQL, [actorId, targetId, targetEmail])
+    },
+    remove: async (actorId, targetId, targetEmail) => {
+      const rows = await asServiceRole(TEAM_REMOVE_SQL, [actorId, targetId, targetEmail])
+      const result = (rows[0] as { result?: unknown } | undefined)?.result
+      if (result !== 'removed' && result !== 'last' && result !== 'notAdmin') throw new Error('remove gave no result')
+      return result
+    },
+    sendMail,
   },
   me: {
     displayName: async (id) => {
