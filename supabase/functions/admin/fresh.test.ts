@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { signedInAt, isFresh, FRESH_MS } from './fresh.ts'
+import { signedInAt, isFresh, decodePayload, FRESH_MS } from './fresh.ts'
 
 describe('signedInAt', () => {
   it('converts seconds to ms', () => {
@@ -32,4 +32,31 @@ describe('isFresh', () => {
   it('is false past the window', () => expect(isFresh(t, t + 600_001)).toBe(false))
   it('is false when null', () => expect(isFresh(null, t)).toBe(false))
   it('is false when far in the future', () => expect(isFresh(t + 120_000, t)).toBe(false))
+})
+
+const b64url = (s: string) => Buffer.from(s, 'utf8').toString('base64url')
+const tokenOf = (payload: unknown) => `${b64url('{"alg":"HS256"}')}.${b64url(JSON.stringify(payload))}.sig`
+
+describe('decodePayload', () => {
+  it('decodes an unpadded payload', () => {
+    const payload = { a: 1 }
+    const token = tokenOf(payload)
+    expect(token.split('.')[1]).not.toMatch(/=/)
+    expect(token.split('.')[1].length % 4).not.toBe(0)
+    expect(decodePayload(token)).toEqual(payload)
+  })
+  it('decodes base64url characters - and _', () => {
+    const payload = { note: '???>>>~~~' } // encodes with - and _
+    const seg = b64url(JSON.stringify(payload))
+    expect(seg).toMatch(/[-_]/)
+    expect(decodePayload(`h.${seg}.s`)).toEqual(payload)
+  })
+  it('returns the amr through to signedInAt', () => {
+    expect(signedInAt(decodePayload(tokenOf({ amr: [{ method: 'otp', timestamp: 1000 }] })))).toBe(1_000_000)
+  })
+  it('returns null for malformed tokens', () => {
+    expect(decodePayload('onlyonesegment')).toBeNull()
+    expect(decodePayload('h.!!!not base64!!!.s')).toBeNull()
+    expect(decodePayload(`h.${b64url('not json')}.s`)).toBeNull()
+  })
 })

@@ -3,7 +3,7 @@ import postgres from 'npm:postgres@3.4.5'
 import { hasAdminRole, adminUserIds, type RolesReader } from '../server/adminRole.ts'
 import * as kv from '../server/kv_store.tsx'
 import { createAdminApp } from './app.ts'
-import { signedInAt } from './fresh.ts'
+import { signedInAt, decodePayload } from './fresh.ts'
 import { createKvLimiter } from './signInLink.ts'
 import { OVERVIEW_SQL } from './overviewQuery.ts'
 
@@ -34,15 +34,6 @@ async function sendMail(to: string, subject: string, text: string, html: string)
   }
 }
 
-function decodePayload(token: string): unknown {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')))
-  } catch {
-    return null
-  }
-}
-
 let sqlClient: ReturnType<typeof postgres> | null = null
 const db = () => (sqlClient ??= postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 2, prepare: false }))
 
@@ -53,7 +44,8 @@ const app = createAdminApp({
     if (!token) return null
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return null
-    return { id: user.id, email: user.email ?? '' }
+    // These claims are trusted only because getUser verified the token first.
+    return { id: user.id, email: user.email ?? '', signedInAt: signedInAt(decodePayload(token)) }
   },
   signInLink: {
     // Runs as the connection user in a read-only transaction: service_role cannot select auth.users.

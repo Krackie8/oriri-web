@@ -26,3 +26,14 @@ export function isFresh(signedInAtMs: number | null, nowMs: number): boolean {
   if (age < 0) return age >= -FUTURE_SKEW_MS
   return age <= FRESH_MS
 }
+
+// Decodes a JWT's payload (middle segment, base64url JSON). Null on any error.
+// Does NOT verify the token: call only after the token was verified elsewhere.
+export function decodePayload(token: string): unknown {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')))
+  } catch {
+    return null
+  }
+}
