@@ -7,8 +7,10 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { meHandler, type MeDeps } from './me.ts'
-import { loadOverview, type OverviewDeps } from './overview.ts'
+import { loadOverview, dubaiDate, type OverviewDeps } from './overview.ts'
+import { cleanQuery, isUuid, toDetail, toListItem, type MembersDeps } from './members.ts'
 import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
+import { getTeam, addToTeam, removeFromTeam, type TeamDeps } from './team.ts'
 
 export type { SignInLinkDeps }
 
@@ -16,9 +18,14 @@ export type { MeDeps }
 
 export type { OverviewDeps }
 
+export type { MembersDeps }
+
+export type { TeamDeps }
+
 export interface AdminUser {
   id: string
   email: string
+  signedInAt: number | null
 }
 
 export interface AdminDeps {
@@ -27,6 +34,8 @@ export interface AdminDeps {
   signInLink: SignInLinkDeps
   overview: OverviewDeps
   me: MeDeps
+  members: MembersDeps
+  team: TeamDeps
 }
 
 const ALLOWED_ORIGINS = [
@@ -102,6 +111,57 @@ export function createAdminApp(deps: AdminDeps): Hono {
       console.error('admin/overview: failed', (err as { message?: string } | null)?.message)
       return c.json({ success: false, error: 'Could not load the overview' }, 500)
     }
+  })
+  app.get('/admin/members', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    try {
+      const [rows, ids, tests] = await Promise.all([
+        deps.members.list(cleanQuery(c.req.query('q'))),
+        deps.members.adminIds(),
+        deps.members.testEmails(),
+      ])
+      const adminIds = new Set(ids)
+      return c.json({ success: true, data: rows.map((r) => toListItem(r, adminIds, tests)) })
+    } catch (err) {
+      console.error('admin/members: failed', (err as { message?: string } | null)?.message)
+      return c.json({ success: false, error: 'Could not load Members' }, 500)
+    }
+  })
+  app.get('/admin/members/:id', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    const id = c.req.param('id')
+    if (!isUuid(id)) return c.json({ error: 'Not found' }, 404)
+    try {
+      const [row, ids, tests] = await Promise.all([
+        deps.members.detail(id),
+        deps.members.adminIds(),
+        deps.members.testEmails(),
+      ])
+      if (!row) return c.json({ error: 'Not found' }, 404)
+      const today = dubaiDate((deps.members.now ?? (() => new Date()))())
+      return c.json({ success: true, data: toDetail(row, id, new Set(ids), tests, today) })
+    } catch (err) {
+      console.error('admin/members/:id: failed', (err as { message?: string } | null)?.message)
+      return c.json({ success: false, error: 'Could not load Members' }, 500)
+    }
+  })
+  // Team: requireAdmin first on every route; the change routes then need a fresh sign-in (team.ts).
+  app.get('/admin/team', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    return getTeam(c, deps.team, auth.user)
+  })
+  app.post('/admin/team', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    return addToTeam(c, deps.team, auth.user)
+  })
+  app.delete('/admin/team/:userId', async (c) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    return removeFromTeam(c, deps.team, auth.user)
   })
   return app
 }

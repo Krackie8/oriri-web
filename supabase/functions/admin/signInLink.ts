@@ -22,7 +22,7 @@ export const SIGN_IN_WORK_TIMEOUT_MS = 10_000
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_PER_EMAIL = 3
 const MAX_PER_IP = 10
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 export const SIGN_IN_ORIGINS = ['https://www.oriri.me', 'https://new.oriri.me', 'http://localhost:8443']
 
@@ -32,7 +32,7 @@ export function redirectToFor(originHeader: string | undefined): string {
   return `${origin}/admin`
 }
 
-const esc = (v: string) => v.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)
+export const esc = (v: string) => v.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)
 
 export async function requestSignInLink(email: unknown, ip: string, deps: SignInLinkDeps): Promise<void> {
   try {

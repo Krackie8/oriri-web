@@ -102,14 +102,19 @@ const emailOf = (r: unknown): string =>
     ? (r as { email: string }).email
     : ''
 
+/** Lower-cased emails of the leads flagged as test (bestie:leadflag:* with test === true). */
+export async function testEmailsFrom(kv: OverviewKv): Promise<Set<string>> {
+  const flags = ((await kv.getByPrefix('bestie:leadflag:')) || []).filter(Boolean) as { email?: unknown; test?: unknown }[]
+  return new Set(
+    flags.filter((f) => f.test === true).map((f) => emailOf(f).trim().toLowerCase()).filter(Boolean),
+  )
+}
+
 /** Gathers everything and builds the Overview. */
 export async function loadOverview(deps: OverviewDeps): Promise<Overview> {
   const today = dubaiDate((deps.now ?? (() => new Date()))())
   const { kv } = deps
-  const flags = ((await kv.getByPrefix('bestie:leadflag:')) || []).filter(Boolean) as { email?: unknown; test?: unknown }[]
-  const testEmails = new Set(
-    flags.filter((f) => f.test === true).map((f) => emailOf(f).trim().toLowerCase()).filter(Boolean),
-  )
+  const testEmails = await testEmailsFrom(kv)
   const [adminIds, waitlist, signups, nourish] = await Promise.all([
     deps.adminIds(),
     kv.getByPrefix('waitlist:bestie:'),
