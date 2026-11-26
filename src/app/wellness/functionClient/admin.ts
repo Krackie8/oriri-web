@@ -1,7 +1,8 @@
 /**
  * Admin: the team-only sign-in link, "who am I" and the Overview numbers.
  * Overview mirrors supabase/functions/admin/overview.ts; MemberListItem and MemberDetail
- * mirror members.ts; TeamMember and TeamChange mirror team.ts (src cannot import Deno code).
+ * mirror members.ts; TeamMember and TeamChange mirror team.ts; the Event types mirror events.ts
+ * (src cannot import Deno code).
  */
 import type { Core } from './core'
 import type { FunctionError, Result } from './types'
@@ -49,6 +50,52 @@ export function teamProblem(e: FunctionError): TeamProblem {
   return code === 'reauth' || code === 'invalid' || code === 'self' || code === 'last' ? code : 'other'
 }
 
+export type EventKind = 'moment' | 'event'
+export const EVENT_CATEGORIES = ['Movement', 'Mind', 'Food', 'Beauty', 'Workshop', 'Pop-up', 'Community'] as const
+
+export interface StoredEvent {
+  id: string
+  title: string
+  date: string
+  startTime?: string
+  location?: string
+  description?: string
+  link?: string
+  pinned: boolean
+  createdAt: string
+  updatedAt: string
+  type?: 'upcoming' | 'recap'
+  photos?: string[]
+  category?: string
+  image?: string
+  partner?: string
+}
+export type EventFields = Partial<Omit<StoredEvent, 'id' | 'createdAt' | 'updatedAt'>>
+
+export interface EventListItem extends StoredEvent {
+  kind: EventKind
+  bookings: number
+  spots: number
+  newBookings: number
+  inMeetUp: boolean
+}
+export interface EventsList {
+  upcoming: EventListItem[]
+  past: EventListItem[]
+  tile: { comingUp: number; bookings: number; fresh: boolean }
+}
+export interface Booking { ref: string; name: string; email: string; phone: string; guests: number; bookedAt: string }
+
+export type EventProblem = { kind: 'invalid'; problem: string } | { kind: 'stale' } | { kind: 'other' }
+
+/** Reads the server's Events error: 400 { error: 'invalid', problem }, 409 { error: 'stale' }; anything else is 'other'. */
+export function eventProblem(e: FunctionError): EventProblem {
+  const d = e.details as { error?: unknown; problem?: unknown } | null | undefined
+  if (d?.error === 'invalid' && typeof d.problem === 'string') return { kind: 'invalid', problem: d.problem }
+  if (d?.error === 'stale') return { kind: 'stale' }
+  return { kind: 'other' }
+}
+
 export interface AdminMe {
   isAdmin: boolean
   firstName: string | null
@@ -94,6 +141,43 @@ export function createAdmin(core: Core) {
     async removeFromTeam(userId: string): Promise<Result<'removed'>> {
       const r = await core.request<{ data: { result: 'removed' } }>('DELETE', `/team/${encodeURIComponent(userId)}`)
       return r.ok ? { ok: true, data: r.data.data.result } : r
+    },
+
+    async events(opts: { seen?: boolean } = {}): Promise<Result<EventsList>> {
+      const r = await core.request<{ data: EventsList }>('GET', opts.seen ? '/events?seen=1' : '/events')
+      return r.ok ? { ok: true, data: r.data.data } : r
+    },
+
+    async createEvent(kind: EventKind, fields: EventFields): Promise<Result<StoredEvent>> {
+      const r = await core.request<{ data: StoredEvent }>('POST', '/events', { body: { kind, ...fields } })
+      return r.ok ? { ok: true, data: r.data.data } : r
+    },
+
+    async updateEvent(kind: EventKind, id: string, updatedAt: string, fields: EventFields): Promise<Result<StoredEvent>> {
+      const r = await core.request<{ data: StoredEvent }>('PUT', `/events/${kind}/${encodeURIComponent(id)}`, { body: { updatedAt, ...fields } })
+      return r.ok ? { ok: true, data: r.data.data } : r
+    },
+
+    async deleteEvent(kind: EventKind, id: string): Promise<Result<{ bookingsRemoved: number }>> {
+      const r = await core.request<{ data: { bookingsRemoved: number } }>('DELETE', `/events/${kind}/${encodeURIComponent(id)}`)
+      return r.ok ? { ok: true, data: r.data.data } : r
+    },
+
+    async bookings(kind: EventKind, id: string): Promise<Result<Booking[]>> {
+      const r = await core.request<{ data: Booking[] }>('GET', `/events/${kind}/${encodeURIComponent(id)}/bookings`)
+      return r.ok ? { ok: true, data: r.data.data } : r
+    },
+
+    async removeBooking(kind: EventKind, id: string, email: string): Promise<Result<void>> {
+      const r = await core.request('DELETE', `/events/${kind}/${encodeURIComponent(id)}/bookings/${encodeURIComponent(email)}`)
+      return r.ok ? { ok: true, data: undefined } : r
+    },
+
+    async uploadPhoto(file: Blob): Promise<Result<string>> {
+      const form = new FormData()
+      form.append('file', file)
+      const r = await core.request<{ data: { url: string } }>('POST', '/events/photo', { form })
+      return r.ok ? { ok: true, data: r.data.data.url } : r
     },
   }
 }

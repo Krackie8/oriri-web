@@ -144,3 +144,51 @@ describe('teamProblem', () => {
     expect(teamProblem({ status: 0, message: 'x' })).toBe('other')
   })
 })
+
+/* ── Events (#100 piece 3) ─────────────────────────────────────────────── */
+import { eventProblem } from './admin'
+
+describe('admin events calls', () => {
+  const list = { upcoming: [], past: [], tile: { comingUp: 0, bookings: 0, fresh: false } }
+  it('reads /events, with ?seen=1 when asked', async () => {
+    const { admin, fake } = build({ 'GET /events': reply(200, { success: true, data: list }), 'GET /events?seen=1': reply(200, { success: true, data: list }) })
+    expect(await admin.events()).toEqual({ ok: true, data: list })
+    await admin.events({ seen: true })
+    expect(fake.calls.map((c) => c.path)).toEqual(['/events', '/events?seen=1'])
+  })
+  it('creates, edits and deletes with the right method and path', async () => {
+    const e = { id: 'abc123', title: 'T', date: '2026-11-29', pinned: false, createdAt: 'a', updatedAt: 'b' }
+    const { admin, fake } = build({
+      'POST /events': reply(201, { success: true, data: e }),
+      'PUT /events/moment/abc123': reply(200, { success: true, data: e }),
+      'DELETE /events/event/abc123': reply(200, { success: true, data: { bookingsRemoved: 2 } }),
+    })
+    expect(await admin.createEvent('moment', { title: 'T', date: '2026-11-29' })).toEqual({ ok: true, data: e })
+    expect(fake.calls[0].body).toEqual({ kind: 'moment', title: 'T', date: '2026-11-29' })
+    expect(await admin.updateEvent('moment', 'abc123', 'b', { title: 'T', date: '2026-11-29' })).toEqual({ ok: true, data: e })
+    expect(fake.calls[1].body).toEqual({ updatedAt: 'b', title: 'T', date: '2026-11-29' })
+    expect(await admin.deleteEvent('event', 'abc123')).toEqual({ ok: true, data: { bookingsRemoved: 2 } })
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /events', 'PUT /events/moment/abc123', 'DELETE /events/event/abc123'])
+  })
+  it('reads bookings and removes one, encoding the email', async () => {
+    const { admin, fake } = build({
+      'GET /events/moment/abc123/bookings': reply(200, { success: true, data: [] }),
+      'DELETE /events/moment/abc123/bookings/a%2Bb%40x.test': reply(200, { success: true, data: { removed: true } }),
+    })
+    expect(await admin.bookings('moment', 'abc123')).toEqual({ ok: true, data: [] })
+    expect((await admin.removeBooking('moment', 'abc123', 'a+b@x.test')).ok).toBe(true)
+    expect(fake.calls[1].path).toBe('/events/moment/abc123/bookings/a%2Bb%40x.test')
+  })
+  it('uploads a photo as a form', async () => {
+    const { admin, fake } = build({ 'POST /events/photo': reply(200, { success: true, data: { url: 'https://x.test/p.jpg' } }) })
+    expect(await admin.uploadPhoto(new Blob([new Uint8Array([0xff, 0xd8, 0xff])]))).toEqual({ ok: true, data: 'https://x.test/p.jpg' })
+    expect(fake.calls[0].form).toBeInstanceOf(FormData)
+    expect((fake.calls[0].form as FormData).get('file')).toBeTruthy()
+  })
+  it('eventProblem reads invalid, stale and anything else', () => {
+    expect(eventProblem({ status: 400, message: '', details: { error: 'invalid', problem: 'Pick a date.' } })).toEqual({ kind: 'invalid', problem: 'Pick a date.' })
+    expect(eventProblem({ status: 409, message: '', details: { error: 'stale' } })).toEqual({ kind: 'stale' })
+    expect(eventProblem({ status: 500, message: '', details: { error: 'x' } })).toEqual({ kind: 'other' })
+    expect(eventProblem({ status: 0, message: '' })).toEqual({ kind: 'other' })
+  })
+})
