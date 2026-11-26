@@ -7,7 +7,7 @@ export interface Tile {
 export const TILES: Tile[] = [
   { key: 'overview', label: 'Overview', live: true },
   { key: 'members', label: 'Members', live: true },
-  { key: 'events', label: 'Events', live: false },
+  { key: 'events', label: 'Events', live: true },
   { key: 'catalogue', label: 'Catalogue', live: false },
   { key: 'shop', label: 'Shop', live: false },
   { key: 'site-content', label: 'Site content', live: false },

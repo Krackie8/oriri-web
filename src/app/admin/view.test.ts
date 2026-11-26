@@ -153,3 +153,48 @@ describe('memberLoadProblem', () => {
     expect(memberLoadProblem(status)).toEqual({ message: "Couldn't load Members.", canRetry: true })
   })
 })
+
+/* ── Events (#100 piece 3) ─────────────────────────────────────────────── */
+import { eventDayWord, bookingsWord, eventsTileLine, kindLabel } from './view'
+
+describe('eventDayWord', () => {
+  const now = new Date('2026-11-26T08:00:00Z')
+  it('names the weekday, day and month, with a 12-hour time', () => {
+    expect(eventDayWord('2026-11-29', '19:30', now)).toBe('Sun 29 Nov, 7:30 pm')
+    expect(eventDayWord('2026-11-29', '09:05', now)).toBe('Sun 29 Nov, 9:05 am')
+    expect(eventDayWord('2026-11-29', '12:00', now)).toBe('Sun 29 Nov, 12:00 pm')
+    expect(eventDayWord('2026-11-29', '00:15', now)).toBe('Sun 29 Nov, 12:15 am')
+  })
+  it('leaves the time out when there is none, and adds the year in another year', () => {
+    expect(eventDayWord('2026-11-29', undefined, now)).toBe('Sun 29 Nov')
+    expect(eventDayWord('2027-01-02', '', now)).toBe('Sat 2 Jan 2027')
+  })
+})
+
+describe('bookingsWord', () => {
+  it('counts bookings and spots, singular and plural', () => {
+    expect(bookingsWord(0, 0)).toBe('No bookings yet')
+    expect(bookingsWord(1, 1)).toBe('1 booked · 1 spot')
+    expect(bookingsWord(1, 2)).toBe('1 booked · 2 spots')
+    expect(bookingsWord(4, 6)).toBe('4 booked · 6 spots')
+  })
+})
+
+describe('eventsTileLine', () => {
+  it('reads what is coming up and its bookings', () => {
+    expect(eventsTileLine({ comingUp: 0, bookings: 0, fresh: false })).toBe('Nothing coming up')
+    expect(eventsTileLine({ comingUp: 1, bookings: 0, fresh: false })).toBe('1 coming up')
+    expect(eventsTileLine({ comingUp: 3, bookings: 1, fresh: true })).toBe('3 coming up · 1 booking')
+    expect(eventsTileLine({ comingUp: 3, bookings: 7, fresh: false })).toBe('3 coming up · 7 bookings')
+  })
+})
+
+describe('kindLabel', () => {
+  it('names the kind in plain words', () => {
+    expect(kindLabel({ kind: 'moment', type: 'upcoming' })).toBe('Stepsisters')
+    expect(kindLabel({ kind: 'moment' })).toBe('Stepsisters')
+    expect(kindLabel({ kind: 'moment', type: 'recap' })).toBe('Stepsisters recap')
+    expect(kindLabel({ kind: 'event', partner: 'Studio X' })).toBe('Studio X')
+    expect(kindLabel({ kind: 'event' })).toBe('Partner event')
+  })
+})

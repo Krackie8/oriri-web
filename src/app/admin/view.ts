@@ -130,3 +130,33 @@ export function teamProblemWord(p: 'reauth' | 'invalid' | 'self' | 'last' | 'oth
 export function countWord(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
 }
+
+/* ── Events (#100 piece 3) ─────────────────────────────────────────────── */
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** "Sun 29 Nov, 7:30 pm"; "Sun 29 Nov" with no time; the year is added in another year. `date` is YYYY-MM-DD. */
+export function eventDayWord(date: string, startTime?: string, now: Date = new Date()): string {
+  const d = new Date(`${date}T00:00:00Z`)
+  const year = d.getUTCFullYear() === dubai(now).getUTCFullYear() ? '' : ` ${d.getUTCFullYear()}`
+  const day = `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${year}`
+  const m = startTime ? /^(\d{2}):(\d{2})$/.exec(startTime) : null
+  if (!m) return day
+  const h = Number(m[1])
+  return `${day}, ${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'am' : 'pm'}`
+}
+
+/** "No bookings yet", "1 booked · 2 spots". */
+export function bookingsWord(bookings: number, spots: number): string {
+  return bookings === 0 ? 'No bookings yet' : `${bookings} booked · ${countWord(spots, 'spot', 'spots')}`
+}
+
+/** The Events tile's line: "Nothing coming up", "3 coming up · 7 bookings". */
+export function eventsTileLine(t: { comingUp: number; bookings: number; fresh?: boolean }): string {
+  if (t.comingUp === 0) return 'Nothing coming up'
+  return t.bookings === 0 ? `${t.comingUp} coming up` : `${t.comingUp} coming up · ${countWord(t.bookings, 'booking', 'bookings')}`
+}
+
+export function kindLabel(e: { kind: 'moment' | 'event'; type?: string; partner?: string }): string {
+  if (e.kind === 'moment') return e.type === 'recap' ? 'Stepsisters recap' : 'Stepsisters'
+  return e.partner?.trim() || 'Partner event'
+}
