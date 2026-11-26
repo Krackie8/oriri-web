@@ -9,6 +9,8 @@
  * - Guests' details appear only in the bookings answer, never in the log or a log line.
  */
 
+import { thisWeeksMeetUp, type MeetUpRow } from '../server/morning.ts'
+
 export type EventKind = 'moment' | 'event'
 export const EVENT_KINDS: readonly EventKind[] = ['moment', 'event']
 /** The Legacy list (src/app/utils/wellnessApi.ts EVENT_CATEGORIES), unchanged. */
@@ -122,5 +124,90 @@ export function cleanEvent(kind: EventKind, body: unknown, photoBase: string):
   } catch (e) {
     if (e instanceof Problem) return { ok: false, problem: e.message }
     throw e
+  }
+}
+
+/* ── The list: the Meet up mark and bookings ─────────────────────────────── */
+
+export interface Booking { ref: string; name: string; email: string; phone: string; guests: number; bookedAt: string }
+export interface EventListItem extends StoredEvent {
+  kind: EventKind
+  bookings: number
+  spots: number
+  /** Bookings made since she last opened Events. */
+  newBookings: number
+  /** The one event the Member Meet up card shows this week. */
+  inMeetUp: boolean
+}
+export interface EventsList {
+  upcoming: EventListItem[]
+  past: EventListItem[]
+  tile: { comingUp: number; bookings: number; fresh: boolean }
+}
+
+/** How far ahead the Meet up card and the tile pill look: today and the 6 days after (thisWeeksMeetUp). */
+const WEEK_DAYS = 6
+const addDays = (date: string, n: number) => {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * The id of the event the Meet up card shows this week, or null. It asks the Member function's own
+ * rule (thisWeeksMeetUp, server/morning.ts) rather than copying it: each row goes in with its id as
+ * its title, so the title that comes back names the pick. A test pins this to the real call.
+ */
+export function meetUpPickId(moments: StoredEvent[], events: StoredEvent[], today: string): string | null {
+  const rows: MeetUpRow[] = [
+    ...moments.map((m) => ({ ...m, title: m.title ? m.id : '', kind: 'moment' as const })),
+    ...events.map((e) => ({ ...e, title: e.title ? e.id : '', kind: 'event' as const })),
+  ]
+  return thisWeeksMeetUp(rows, today)?.title ?? null
+}
+
+/** The booking records by ref, newest first. Rows without a ref and an email are dropped. */
+export function groupBookings(rows: unknown[]): Map<string, Booking[]> {
+  const out = new Map<string, Booking[]>()
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue
+    const x = r as Record<string, unknown>
+    if (typeof x.ref !== 'string' || !x.ref || typeof x.email !== 'string' || !x.email) continue
+    const b: Booking = {
+      ref: x.ref, name: str(x.name), email: x.email, phone: str(x.phone),
+      guests: Number.isFinite(Number(x.guests)) && Number(x.guests) > 0 ? Number(x.guests) : 1,
+      bookedAt: str(x.bookedAt),
+    }
+    out.set(b.ref, [...(out.get(b.ref) ?? []), b])
+  }
+  for (const list of out.values()) list.sort((a, b) => b.bookedAt.localeCompare(a.bookedAt))
+  return out
+}
+
+export function listEvents(i: { moments: StoredEvent[]; events: StoredEvent[]; rsvps: unknown[]; today: string; seenAt: string | null }): EventsList {
+  const byRef = groupBookings(i.rsvps)
+  const pick = meetUpPickId(i.moments, i.events, i.today)
+  const item = (kind: EventKind) => (e: StoredEvent): EventListItem => {
+    const bookings = byRef.get(refOf(kind, e.id)) ?? []
+    return {
+      ...e, kind,
+      bookings: bookings.length,
+      spots: bookings.reduce((t, b) => t + b.guests, 0),
+      newBookings: bookings.filter((b) => !i.seenAt || b.bookedAt > i.seenAt).length,
+      inMeetUp: e.id === pick,
+    }
+  }
+  const all = [...i.moments.map(item('moment')), ...i.events.map(item('event'))]
+  const upcoming = all.filter((e) => e.date >= i.today).sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? '') || a.id.localeCompare(b.id))
+  const past = all.filter((e) => e.date < i.today).sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
+  const weekEnd = addDays(i.today, WEEK_DAYS)
+  return {
+    upcoming,
+    past,
+    tile: {
+      comingUp: upcoming.length,
+      bookings: upcoming.reduce((t, e) => t + e.bookings, 0),
+      fresh: upcoming.some((e) => e.date <= weekEnd && e.newBookings > 0),
+    },
   }
 }

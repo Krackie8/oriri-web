@@ -105,3 +105,82 @@ describe('ids and refs', () => {
     expect(refOf('event', 'abc123')).toBe('e-abc123')
   })
 })
+
+/* ── Task 2: the Meet up mark and bookings ─────────────────────────────── */
+import { meetUpPickId, groupBookings, listEvents, type StoredEvent } from './events'
+import { thisWeeksMeetUp } from '../server/morning'
+
+const ev = (id: string, date: string, o: Partial<StoredEvent> = {}): StoredEvent =>
+  ({ id, title: `Title ${id}`, date, pinned: false, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z', ...o })
+const TODAY = '2026-11-26'
+
+describe('meetUpPickId names the event the Meet up card shows', () => {
+  it('a pinned partner event beats a Stepsisters one', () => {
+    expect(meetUpPickId([ev('mmmmmm1', '2026-11-27', { type: 'upcoming' })], [ev('eeeeee1', '2026-11-30', { pinned: true })], TODAY)).toBe('eeeeee1')
+  })
+  it('Stepsisters beats a partner event on the same day, and the earlier one wins', () => {
+    expect(meetUpPickId([ev('mmmmmm1', '2026-11-28')], [ev('eeeeee1', '2026-11-28')], TODAY)).toBe('mmmmmm1')
+    expect(meetUpPickId([ev('mmmmmm2', '2026-11-30'), ev('mmmmmm1', '2026-11-27')], [], TODAY)).toBe('mmmmmm1')
+  })
+  it('never a recap; 7 days out counts and 8 does not; nothing gives null', () => {
+    expect(meetUpPickId([ev('mmmmmm1', '2026-11-27', { type: 'recap' })], [], TODAY)).toBeNull()
+    expect(meetUpPickId([ev('mmmmmm1', '2026-12-02')], [], TODAY)).toBe('mmmmmm1')
+    expect(meetUpPickId([ev('mmmmmm1', '2026-12-03')], [], TODAY)).toBeNull()
+    expect(meetUpPickId([ev('mmmmmm1', '2026-11-25')], [], TODAY)).toBeNull()
+    expect(meetUpPickId([], [], TODAY)).toBeNull()
+  })
+  it('agrees with the real thisWeeksMeetUp on the same rows', () => {
+    const moments = [ev('mmmmmm1', '2026-11-29'), ev('mmmmmm2', '2026-11-27', { type: 'recap' }), ev('mmmmmm3', '2026-12-01')]
+    const events = [ev('eeeeee1', '2026-11-28', { pinned: true }), ev('eeeeee2', '2026-11-27')]
+    for (const [m, e] of [[moments, events], [moments, []], [[], events.slice(1)]] as const) {
+      const id = meetUpPickId([...m], [...e], TODAY)
+      const real = thisWeeksMeetUp([...m.map((x) => ({ ...x, kind: 'moment' as const })), ...e.map((x) => ({ ...x, kind: 'event' as const }))], TODAY)
+      const picked = [...m, ...e].find((x) => x.id === id)
+      expect(real && { title: real.title, date: real.date }).toEqual(picked ? { title: picked.title, date: picked.date } : null)
+    }
+  })
+})
+
+const rsvp = (ref: string, email: string, bookedAt: string, guests = 1) => ({ ref, email, name: `N ${email}`, phone: '+971 50', guests, bookedAt, eventTitle: 't', eventDate: 'd', wb_source: 'direct', updatedAt: bookedAt })
+
+describe('groupBookings', () => {
+  it('groups by ref, newest first, and drops malformed rows', () => {
+    const g = groupBookings([
+      rsvp('m-mmmmmm1', 'a@example.test', '2026-11-20T10:00:00Z'),
+      rsvp('m-mmmmmm1', 'b@example.test', '2026-11-21T10:00:00Z', 3),
+      rsvp('e-eeeeee1', 'c@example.test', '2026-11-19T10:00:00Z'),
+      { ref: 'm-mmmmmm1' }, null, 'x', { email: 'z@example.test' },
+    ])
+    expect(g.get('m-mmmmmm1')!.map((b) => b.email)).toEqual(['b@example.test', 'a@example.test'])
+    expect(g.get('m-mmmmmm1')![0]).toEqual({ ref: 'm-mmmmmm1', name: 'N b@example.test', email: 'b@example.test', phone: '+971 50', guests: 3, bookedAt: '2026-11-21T10:00:00Z' })
+    expect(g.get('e-eeeeee1')).toHaveLength(1)
+    expect(g.size).toBe(2)
+  })
+})
+
+describe('listEvents', () => {
+  const moments = [ev('mmmmmm1', '2026-11-29'), ev('mmmmmm2', '2026-11-10', { type: 'recap' })]
+  const events = [ev('eeeeee1', '2026-12-06'), ev('eeeeee2', '2026-11-26')]
+  const rsvps = [
+    rsvp('m-mmmmmm1', 'a@example.test', '2026-11-20T10:00:00Z', 2),
+    rsvp('m-mmmmmm1', 'b@example.test', '2026-11-25T10:00:00Z', 1),
+    rsvp('e-eeeeee1', 'c@example.test', '2026-11-25T10:00:00Z', 4),
+  ]
+  it('splits coming up (soonest first, today included) from past (latest first), with counts and the mark', () => {
+    const r = listEvents({ moments, events, rsvps, today: TODAY, seenAt: '2026-11-24T00:00:00Z' })
+    expect(r.upcoming.map((e) => e.id)).toEqual(['eeeeee2', 'mmmmmm1', 'eeeeee1'])
+    expect(r.past.map((e) => e.id)).toEqual(['mmmmmm2'])
+    const m1 = r.upcoming.find((e) => e.id === 'mmmmmm1')!
+    expect(m1).toMatchObject({ kind: 'moment', bookings: 2, spots: 3, newBookings: 1, inMeetUp: true })
+    expect(r.upcoming.filter((e) => e.inMeetUp)).toHaveLength(1)
+    expect(r.tile).toEqual({ comingUp: 3, bookings: 3, fresh: true })
+  })
+  it('the pill is only for new bookings on an event in the next 7 days', () => {
+    const later = listEvents({ moments: [], events, rsvps, today: TODAY, seenAt: '2026-11-24T00:00:00Z' })
+    expect(later.tile.fresh).toBe(false) // eeeeee1 is 10 days out
+    const seen = listEvents({ moments, events, rsvps, today: TODAY, seenAt: '2026-11-26T00:00:00Z' })
+    expect(seen.tile.fresh).toBe(false)
+    const never = listEvents({ moments, events, rsvps, today: TODAY, seenAt: null })
+    expect(never.tile.fresh).toBe(true)
+  })
+})
