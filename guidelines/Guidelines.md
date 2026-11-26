@@ -1,43 +1,69 @@
-# Wellness Bestie by ORIRI: design guidelines
+# Oriri: guidelines
 
-## Scope
-- Marketing app lives in `src/app/wellness/` and renders standalone (no podcast header, tab bar, splash or onboarding).
-- Routes: `/` Homepage · `/plan` Options · `/plan/inputs` Input · `/plan/day` Curated day · `/membership` Membership preview · `/about` · `/privacy`. `/pilot` (old waitlist form) redirects to `/plan/inputs` with its UTMs.
-- Say "waitlist", never "founding". ONE sign-up: the free day gate IS the waitlist sign-up, email + consent only (Ren 2026-11-11: keep it easy; other details come later at account set-up; never phone). Card heading "Your wellness 1 day trial is ready", line "Pop in your email and join our waitlist to access Wellness Bestie." Every "Join the waitlist" button is `WaitlistLink` (kit.tsx): it opens the planner, or shows "You're on the waitlist" once this device has signed up.
-- Homepage order: hero "Your wellness plan, curated for you." → How it works (Check in · Get your planner · Tap & track) → Ren's picks directory (no times or prices; Meetup card holds Stepsisters + upcoming events) → plum band. No header CTA.
-- One shared bottom tab bar (`components/BottomTabBar.tsx`: Home `/`, Plan, Episodes, Shop, Profile) on the Wellness Bestie pages and the podcast-app pages. `/podcast` redirects to `/`. The podcast app uses the same ivory/plum/gold tokens (`src/styles/globals.css`) and Bodoni Moda display font.
-- Waitlist profile collects Move (workouts), Meal and Mindset tags; one shared tag is enough to match.
-- Prices: recipes, videos, podcasts and books are Free. Paid venues show an average range ("AED 50–80"); budget checks use the top of the range.
-- Swipe for a bestie: a mutual "Say hi" connects both on Instagram first (handles hidden until mutual).
-- Tap & track: ticks and weekly stats are stored on-device (`bestie/tracker.ts`), shown as thin rings with pillar icons. `/bestie` and `/nourish*` redirect.
-- Podcast-app screens (episodes, shop, profile, community, admin) share the ivory/plum/gold theme.
-- Mobile web app: content sits in a 390–430px column (`Screen` in `bestie/kit.tsx`).
+These are the rules for any change to Oriri. They hold until a ruling changes them. For what things are called and how they work, use the sources below. Don't copy their contents in here: copies go stale.
 
-## Positioning
-- Never name a city in copy (we will scale). City-specific data (currency, areas, budget chips) lives only in `bestie/config.ts`.
+- **Words:** `GLOSSARY.md`, which covers Member, Join, Check-in, Pillar, Day plan, Suggestion, Completion, Proof, Level, Status and more. Use its terms in code, copy, issues and reviews.
+- **Decisions about how it's built:** `docs/adr/`.
+- **How a feature should work:** its spec in `docs/superpowers/specs/` and its GitHub issue (Bestie v1 is #67).
+- **The look:** `src/styles/wellness.css`. Its values are the source of truth, and the token names are historical. `wb-plum` and `wb-gold` are no longer plum or gold.
 
-## Style: quiet-luxury editorial
-- Ivory `#F7F3EE` background (`wb-paper`), cards `#FFFDFA` (`wb-shell`), plum `#4A2C3D` primary (`wb-plum`), gold `#C9A46A` accent (`wb-gold`, decorative only: hairlines, icons, selected outlines; never body text).
-- Headings: Bodoni Moda Regular (400). Body/UI: Figtree. No italics anywhere.
-- Minimum text size 14px. Pill buttons. Cards 16–20px radius. Real photos (Unsplash IDs or uploaded files) via `Photo`.
-- Pillar icons are thin line icons (`PillarIcon`), never emoji.
+## What Oriri is
 
-## Content
-- Pillars: Move (studios & recovery), Meal (cafés, restaurants, recipes), Mindset (podcasts by category incl. Tea for Two, books, articles), Meetup (Stepsisters free events + swipe for a bestie).
-- Homepage picks (2 per pillar) are edited in `bestie/picks.ts`. Plan options are in `bestie/engine.ts`.
+- **Oriri is a wellness app for women.** Bestie suggests one thing per Pillar (Move, Meal, Mindset, Meet up) from a Member's Check-in, and learns from what she does.
+- **Joining is free, with daily Bestie included.** Membership is the paid tier on top.
+- **The Wellness site** (`src/app/wellness/`, routed by `WellnessSite.tsx`) is the product, and all new work targets it.
+- **The Legacy app** (`App.tsx` for other paths, and `/admin/legacy`) is frozen. Don't add to it. Its features get rebuilt in the Wellness site or the new Admin.
+- **The Admin** is at `/admin` (`src/app/admin/`) and is for the team only. It talks to its own edge function, `admin`, never to `make-server-a278ea32`.
 
-## Free day plan
-- Flexible checklist, no clock times. Item durations add up exactly to the visitor's time (min 30 min). One Meal; extras are Move or Mindset.
-- Meetup is never a checklist item. A Stepsisters event shows as a separate "Happening today" card only when one is scheduled for today (`/wellness/moments`).
-- Every item must have a follow-through link (map search to find & book, recipe, video, episode, book) or in-app steps. Links are built in `bestie/config.ts` (`links.*`); Tea for Two always goes to `/episodes`.
-- The last item is locked until the email gate.
+## Copy and voice
 
-## Free day + leads
-- One free day per email. Gate = waitlist sign-up: email + consent → `POST /bestie/free-day` (KV `bestie:freeday:<email>`, Google Sheet tab "Free days", notifies account@oriri.me). 409 `used` → "already on the waitlist". Also tracked on-device.
-- Lead email checks: format, throwaway domains, and the domain must accept mail (MX lookup; `domainAcceptsMail` in `utils/emailCheck.ts` on the client, `leadEmailProblem` on the server). Lookups fail open.
-- Admin › Sign-ups › Wellness Bestie waitlist merges free day leads + old `/pilot` applications by email. Test leads (own email, example/test domains, "test" in the address, "+" copies, no mail server, or marked by hand via `/bestie/lead-flags`) are left out of the count.
-- No phone numbers on the free-day gate.
+- **Say "Join" and "Member".** A woman Joins Oriri and becomes a Member.
+  - Never say "waitlist", "founding", "user", "lead" (once she has an account), "premium" or "VIP".
+  - Some visitor screens still say "Join the waitlist". That copy goes with #82. Don't add more of it.
+- **Call it Bestie.** Never "the AI" or "the algorithm".
+- **Never name a city in copy.** Oriri will scale beyond its first city.
+  - On the site, city data lives in `src/app/wellness/bestie/config.ts`: currency, areas and budget chips.
+  - On the server, it's in `supabase/functions/server/join.ts` (`HOME_AREAS`).
+- **Write short, plain and warm,** in Ren's voice. Write in sentences, with no jargon, IDs or codes on screen.
+  - Dates read like "Sun 29 Nov", and times are local ("7:30 pm").
+- **Ask for as little as possible.** Never ask for a phone number to Join.
+- **Every Suggestion has a follow-through:** a link to find, book, cook, watch or listen, or in-app steps.
 
-## Analytics
-- Never add raw GA4/Clarity snippets; IDs live in `analytics/config.ts` and load only after consent.
-- Use helpers in `analytics/track.ts`: `cta_click`, `card_click` (box: move/meal/mindset/meetups), `form_submit` (form_name `free_day`), `plan_start`, `plan_inputs_done`, `membership_prompt_view`, `pattern_keep/change`, `bestie_swipe`.
+## Look: soft mocha, editorial
+
+- **Colours, fonts and sizes come from the `wb-*` tokens** in `wellness.css`. Don't hard-code colours on Wellness pages.
+  - The Admin uses the same palette, plus its blush accent `#C98A90` for buttons and focus rings.
+- **Headings** are uppercase Red Hat Display (`font-wb-serif`). **Body and UI** are Figtree. Bodoni Moda is for the ORIRI wordmark only.
+- **No italics anywhere.** The minimum text size is 14px.
+- **Shapes:** pill buttons; cards with a 16–20px radius on a white shell.
+- **Photos are real photos** (`Photo`). Pillar icons are thin line icons (`PillarIcon`), never emoji.
+- **Mobile first:** content sits in a 390–430px column (`Screen` in `bestie/kit.tsx`). Every screen must work on a phone.
+- **Accessibility:**
+  - every form field has a label;
+  - every control can be reached by keyboard and shows a focus ring;
+  - errors are announced (`role="alert"` or `aria-live`).
+
+## How it's built
+
+- **The Wellness site talks to the server only through the Function client** (`src/app/wellness/functionClient/`). Callers use named actions; only the client knows paths, auth and the Relay.
+- **Every write goes through an edge function.** The `bestie` schema isn't exposed to the browser (ADR-0002). Bestie's data lives in Postgres tables (ADR-0001).
+- **A visitor's plan stays in her browser, and only Members' Check-ins are recorded** (ADR-0003).
+- **Consent decides what may be recorded or learned.**
+  - Terms is required to Join, and every other Consent is optional and starts off.
+  - Bestie learns from a Member only with her personalisation Consent.
+- **Being an admin** means a live `admin` row in `public.user_roles`, checked on the server for every request. Never `user_metadata`, and never an email address.
+- **Analytics:** never add raw GA4 or Clarity snippets.
+  - The IDs live in `wellness/analytics/config.ts` and load only after consent.
+  - Track events with the helpers in `wellness/analytics/track.ts`.
+- **Tests:**
+  - Rules live in pure modules tested with vitest (`npm test`).
+  - SQL is tested on the local Postgres copy (`bash supabase/twin/run.sh`, which needs Docker).
+  - A change to the plan-fitting rules bumps the engine version (`BESTIE_ENGINE_VERSION`).
+- **The repo is public.** No real email address, key or secret goes in a committed file. Use `example.test` addresses in fixtures.
+
+## Releasing
+
+- **One database and two edge functions serve both staging and production.** The database is `lemtlurqzmjdahbhunhz`; the functions are `make-server-a278ea32` and `admin`.
+- **A push to `main` deploys staging** (`new.oriri.me`).
+- **Production** (`www.oriri.me`), **every edge-function deploy, every migration on the live database and every merge** happen only with Khairul's yes.
+- **Granting or removing an admin** happens on the Admin's Team screen, with Khairul's approval. Auth settings are his to change.
