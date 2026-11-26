@@ -108,6 +108,26 @@ select pg_temp.check((
         left join lateral (select energy, goal from bestie.check_ins where member_id = m.id order by created_at desc limit 1) ci on true
         where m.id = '00000000-0000-0000-0000-0000000008a1') s),
   'morningSignals: joined on the Dubai day, a withdrawn Consent wins, the latest Check-in');
+
+-- 6b. #102 personalisation: her latest row; a yes gives the Dubai date she gave it (the store's exact select).
+create or replace function pg_temp.personalisation(mid uuid) returns table (granted boolean, since text) language sql as $$
+        select c.granted, to_char(c.recorded_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as since
+        from bestie.consents c
+        where c.member_id = mid and c.purpose = 'personalisation'
+        order by c.recorded_at desc limit 1
+$$;
+select pg_temp.check((select granted = false from pg_temp.personalisation('00000000-0000-0000-0000-0000000008a1')),
+  'personalisation: a yes then a no reads as a no');
+select pg_temp.check(not exists (select 1 from pg_temp.personalisation('00000000-0000-0000-0000-0000000008ff')),
+  'personalisation: no Consent row reads as nothing');
+select pg_temp.check((select granted and since = to_char(now() at time zone 'Asia/Dubai', 'YYYY-MM-DD') from pg_temp.personalisation('00000000-0000-0000-0000-0000000008a2')),
+  'personalisation: a yes gives today in Dubai');
+begin;
+insert into bestie.consents (member_id, purpose, version, granted, recorded_at) values
+  ('00000000-0000-0000-0000-0000000008a1', 'personalisation', 'v1', true, '2026-11-24T22:30:00Z');
+select pg_temp.check((select granted and since = '2026-11-25' from pg_temp.personalisation('00000000-0000-0000-0000-0000000008a1')),
+  'personalisation: no then yes at 22:30 UTC gives the next Dubai day');
+rollback;
 reset role;
 
 -- 7. A signed-in Member reads only her own member_lines, and cannot write them.
