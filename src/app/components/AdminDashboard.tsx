@@ -32,12 +32,9 @@ import {
   Activity,
   Share2
 } from 'lucide-react';
-import WellnessCalendarManagement from './admin/WellnessCalendarManagement';
 import WellnessGuideManagement from './admin/WellnessGuideManagement';
 import TrafficDashboard from './admin/TrafficDashboard';
 import ShopEarnings from './admin/ShopEarnings';
-import EventBookings from './admin/EventBookings';
-import StepsistersManagement from './admin/StepsistersManagement';
 import PlanSignupsManagement from './admin/PlanSignupsManagement';
 import WaitlistLeadsManagement from './admin/WaitlistLeadsManagement';
 
@@ -135,7 +132,7 @@ function TopItemsList({ items, title, valuePrefix = '', valueSuffix = '' }: TopI
   );
 }
 
-const LEGACY_TABS = ['overview', 'stepsisters', 'guide', 'traffic', 'shop', 'plan'];
+const LEGACY_TABS = ['overview', 'guide', 'traffic', 'shop', 'plan'];
 
 export default function AdminDashboard() {
   const {
@@ -154,11 +151,12 @@ export default function AdminDashboard() {
     toggleRealTime
   } = useAdmin();
 
-  // Open straight on the posting tabs; /admin/legacy?tab=stepsisters deep-links.
-  // An unknown or removed tab value falls back to stepsisters, never a blank panel.
+  // Open straight on the Directory; /admin/legacy?tab=guide deep-links. Stepsisters & events moved
+  // to the new Admin's Events (#100 piece 3). An unknown or removed tab value falls back to the
+  // Directory, never a blank panel.
   const [activeTab, setActiveTab] = useState(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
-    return t && LEGACY_TABS.includes(t) ? t : 'stepsisters';
+    return t && LEGACY_TABS.includes(t) ? t : 'guide';
   });
 
   if (error) {
@@ -260,7 +258,6 @@ export default function AdminDashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="stepsisters">Stepsisters & events</TabsTrigger>
           <TabsTrigger value="guide">Directory</TabsTrigger>
           <TabsTrigger value="traffic">Traffic</TabsTrigger>
           <TabsTrigger value="shop">Shop</TabsTrigger>
@@ -500,12 +497,6 @@ export default function AdminDashboard() {
 
         <TabsContent value="shop" className="space-y-6">
           <ShopEarnings />
-        </TabsContent>
-
-        <TabsContent value="stepsisters" className="space-y-6">
-          <EventBookings />
-          <StepsistersManagement />
-          <WellnessCalendarManagement />
         </TabsContent>
 
         <TabsContent value="plan" className="space-y-6">

@@ -109,12 +109,7 @@ async function request<T>(
 
 // ── Events ───────────────────────────────────────────────────────────────────
 export const getEvents = () => request<WellnessEvent[]>('/wellness/events', undefined);
-export const createEvent = (token: string | undefined, event: Omit<WellnessEvent, 'id'>) =>
-  request<WellnessEvent>('/wellness/events', token, { method: 'POST', body: JSON.stringify(event) });
-export const updateEvent = (token: string | undefined, id: string, event: Partial<WellnessEvent>) =>
-  request<WellnessEvent>(`/wellness/events/${id}`, token, { method: 'PUT', body: JSON.stringify(event) });
-export const deleteEvent = (token: string | undefined, id: string) =>
-  request<void>(`/wellness/events/${id}`, token, { method: 'DELETE' });
+// Events are written by the new Admin (supabase/functions/admin, #100 piece 3).
 
 // ── Guides ───────────────────────────────────────────────────────────────────
 export const getGuides = () => request<WellnessGuide[]>('/wellness/guides', undefined, { cache: 'no-store' });
@@ -138,12 +133,7 @@ export const deleteGuide = (token: string | undefined, id: string) =>
 
 // ── Stepsisters moments ──────────────────────────────────────────────────────
 export const getMoments = () => request<StepsistersMoment[]>('/wellness/moments', undefined);
-export const createMoment = (token: string | undefined, m: Omit<StepsistersMoment, 'id'>) =>
-  request<StepsistersMoment>('/wellness/moments', token, { method: 'POST', body: JSON.stringify(m) });
-export const updateMoment = (token: string | undefined, id: string, m: Partial<StepsistersMoment>) =>
-  request<StepsistersMoment>(`/wellness/moments/${id}`, token, { method: 'PUT', body: JSON.stringify(m) });
-export const deleteMoment = (token: string | undefined, id: string) =>
-  request<void>(`/wellness/moments/${id}`, token, { method: 'DELETE' });
+// Moments are written by the new Admin (supabase/functions/admin, #100 piece 3).
 
 /** Upload a photo (admin only). Returns a permanent public URL. */
 export async function uploadPhoto(token: string | undefined, file: File): Promise<ApiResult<{ url: string }>> {
@@ -270,6 +260,4 @@ export interface Rsvp {
 }
 export const bookEvent = (body: { ref: string; name: string; email: string; phone?: string; guests?: number; wb_source?: string }) =>
   request<{ alreadyBooked: boolean; link: string }>('/wellness/rsvp', undefined, { method: 'POST', body: JSON.stringify(body) });
-export const getRsvps = (token: string | undefined) => request<Rsvp[]>('/wellness/rsvps', token, { cache: 'no-store' });
-export const deleteRsvp = (token: string | undefined, ref: string, email: string) =>
-  request<void>(`/wellness/rsvps/${ref}/${encodeURIComponent(email)}`, token, { method: 'DELETE' });
+// Bookings are read and removed in the new Admin's Events (#100 piece 3).
