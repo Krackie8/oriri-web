@@ -4,6 +4,7 @@ import { adminClient } from '../wellness/functionClient/adminClient'
 import type { Overview } from '../wellness/functionClient/admin'
 import HomeScreen from './HomeScreen'
 import LoginScreen from './LoginScreen'
+import EventsScreen from './EventsScreen'
 import MembersScreen from './MembersScreen'
 import OverviewScreen from './OverviewScreen'
 import TeamScreen from './TeamScreen'
@@ -18,8 +19,9 @@ export default function AdminSite() {
   const [gen, setGen] = useState(0)
   const [me, setMe] = useState<MeResult>({ kind: 'pending' })
   const [firstName, setFirstName] = useState<string | null>(null)
-  const [screen, setScreen] = useState<'home' | 'overview' | 'members' | 'team'>('home')
+  const [screen, setScreen] = useState<'home' | 'overview' | 'members' | 'team' | 'events'>('home')
   const [teamCount, setTeamCount] = useState<number | null>(null)
+  const [eventsTile, setEventsTile] = useState<{ comingUp: number; bookings: number; fresh: boolean } | null>(null)
   const [numbers, setNumbers] = useState<Numbers>({ kind: 'loading' })
   const [menu, setMenu] = useState(false)
   // Counts session changes. A late answer for an older session is dropped.
@@ -52,6 +54,7 @@ export default function AdminSite() {
     setMe({ kind: 'pending' })
     setNumbers({ kind: 'loading' })
     setTeamCount(null)
+    setEventsTile(null)
     if (userId === null) {
       setScreen('home')
       setMenu(false)
@@ -109,6 +112,10 @@ export default function AdminSite() {
     let live = true
     void adminClient.team().then((r) => {
       if (live && g === genRef.current) setTeamCount(r.ok ? r.data.members.length : null)
+    })
+    // The Events tile's line and pill. Home's call never marks Events seen; opening Events does.
+    void adminClient.events().then((r) => {
+      if (live && g === genRef.current) setEventsTile(r.ok ? r.data.tile : null)
     })
     return () => {
       live = false
@@ -169,12 +176,15 @@ export default function AdminSite() {
         <MembersScreen currentGen={currentGen} />
       ) : screen === 'team' ? (
         <TeamScreen currentGen={currentGen} />
+      ) : screen === 'events' ? (
+        <EventsScreen currentGen={currentGen} />
       ) : (
         <HomeScreen
           firstName={firstName}
           overview={current}
           teamCount={teamCount}
-          onOpen={(key) => (key === 'overview' || key === 'members' || key === 'team') && setScreen(key)}
+          eventsTile={eventsTile}
+          onOpen={(key) => (key === 'overview' || key === 'members' || key === 'team' || key === 'events') && setScreen(key)}
         />
       )
   }
