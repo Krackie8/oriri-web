@@ -12,6 +12,9 @@
  *   an item up or down, fading in a straight line to nothing over 30 days. Nothing but a light
  *   version is suggested two days running. One Suggestion per plan is new for her when one fits,
  *   and one day in three that slot leans towards her weakest Pillar.
+ * - Learning needs her personalisation Consent (#102, DEC-019): without a yes, nothing weights her
+ *   plan or her swap options and the plan does not lean; with one, only outcomes from plans dated on
+ *   or after the Dubai day of her latest yes count. No repeats and new for you run either way.
  * - Swap: she picks from up to three that still fit with the rest of today's plan. The old one is
  *   recorded swapped; her pick and the ones she passed on point back to it.
  *
@@ -31,7 +34,7 @@ import {
 export type { Energy, Goal, Pillar }
 
 /** Names the plan-fitting rules. Bump it whenever they change (a fingerprint test enforces this). */
-export const BESTIE_ENGINE_VERSION = 'bestie-3'
+export const BESTIE_ENGINE_VERSION = 'bestie-4'
 
 export const PILLARS: Pillar[] = ['move', 'meal', 'mindset', 'meet_up']
 const ENERGIES: Energy[] = ['low', 'steady', 'high']
@@ -221,6 +224,8 @@ export interface BestieStore {
   recordLine(memberId: string, lineId: string, shownOn: string): Promise<string>
   /** When she joined (Dubai date), her latest personalisation Consent, and her latest Check-in. */
   morningSignals(memberId: string): Promise<{ joinedOn: string; personal: boolean; lastCheckIn: { energy: Energy; goal: Goal | null } | null }>
+  /** Her latest personalisation Consent, if it is a yes: the Dubai date she gave it. Null for a no or none (#102). */
+  personalisation(memberId: string): Promise<{ since: string } | null>
 }
 
 /** Where this week's Meet ups come from: the Stepsisters moments and events in the key-value store. */
@@ -386,6 +391,14 @@ function weakestPillar(rows: HistoryRow[], today: string): Pillar {
   return PILLARS.reduce((best, p) => (count(p) < count(best) ? p : best), PILLARS[0])
 }
 
+/**
+ * The Pillar today's new-for-you slot leans towards, or null. It leans only one day in three, and only
+ * with her personalisation Consent (DEC-019): `learnFrom` is null without a yes.
+ */
+export function leaningPillar(learnFrom: HistoryRow[] | null, today: string): Pillar | null {
+  return learnFrom && leansWeakest(today) ? weakestPillar(learnFrom, today) : null
+}
+
 interface Ctx {
   input: Input
   hot: boolean
@@ -395,18 +408,20 @@ interface Ctx {
 }
 
 async function context(store: BestieStore, memberId: string, input: Input, today: string) {
-  const [catalogue, history, ever] = await Promise.all([
-    store.catalogue('dubai'), store.history(memberId, addDays(today, -FADE_DAYS)), store.everShown(memberId),
+  const [catalogue, history, ever, consent] = await Promise.all([
+    store.catalogue('dubai'), store.history(memberId, addDays(today, -FADE_DAYS)), store.everShown(memberId), store.personalisation(memberId),
   ])
   const yesterday = addDays(today, -1)
-  const weights = new Map(catalogue.map((i) => [i.id, personalWeight(history, i.id, today)]))
+  // What Bestie may learn from: nothing without her yes, and only from the day she gave it (DEC-019).
+  const learnFrom = consent ? history.filter((r) => r.plan_date >= consent.since) : null
+  const weights = new Map(catalogue.map((i) => [i.id, personalWeight(learnFrom ?? [], i.id, today)]))
   const ctx: Ctx = {
     input,
     hot: HOT_MONTHS.includes(dubai(new Date(`${today}T08:00:00Z`)).getUTCMonth()),
     weight: (i) => weights.get(i.id) ?? 0,
     banned: new Set(history.filter((r) => r.plan_date === yesterday && r.outcome !== 'not_picked').map((r) => r.catalogue_item_id)),
   }
-  return { catalogue, history, ever: new Set(ever), ctx }
+  return { catalogue, history, learnFrom, ever: new Set(ever), ctx }
 }
 
 /* ── Fitting ────────────────────────────────────────────────────────────── */
@@ -550,9 +565,9 @@ export async function checkIn(store: BestieStore, user: { id: string }, raw: unk
   if (typeof input === 'string') return { outcome: 'invalid', message: input }
 
   const today = dubaiDate(now)
-  const { catalogue, history, ever, ctx } = await context(store, member.id, input, today)
+  const { catalogue, learnFrom, ever, ctx } = await context(store, member.id, input, today)
   const fitted = fit(catalogue, ctx)
-  const lean = leansWeakest(today) ? weakestPillar(history, today) : null
+  const lean = leaningPillar(learnFrom, today)
   const { items, fresh } = newForYou(catalogue, fitted.items, ctx, ever, lean)
   const stored = await store.recordPlan({
     memberId: member.id,
@@ -901,6 +916,8 @@ export function createMemoryBestieStore(opts: {
 } = {}) {
   const dailyLines = opts.lines ?? []
   const consents = opts.consents ?? []
+  const latestPersonalisation = (memberId: string) =>
+    consents.filter((c) => c.memberId === memberId && c.purpose === 'personalisation').sort((a, b) => (a.at < b.at ? -1 : 1)).at(-1)
   const memberLines: { memberId: string; lineId: string; shownOn: string }[] = []
   const members = new Map((opts.members ?? []).map((m) => [m.id, m]))
   const items = opts.catalogue ?? CATALOGUE_SEED.map((i) => ({ ...i, id: `cat-${i.slug}` }))
@@ -935,7 +952,7 @@ export function createMemoryBestieStore(opts: {
   })
   const store: BestieStore & {
     checkIns: typeof checkIns; plans: typeof plans; suggestions: typeof suggestions; completions: typeof completions
-    points: typeof points; levelRows: typeof levelRows
+    points: typeof points; levelRows: typeof levelRows; consents: typeof consents
     /** Test helper: ledger points from an earlier Completion, at a time. */
     seedPoints(memberId: string, pillar: Pillar, amount: number, at: string): void
   } = {
@@ -945,6 +962,7 @@ export function createMemoryBestieStore(opts: {
     completions,
     points,
     levelRows,
+    consents,
     seedPoints(memberId, pillar, amount, at) {
       points.push({ id: ++rowId, member_id: memberId, pillar, amount, reason: 'completion', completion_id: null, created_at: at })
     },
@@ -1071,13 +1089,17 @@ export function createMemoryBestieStore(opts: {
       return lineId
     },
     async morningSignals(memberId) {
-      const consent = consents.filter((c) => c.memberId === memberId && c.purpose === 'personalisation').sort((a, b) => (a.at < b.at ? -1 : 1)).at(-1)
+      const consent = latestPersonalisation(memberId)
       const last = checkIns.filter((c) => c.member_id === memberId).at(-1)
       return {
         joinedOn: members.get(memberId)?.joinedOn ?? '2026-01-01',
         personal: consent?.granted ?? false,
         lastCheckIn: last ? { energy: last.energy, goal: last.goal } : null,
       }
+    },
+    async personalisation(memberId) {
+      const c = latestPersonalisation(memberId)
+      return c?.granted ? { since: dubaiDate(new Date(c.at)) } : null
     },
   }
   return store
