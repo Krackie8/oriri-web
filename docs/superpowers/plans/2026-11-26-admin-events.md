@@ -355,3 +355,23 @@ No code here. This is the order and the proof for each step. Stop and ask before
   - Comment on #100 with what shipped.
   - Update the vault (`state.md` and the session note).
   - The Legacy `server` routes for events and RSVPs stay until the cleanup redeploy. Note this in #100's comment.
+
+## As built (2026-11-26, tasks 1–7; task 8 waits for Khairul)
+
+- **Tests:**
+  - `npm test` passes all 593.
+  - `npm run build` succeeds.
+  - `tsc` is clean for every file this branch touches. Its one error, `AdminDashboard.tsx` `totalViews`, is already on `main`.
+  - Deno isn't installed on this machine, so `deno check` wasn't run.
+- **Mutation checks:**
+  - With the stale check removed, the 409 test fails.
+  - Matching a booking by key prefix instead of the whole email fails a new test ("ana@example.test" against "ana@example.testing").
+- **Wording added to Task 1:** "Pick a category." and "Pick meet-up or recap.". "Pick a photo." is used when the upload has no file.
+- **The plan's example date was wrong.** 29 Nov 2026 is a Sunday; the helper and its tests are right.
+- **Live data checked read-only:** the 2 live events (1 partner, 1 Stepsisters) pass every new rule, so nothing existing gets locked against edits.
+- **The Legacy tab also held `EventBookings`,** an all-bookings list with a CSV download. It's removed, and Events replaces it per event, with "Copy emails" instead of CSV.
+- **Legacy `/admin/legacy`** now opens on the Directory by default.
+- **Browser check:** the screen was driven in the dev server with the admin client's calls faked in the page. Live wasn't touched.
+  - It ran at 375 px.
+  - Covered: list, add, a `javascript:` link refused with its wording, save, bookings view, and delete with the "Its booking will be removed too" confirm.
+  - Every form field has its label.
