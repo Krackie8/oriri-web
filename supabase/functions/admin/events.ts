@@ -9,6 +9,8 @@
  * - Guests' details appear only in the bookings answer, never in the log or a log line.
  */
 
+import type { Context } from 'hono'
+import type { AdminUser } from './app.ts'
 import { thisWeeksMeetUp, type MeetUpRow } from '../server/morning.ts'
 
 export type EventKind = 'moment' | 'event'
@@ -210,4 +212,154 @@ export function listEvents(i: { moments: StoredEvent[]; events: StoredEvent[]; r
       fresh: upcoming.some((e) => e.date <= weekEnd && e.newBookings > 0),
     },
   }
+}
+
+/* ── Routes ──────────────────────────────────────────────────────────────── */
+
+export type PhotoType = 'image/jpeg' | 'image/png' | 'image/webp'
+
+export interface EventsDeps {
+  list(kind: EventKind): Promise<StoredEvent[]>
+  get(kind: EventKind, id: string): Promise<StoredEvent | null>
+  put(kind: EventKind, e: StoredEvent): Promise<void>
+  remove(kind: EventKind, id: string): Promise<void>
+  /** Booking records whose key starts with `prefix` ('rsvp:' or 'rsvp:<ref>:'). */
+  rsvps(prefix: string): Promise<unknown[]>
+  removeRsvps(keys: string[]): Promise<void>
+  /** Stores the photo in the public wellness bucket under a generated name; returns its public URL. */
+  upload(bytes: Uint8Array, type: PhotoType): Promise<string>
+  /** Who did what to which event. Never a guest's details. */
+  log(entry: { actor: string; kind: EventKind; id: string; action: 'create' | 'edit' | 'delete' | 'booking_removed' }): Promise<void>
+  seenAt(userId: string): Promise<string | null>
+  markSeen(userId: string, at: string): Promise<void>
+  /** The public URL prefix of the wellness bucket: a photo must start with it. */
+  photoBase: string
+  now(): Date
+}
+
+export const MAX_PHOTO_BYTES = 8 * 1024 * 1024
+const dubaiDate = (d: Date) => new Date(d.getTime() + 4 * 3600_000).toISOString().slice(0, 10)
+const bookingKey = (ref: string, email: string) => `rsvp:${ref}:${email.toLowerCase()}`
+const failed = (c: Context, what: string, err: unknown) => {
+  console.error(`admin/events: ${what} failed`, (err as { message?: string } | null)?.message)
+  return c.json({ success: false, error: 'Something went wrong' }, 500)
+}
+
+/** The event named by the path, or null for a bad kind or id (nothing is read for those). */
+function target(c: Context): { kind: EventKind; id: string } | null {
+  const kind = c.req.param('kind')
+  const id = c.req.param('id') ?? ''
+  return isEventKind(kind) && isEventId(id) ? { kind, id } : null
+}
+const notFound = (c: Context) => c.json({ error: 'Not found' }, 404)
+const readBody = async (c: Context) => (await c.req.json().catch(() => null)) as Record<string, unknown> | null
+
+export async function getEvents(c: Context, deps: EventsDeps, user: AdminUser) {
+  try {
+    const [moments, events, rsvps, seenAt] = await Promise.all([deps.list('moment'), deps.list('event'), deps.rsvps('rsvp:'), deps.seenAt(user.id)])
+    const now = deps.now()
+    const data = listEvents({ moments, events, rsvps, today: dubaiDate(now), seenAt })
+    if (c.req.query('seen') === '1') await deps.markSeen(user.id, now.toISOString())
+    return c.json({ success: true, data })
+  } catch (err) { return failed(c, 'list', err) }
+}
+
+export async function createEvent(c: Context, deps: EventsDeps, user: AdminUser) {
+  const b = await readBody(c)
+  if (!b || !isEventKind(b.kind)) return c.json({ error: 'kind' }, 400)
+  const kind = b.kind
+  const clean = cleanEvent(kind, b, deps.photoBase)
+  if (!clean.ok) return c.json({ error: 'invalid', problem: clean.problem }, 400)
+  try {
+    const at = deps.now().toISOString()
+    const e: StoredEvent = { id: crypto.randomUUID(), ...clean.fields, createdAt: at, updatedAt: at }
+    await deps.put(kind, e)
+    await deps.log({ actor: user.id, kind, id: e.id, action: 'create' })
+    return c.json({ success: true, data: e }, 201)
+  } catch (err) { return failed(c, 'create', err) }
+}
+
+/**
+ * KV has no compare-and-set, so the updatedAt check and the write are two steps: two saves inside
+ * one request's length can both pass. With two admins that is accepted (spec, DEC-020).
+ */
+export async function updateEvent(c: Context, deps: EventsDeps, user: AdminUser) {
+  const t = target(c)
+  if (!t) return notFound(c)
+  const b = await readBody(c)
+  const clean = cleanEvent(t.kind, b, deps.photoBase)
+  if (!clean.ok) return c.json({ error: 'invalid', problem: clean.problem }, 400)
+  try {
+    const old = await deps.get(t.kind, t.id)
+    if (!old) return notFound(c)
+    if (old.updatedAt !== b?.updatedAt) return c.json({ error: 'stale' }, 409)
+    let at = deps.now().toISOString()
+    if (at <= old.updatedAt) at = new Date(Date.parse(old.updatedAt) + 1).toISOString() // a change always moves updatedAt
+    const e: StoredEvent = { ...clean.fields, id: old.id, createdAt: old.createdAt, updatedAt: at }
+    await deps.put(t.kind, e)
+    await deps.log({ actor: user.id, kind: t.kind, id: t.id, action: 'edit' })
+    return c.json({ success: true, data: e })
+  } catch (err) { return failed(c, 'edit', err) }
+}
+
+/** The event and its bookings go together, so no booking is left pointing at nothing. */
+export async function deleteEvent(c: Context, deps: EventsDeps, user: AdminUser) {
+  const t = target(c)
+  if (!t) return notFound(c)
+  try {
+    if (!(await deps.get(t.kind, t.id))) return notFound(c)
+    const ref = refOf(t.kind, t.id)
+    const bookings = groupBookings(await deps.rsvps(`rsvp:${ref}:`)).get(ref) ?? []
+    if (bookings.length) await deps.removeRsvps(bookings.map((b) => bookingKey(ref, b.email)))
+    await deps.remove(t.kind, t.id)
+    await deps.log({ actor: user.id, kind: t.kind, id: t.id, action: 'delete' })
+    return c.json({ success: true, data: { bookingsRemoved: bookings.length } })
+  } catch (err) { return failed(c, 'delete', err) }
+}
+
+export async function getBookings(c: Context, deps: EventsDeps) {
+  const t = target(c)
+  if (!t) return notFound(c)
+  try {
+    const ref = refOf(t.kind, t.id)
+    return c.json({ success: true, data: groupBookings(await deps.rsvps(`rsvp:${ref}:`)).get(ref) ?? [] })
+  } catch (err) { return failed(c, 'bookings', err) }
+}
+
+export async function removeBooking(c: Context, deps: EventsDeps, user: AdminUser) {
+  const t = target(c)
+  if (!t) return notFound(c)
+  const email = (c.req.param('email') ?? '').trim().toLowerCase()
+  if (!email || email.length > 160) return notFound(c)
+  try {
+    const ref = refOf(t.kind, t.id)
+    // Match the whole email: the key prefix alone would also match a longer address.
+    const found = (groupBookings(await deps.rsvps(`rsvp:${ref}:`)).get(ref) ?? []).some((b) => b.email.toLowerCase() === email)
+    if (!found) return notFound(c)
+    await deps.removeRsvps([bookingKey(ref, email)])
+    await deps.log({ actor: user.id, kind: t.kind, id: t.id, action: 'booking_removed' })
+    return c.json({ success: true, data: { removed: true } })
+  } catch (err) { return failed(c, 'remove booking', err) }
+}
+
+/** The photo's type from its first bytes, whatever its name or declared type says. */
+export function sniffPhoto(b: Uint8Array): PhotoType | null {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, i) => b[i] === x)) return 'image/png'
+  const ascii = (from: number, to: number) => String.fromCharCode(...b.slice(from, to))
+  if (b.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
+  return null
+}
+
+export async function uploadPhoto(c: Context, deps: EventsDeps) {
+  const form = await c.req.formData().catch(() => null)
+  const file = form?.get('file')
+  if (!file || typeof file === 'string') return c.json({ error: 'invalid', problem: 'Pick a photo.' }, 400)
+  if (file.size > MAX_PHOTO_BYTES) return c.json({ error: 'invalid', problem: 'Photos can be up to 8 MB.' }, 400)
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const type = sniffPhoto(bytes)
+  if (!type) return c.json({ error: 'invalid', problem: 'Photos must be JPEG, PNG or WebP.' }, 400)
+  try {
+    return c.json({ success: true, data: { url: await deps.upload(bytes, type) } })
+  } catch (err) { return failed(c, 'photo', err) }
 }

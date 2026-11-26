@@ -11,6 +11,7 @@ import { loadOverview, dubaiDate, type OverviewDeps } from './overview.ts'
 import { cleanQuery, isUuid, toDetail, toListItem, type MembersDeps } from './members.ts'
 import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
 import { getTeam, addToTeam, removeFromTeam, type TeamDeps } from './team.ts'
+import { getEvents, createEvent, updateEvent, deleteEvent, getBookings, removeBooking, uploadPhoto, type EventsDeps } from './events.ts'
 
 export type { SignInLinkDeps }
 
@@ -21,6 +22,8 @@ export type { OverviewDeps }
 export type { MembersDeps }
 
 export type { TeamDeps }
+
+export type { EventsDeps }
 
 export interface AdminUser {
   id: string
@@ -36,6 +39,7 @@ export interface AdminDeps {
   me: MeDeps
   members: MembersDeps
   team: TeamDeps
+  events: EventsDeps
 }
 
 const ALLOWED_ORIGINS = [
@@ -163,5 +167,18 @@ export function createAdminApp(deps: AdminDeps): Hono {
     if (auth instanceof Response) return auth
     return removeFromTeam(c, deps.team, auth.user)
   })
+  // Events (#100 piece 3): requireAdmin first on every route; the rules are in events.ts.
+  const admin = (handle: (c: Context, user: AdminUser) => Promise<Response> | Response) => async (c: Context) => {
+    const auth = await requireAdmin(c, deps)
+    if (auth instanceof Response) return auth
+    return handle(c, auth.user)
+  }
+  app.get('/admin/events', admin((c, user) => getEvents(c, deps.events, user)))
+  app.post('/admin/events', admin((c, user) => createEvent(c, deps.events, user)))
+  app.post('/admin/events/photo', admin((c) => uploadPhoto(c, deps.events)))
+  app.put('/admin/events/:kind/:id', admin((c, user) => updateEvent(c, deps.events, user)))
+  app.delete('/admin/events/:kind/:id', admin((c, user) => deleteEvent(c, deps.events, user)))
+  app.get('/admin/events/:kind/:id/bookings', admin((c) => getBookings(c, deps.events)))
+  app.delete('/admin/events/:kind/:id/bookings/:email', admin((c, user) => removeBooking(c, deps.events, user)))
   return app
 }
