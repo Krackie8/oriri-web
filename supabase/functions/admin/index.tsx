@@ -9,6 +9,10 @@ import { OVERVIEW_SQL } from './overviewQuery.ts'
 import { testEmailsFrom } from './overview.ts'
 import { MEMBERS_LIST_SQL, MEMBER_DETAIL_SQL } from './membersQuery.ts'
 import { TEAM_LIST_SQL, TEAM_GRANT_SQL, TEAM_REMOVE_SQL, TEAM_CHANGES_SQL } from './teamQuery.ts'
+import type { EventKind, StoredEvent } from './events.ts'
+
+const WELLNESS_BUCKET = 'make-a278ea32-wellness'
+const EVENT_PREFIX: Record<EventKind, string> = { moment: 'wellness:moment:', event: 'wellness:event:' }
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -139,6 +143,33 @@ const app = createAdminApp({
     },
     sendMail,
     background,
+  },
+  // Events (#100 piece 3, DEC-020): the same KV entries the Member side reads; no server change.
+  events: {
+    list: async (kind) =>
+      (((await kv.getByPrefix(EVENT_PREFIX[kind])) || []) as unknown[])
+        .filter((e): e is StoredEvent => !!e && typeof e === 'object' && typeof (e as { id?: unknown }).id === 'string'),
+    get: async (kind, id) => ((await kv.get(EVENT_PREFIX[kind] + id)) as StoredEvent | null) ?? null,
+    put: (kind, e) => kv.set(EVENT_PREFIX[kind] + e.id, e),
+    remove: (kind, id) => kv.del(EVENT_PREFIX[kind] + id),
+    rsvps: async (prefix) => ((await kv.getByPrefix(prefix)) || []) as unknown[],
+    removeRsvps: (keys) => kv.mdel(keys),
+    // The bucket exists already (Legacy made it); admin never creates buckets.
+    upload: async (bytes, type) => {
+      const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg'
+      const path = `admin/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
+      const { error } = await supabase.storage.from(WELLNESS_BUCKET).upload(path, bytes, { contentType: type })
+      if (error) throw new Error(`upload failed: ${error.message}`)
+      return supabase.storage.from(WELLNESS_BUCKET).getPublicUrl(path).data.publicUrl
+    },
+    log: (entry) => kv.set(`admin:eventlog:${new Date().toISOString()}:${crypto.randomUUID().slice(0, 8)}`, { ...entry, at: new Date().toISOString() }),
+    seenAt: async (userId) => {
+      const v = (await kv.get(`admin:seen:events:${userId}`)) as { at?: unknown } | null
+      return typeof v?.at === 'string' ? v.at : null
+    },
+    markSeen: (userId, at) => kv.set(`admin:seen:events:${userId}`, { at }),
+    photoBase: `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/${WELLNESS_BUCKET}/`,
+    now: () => new Date(),
   },
   me: {
     displayName: async (id) => {
