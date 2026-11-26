@@ -8343,6 +8343,19 @@ const postgresBestieStore: BestieStore = {
       lastCheckIn: r?.energy ? { energy: r.energy, goal: r.goal ?? null } : null,
     };
   },
+  /** #102: her latest personalisation Consent row; a yes gives the Dubai date she gave it. */
+  async personalisation(memberId) {
+    const rows = await bestieDb().begin(async (tx: any) => {
+      await tx`set local role service_role`;
+      return tx`
+        select c.granted, to_char(c.recorded_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as since
+        from bestie.consents c
+        where c.member_id = ${memberId} and c.purpose = 'personalisation'
+        order by c.recorded_at desc limit 1`;
+    });
+    const r: any = rows[0];
+    return r?.granted === true ? { since: String(r.since) } : null;
+  },
 };
 
 /** This week's Meet ups (#74): the Stepsisters moments and wellness events Ren keeps in the key-value store. */

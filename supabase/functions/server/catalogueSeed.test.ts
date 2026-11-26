@@ -66,6 +66,7 @@ const FINGERPRINTS: Record<string, string> = {
   'bestie-1': '609acfbfb55bd3e4',
   'bestie-2': 'e9bb10937b625553', // #71: weighting, no repeats, new for you
   'bestie-3': 'efee7833df06610d', // #74: why lines name the NOAA sunset for the day, not a month table
+  'bestie-4': 'efee7833df06610d', // #102: learning needs the Consent; a fresh Member has no history, so her plans are unchanged
 
 }
 

@@ -13,7 +13,11 @@ const NOV = at('2026-11-16')
 // Low energy keeps Move a single-Pillar item (a Steady plan fills Move with the run club).
 const GOOD = { energy: 'low', minutes: 120, budgetAed: 250 }
 
-const setup = () => createMemoryBestieStore({ members: [{ id: 'm1', home_area: 'Dubai Marina' }, { id: 'm2', home_area: 'Deira' }] })
+// m1 said yes to personalisation before these plans, so Bestie learns from her (#102: no yes, no learning).
+const setup = () => createMemoryBestieStore({
+  members: [{ id: 'm1', home_area: 'Dubai Marina' }, { id: 'm2', home_area: 'Deira' }],
+  consents: [{ memberId: 'm1', purpose: 'personalisation', granted: true, at: '2026-10-01T00:00:00Z' }],
+})
 type Store = ReturnType<typeof setup>
 
 async function plan(store: Store, input: unknown, now = NOV): Promise<DayPlan> {
@@ -211,7 +215,7 @@ describe('new for you', () => {
 })
 
 describe('the engine version', () => {
-  it('is bestie-3: the learning rules, with sunset by the NOAA formula (#74)', () => {
-    expect(BESTIE_ENGINE_VERSION).toBe('bestie-3')
+  it('is bestie-4: learning only with the personalisation Consent (#102)', () => {
+    expect(BESTIE_ENGINE_VERSION).toBe('bestie-4')
   })
 })
