@@ -129,6 +129,12 @@ alter table bestie.catalogue_reviews force row level security;
 alter table bestie.place_signals enable row level security;
 alter table bestie.place_signals force row level security;
 
+-- A Member reads only approved catalogue items: a run's pending or rejected finds stay out of sight.
+-- Same as the 20261116000100 policy, plus the status check.
+drop policy catalogue_items_read on bestie.catalogue_items;
+create policy catalogue_items_read on bestie.catalogue_items for select to authenticated
+  using (retired_at is null and status = 'approved');
+
 -- ===== 3. Decisions and undo =====
 -- Each function does its whole job in one call, so a change and its log rows commit together or not at all.
 -- They run as service_role (security invoker) and answer an expected outcome with a result, never an error.
@@ -196,6 +202,12 @@ begin
   end if;
   if v_place.lat is null or v_place.lng is null then return 'noPosition'; end if;
 
+  -- A plain approve that carries edits is an edit: they are applied and logged, never dropped.
+  if p_decision = 'approved' and (coalesce(p_edits, '{}') not in ('{}', 'null')
+      or exists (select 1 from jsonb_array_elements(p_activities) e
+                 where e -> 'approve' = 'true' and (e ?| array['price_min_aed', 'price_max_aed', 'duration_min']))) then
+    p_decision := 'edited_approved';
+  end if;
   if p_decision = 'edited_approved' then
     v_edits := bestie.catalogue_edits(to_jsonb(v_place), p_edits, '{name,area}');
     select jsonb_agg(jsonb_build_object('id', s.id, 'text', s.text) order by s.id),
@@ -272,6 +284,8 @@ begin
   if v_act.status <> 'pending' then return 'notPending'; end if;
   if v_place_status <> 'approved' then return 'placeNotApproved'; end if;
 
+  -- A plain approve that carries edits is an edit: they are applied and logged, never dropped.
+  if p_decision = 'approved' and coalesce(p_edits, '{}') not in ('{}', 'null') then p_decision := 'edited_approved'; end if;
   if p_decision = 'edited_approved' then
     v_edits := bestie.catalogue_edits(to_jsonb(v_act), p_edits, '{price_min_aed,price_max_aed,duration_min}');
   end if;
@@ -308,6 +322,8 @@ begin
   if not found then return 'notFound'; end if;
   if v_item.status <> 'pending' then return 'notPending'; end if;
 
+  -- A plain approve that carries edits is an edit: they are applied and logged, never dropped.
+  if p_decision = 'approved' and coalesce(p_edits, '{}') not in ('{}', 'null') then p_decision := 'edited_approved'; end if;
   if p_decision = 'edited_approved' then
     v_edits := bestie.catalogue_edits(to_jsonb(v_item), p_edits, '{title,time_note,ends_on}');
   end if;
@@ -354,7 +370,12 @@ declare
   v_rejected int := 0;
   v_restored int := 0;
   v_skipped jsonb := '[]';
+  v_paired bigint[] := '{}';
+  v_ok boolean;
   c bestie.catalogue_changes;
+  v_pair bestie.catalogue_changes;
+  v_min bestie.catalogue_changes;
+  v_max bestie.catalogue_changes;
 begin
   -- for no key update: it serializes undo against undo but not against the key-share lock every
   -- insert or update referencing this run takes (review rows, places), so a decision holding a place
@@ -402,40 +423,72 @@ begin
 
   -- One case on field, no dynamic SQL. Each restore matches only while the field still equals
   -- the run's new_value (compared as jsonb); otherwise nothing is found and the change is skipped.
+  -- The two price bounds of one (place, item) changed by this run go back as a pair: both only when
+  -- both still hold what the run wrote, else both are skipped. Each restore runs in its own block, so
+  -- one that would break a check (min above max, approved with no position) is skipped and the rest
+  -- go ahead. These blocks take no new locks out of order: every place is already locked above.
   for c in select * from bestie.catalogue_changes where run_id = p_run order by id desc loop
-    case c.field
-      when 'name' then
-        update bestie.places set name = c.old_value #>> '{}', updated_at = now()
-          where id = c.place_id and coalesce(to_jsonb(name), 'null') = coalesce(c.new_value, 'null');
-      when 'area' then
-        update bestie.places set area = c.old_value #>> '{}', updated_at = now()
-          where id = c.place_id and coalesce(to_jsonb(area), 'null') = coalesce(c.new_value, 'null');
-      when 'website' then
-        update bestie.places set website = c.old_value #>> '{}', updated_at = now()
-          where id = c.place_id and coalesce(to_jsonb(website), 'null') = coalesce(c.new_value, 'null');
-      when 'opening_hours' then
-        update bestie.places set opening_hours = nullif(c.old_value, 'null'), updated_at = now()
-          where id = c.place_id and coalesce(opening_hours, 'null') = coalesce(c.new_value, 'null');
-      when 'status' then
-        update bestie.places set status = c.old_value #>> '{}', updated_at = now()
-          where id = c.place_id and coalesce(to_jsonb(status), 'null') = coalesce(c.new_value, 'null');
-      when 'price_min_aed' then
-        update bestie.place_activities set price_min_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
+    continue when c.id = any(v_paired);
+    v_pair := null;
+    if c.field in ('price_min_aed', 'price_max_aed') then
+      select * into v_pair from bestie.catalogue_changes
+        where run_id = p_run and place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+          and field = case c.field when 'price_min_aed' then 'price_max_aed' else 'price_min_aed' end
+          and not (id = any(v_paired))
+        order by id desc limit 1;
+    end if;
+    begin
+      if v_pair.id is not null then
+        v_paired := v_paired || v_pair.id;
+        v_min := case when c.field = 'price_min_aed' then c else v_pair end;
+        v_max := case when c.field = 'price_max_aed' then c else v_pair end;
+        update bestie.place_activities set price_min_aed = (v_min.old_value #>> '{}')::numeric,
+            price_max_aed = (v_max.old_value #>> '{}')::numeric, updated_at = now()
           where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
-            and coalesce(to_jsonb(price_min_aed), 'null') = coalesce(c.new_value, 'null');
-      when 'price_max_aed' then
-        update bestie.place_activities set price_max_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
-          where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
-            and coalesce(to_jsonb(price_max_aed), 'null') = coalesce(c.new_value, 'null');
-      when 'duration_min' then
-        update bestie.place_activities set duration_min = (c.old_value #>> '{}')::integer, updated_at = now()
-          where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
-            and coalesce(to_jsonb(duration_min), 'null') = coalesce(c.new_value, 'null');
-    end case;
-    if found then
-      v_restored := v_restored + 1;
+            and coalesce(to_jsonb(price_min_aed), 'null') = coalesce(v_min.new_value, 'null')
+            and coalesce(to_jsonb(price_max_aed), 'null') = coalesce(v_max.new_value, 'null');
+      else
+        case c.field
+          when 'name' then
+            update bestie.places set name = c.old_value #>> '{}', updated_at = now()
+              where id = c.place_id and coalesce(to_jsonb(name), 'null') = coalesce(c.new_value, 'null');
+          when 'area' then
+            update bestie.places set area = c.old_value #>> '{}', updated_at = now()
+              where id = c.place_id and coalesce(to_jsonb(area), 'null') = coalesce(c.new_value, 'null');
+          when 'website' then
+            update bestie.places set website = c.old_value #>> '{}', updated_at = now()
+              where id = c.place_id and coalesce(to_jsonb(website), 'null') = coalesce(c.new_value, 'null');
+          when 'opening_hours' then
+            update bestie.places set opening_hours = nullif(c.old_value, 'null'), updated_at = now()
+              where id = c.place_id and coalesce(opening_hours, 'null') = coalesce(c.new_value, 'null');
+          when 'status' then
+            update bestie.places set status = c.old_value #>> '{}', updated_at = now()
+              where id = c.place_id and coalesce(to_jsonb(status), 'null') = coalesce(c.new_value, 'null');
+          when 'price_min_aed' then
+            update bestie.place_activities set price_min_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
+              where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+                and coalesce(to_jsonb(price_min_aed), 'null') = coalesce(c.new_value, 'null');
+          when 'price_max_aed' then
+            update bestie.place_activities set price_max_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
+              where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+                and coalesce(to_jsonb(price_max_aed), 'null') = coalesce(c.new_value, 'null');
+          when 'duration_min' then
+            update bestie.place_activities set duration_min = (c.old_value #>> '{}')::integer, updated_at = now()
+              where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+                and coalesce(to_jsonb(duration_min), 'null') = coalesce(c.new_value, 'null');
+        end case;
+      end if;
+      v_ok := found;
+    exception when check_violation or not_null_violation then
+      v_ok := false;
+    end;
+    if v_ok then
+      v_restored := v_restored + case when v_pair.id is not null then 2 else 1 end;
     else
       v_skipped := v_skipped || jsonb_build_array(jsonb_build_object('change_id', c.id, 'field', c.field));
+      if v_pair.id is not null then
+        v_skipped := v_skipped || jsonb_build_array(jsonb_build_object('change_id', v_pair.id, 'field', v_pair.field));
+      end if;
     end if;
   end loop;
 

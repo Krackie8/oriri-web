@@ -343,6 +343,100 @@ select pg_temp.check((select name = 'Old Steady' from bestie.places where id = '
 select pg_temp.check((select r.reason = 'bad_run' and r.target = 'place_activity' and pa.status = 'rejected'
   from bestie.catalogue_reviews r join bestie.place_activities pa on pa.place_id = r.place_id and pa.catalogue_item_id = r.catalogue_item_id
   where r.id > :base), 'the pending activity at the approved place is rejected as bad_run');
+
+-- Undo never raises on a restore that would break a check. A run raised a price 50-100 to 120-220,
+-- then the lowest was set by hand to 130: the two bounds go back together or not at all.
+insert into bestie.catalogue_runs (id, model, status, finished_at) values ('00000000-0000-0000-0000-00000000e0c4', 'test-model', 'done', now());
+insert into bestie.places (id, source, source_id, name, lat, lng, area, status) values
+  ('00000000-0000-0000-0000-00000000e0e9', 'manual', 'cr-9', 'Price Studio', 25.1, 55.1, 'JLT', 'approved');
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, status)
+  select '00000000-0000-0000-0000-00000000e0e9', id, 130, 220, 'approved' from bestie.catalogue_items where slug = 'reformer';
+insert into bestie.catalogue_changes (run_id, place_id, catalogue_item_id, field, old_value, new_value)
+  select '00000000-0000-0000-0000-00000000e0c4', '00000000-0000-0000-0000-00000000e0e9', id, f, o, n
+  from bestie.catalogue_items, (values ('price_min_aed', '50'::jsonb, '120'::jsonb), ('price_max_aed', '100', '220')) v(f, o, n)
+  where slug = 'reformer';
+create temp table undo_price as
+  select bestie.undo_catalogue_run('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0c4') as r;
+select pg_temp.check((select r->>'result' = 'undone' and (r->>'restored')::int = 0 and jsonb_array_length(r->'skipped') = 2
+  and r->'skipped' @> (select jsonb_agg(jsonb_build_object('change_id', id, 'field', field)) from bestie.catalogue_changes where run_id = '00000000-0000-0000-0000-00000000e0c4')
+  from undo_price), 'a price pair with one bound changed by hand returns undone, with both price changes skipped');
+select pg_temp.check((select price_min_aed = 130 and price_max_aed = 220 from bestie.place_activities
+  where place_id = '00000000-0000-0000-0000-00000000e0e9' and catalogue_item_id = (select id from bestie.catalogue_items where slug = 'reformer')), 'both bounds are left as they are');
+select pg_temp.check((select status = 'undone' from bestie.catalogue_runs where id = '00000000-0000-0000-0000-00000000e0c4'), 'the price run is marked undone');
+
+-- A run closed a place, then its position was cleared: putting it back to approved would break
+-- places_approved_has_coords, so that change is skipped and the rest of the undo goes ahead.
+insert into bestie.catalogue_runs (id, model, status, finished_at) values ('00000000-0000-0000-0000-00000000e0c5', 'test-model', 'done', now());
+insert into bestie.places (id, source, source_id, name, lat, lng, area, status) values
+  ('00000000-0000-0000-0000-00000000e0ea', 'manual', 'cr-10', 'New Name', null, null, 'JLT', 'closed');
+insert into bestie.catalogue_changes (run_id, place_id, field, old_value, new_value) values
+  ('00000000-0000-0000-0000-00000000e0c5', '00000000-0000-0000-0000-00000000e0ea', 'status', '"approved"', '"closed"'),
+  ('00000000-0000-0000-0000-00000000e0c5', '00000000-0000-0000-0000-00000000e0ea', 'name', '"Old Name"', '"New Name"');
+create temp table undo_status as
+  select bestie.undo_catalogue_run('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0c5') as r;
+select pg_temp.check((select r->>'result' = 'undone' and (r->>'restored')::int = 1
+  and r->'skipped' = (select jsonb_build_array(jsonb_build_object('change_id', id, 'field', 'status')) from bestie.catalogue_changes
+                      where run_id = '00000000-0000-0000-0000-00000000e0c5' and field = 'status')
+  from undo_status), 'a status restore that breaks a check is skipped and the undo still returns undone');
+select pg_temp.check((select status = 'closed' and name = 'Old Name' from bestie.places where id = '00000000-0000-0000-0000-00000000e0ea'), 'the place stays closed and its name is back');
+select pg_temp.check((select status = 'undone' from bestie.catalogue_runs where id = '00000000-0000-0000-0000-00000000e0c5'), 'the status run is marked undone');
+
+-- A plain approved decision that carries edits is applied and logged as edited_approved.
+select max(id) as base from bestie.catalogue_reviews \gset
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, run_id)
+  select '00000000-0000-0000-0000-00000000e0e1', id, 60, 90, '00000000-0000-0000-0000-00000000e0c1' from bestie.catalogue_items where slug = 'sauna';
+select pg_temp.check(bestie.decide_place_activity('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e1',
+  (select id from bestie.catalogue_items where slug = 'sauna'), 'approved', null, null, '{"price_min_aed": 70, "price_max_aed": 95}') = 'decided',
+  'approving an activity with edits returns decided');
+select pg_temp.check((select pa.price_min_aed = 70 and pa.price_max_aed = 95 and pa.status = 'approved' from bestie.place_activities pa
+  join bestie.catalogue_items i on i.id = pa.catalogue_item_id where pa.place_id = '00000000-0000-0000-0000-00000000e0e1' and i.slug = 'sauna'),
+  'the edits on a plain approved activity are saved');
+select pg_temp.check((select decision = 'edited_approved' and edits = '{"price_min_aed": {"old": 60, "new": 70}, "price_max_aed": {"old": 90, "new": 95}}'::jsonb
+  from bestie.catalogue_reviews where id > :base), 'a plain approved activity with edits is logged as edited_approved');
+
+select max(id) as base from bestie.catalogue_reviews \gset
+insert into bestie.places (id, source, source_id, name, lat, lng, area, run_id) values
+  ('00000000-0000-0000-0000-00000000e0eb', 'manual', 'cr-11', 'Long Place Name', 25.1, 55.1, 'JLT', '00000000-0000-0000-0000-00000000e0c1');
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, run_id)
+  select '00000000-0000-0000-0000-00000000e0eb', id, 100, 150, '00000000-0000-0000-0000-00000000e0c1' from bestie.catalogue_items where slug = 'reformer';
+select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0eb', 'approved', null, null,
+  (select jsonb_agg(jsonb_build_object('catalogue_item_id', id, 'approve', true, 'price_min_aed', 100, 'price_max_aed', 180)) from bestie.catalogue_items where slug = 'reformer'),
+  '{"name": "Short Name"}') = 'decided', 'approving a place with edits returns decided');
+select pg_temp.check((select name = 'Short Name' and status = 'approved' from bestie.places where id = '00000000-0000-0000-0000-00000000e0eb'), 'the place edit on a plain approved place is saved');
+select pg_temp.check((select pa.price_max_aed = 180 from bestie.place_activities pa join bestie.catalogue_items i on i.id = pa.catalogue_item_id
+  where pa.place_id = '00000000-0000-0000-0000-00000000e0eb' and i.slug = 'reformer'), 'the activity edit on a plain approved place is saved');
+select pg_temp.check((select count(*) from bestie.catalogue_reviews where id > :base and decision = 'edited_approved') = 2
+  and (select edits = '{"name": {"old": "Long Place Name", "new": "Short Name"}}'::jsonb from bestie.catalogue_reviews where id > :base and target = 'place')
+  and (select edits = '{"price_max_aed": {"old": 150, "new": 180}}'::jsonb from bestie.catalogue_reviews where id > :base and target = 'place_activity'),
+  'the place and its activity are both logged as edited_approved');
+-- Edits only on an activity entry are enough to make it an edit.
+insert into bestie.places (id, source, source_id, name, lat, lng, area, run_id) values
+  ('00000000-0000-0000-0000-00000000e0ec', 'manual', 'cr-12', 'Price Only', 25.1, 55.1, 'JLT', '00000000-0000-0000-0000-00000000e0c1');
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, run_id)
+  select '00000000-0000-0000-0000-00000000e0ec', id, 100, 150, '00000000-0000-0000-0000-00000000e0c1' from bestie.catalogue_items where slug = 'yoga';
+select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0ec', 'approved', null, null,
+  (select jsonb_agg(jsonb_build_object('catalogue_item_id', id, 'approve', true, 'duration_min', 50)) from bestie.catalogue_items where slug = 'yoga'), null) = 'decided',
+  'approving a place with only an activity edit returns decided');
+select pg_temp.check((select pa.duration_min = 50 from bestie.place_activities pa where pa.place_id = '00000000-0000-0000-0000-00000000e0ec'),
+  'a plain approved place with only an activity edit saves that edit');
+
+select max(id) as base from bestie.catalogue_reviews \gset
+insert into bestie.catalogue_items (id, title, pillars, kind, status, run_id) values
+  ('00000000-0000-0000-0000-00000000e0d3', 'Old event title', '{meet_up}', 'event', 'pending', '00000000-0000-0000-0000-00000000e0c1');
+select pg_temp.check(bestie.decide_event('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0d3', 'approved', null, null, '{"title": "New event title"}') = 'decided',
+  'approving an event with edits returns decided');
+select pg_temp.check((select title = 'New event title' from bestie.catalogue_items where id = '00000000-0000-0000-0000-00000000e0d3')
+  and (select decision = 'edited_approved' from bestie.catalogue_reviews where id > :base), 'a plain approved event with edits is saved and logged as edited_approved');
+
+-- A pending event is not readable by a Member; an approved one is.
+insert into bestie.catalogue_items (id, title, pillars, kind, status, run_id) values
+  ('00000000-0000-0000-0000-00000000e0d4', 'Pending meetup', '{meet_up}', 'event', 'pending', '00000000-0000-0000-0000-00000000e0c1');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000e0a2', false);
+select pg_temp.check(not exists (select 1 from bestie.catalogue_items where id = '00000000-0000-0000-0000-00000000e0d4'), 'a Member cannot read a pending catalogue item');
+select pg_temp.check(exists (select 1 from bestie.catalogue_items where id = '00000000-0000-0000-0000-00000000e0d1'), 'a Member can read an approved catalogue item');
+select set_config('request.jwt.claim.sub', '', false);
 reset role;
 
 -- Who can call: service_role only.
