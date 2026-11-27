@@ -1,4 +1,4 @@
-/** Admin › Traffic: cookieless first-party counts (visits, pages, sources, place clicks). */
+/** Admin › Traffic: cookieless first-party counts (visits, leads, sources, pages, devices, place clicks). */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RefreshCw } from 'lucide-react';
@@ -6,7 +6,37 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { useAuth } from '../../hooks/useAuth';
 import * as wellnessApi from '../../utils/wellnessApi';
-import type { DayStats } from '../../utils/wellnessApi';
+import type { DayStats, StatsSite } from '../../utils/wellnessApi';
+import { CITIES, PICKS } from '../../wellness/shop/catalog';
+
+const SITES: { id: StatsSite; label: string }[] = [
+  { id: 'prod', label: 'Live site' },
+  { id: 'staging', label: 'Staging' },
+];
+
+const FORM_NAMES: Record<string, string> = {
+  free_day: 'Free day trial',
+  pilot_application: 'Waitlist form',
+  bestie_waitlist: 'Bestie waitlist',
+  signup: 'New account',
+  member_join: 'Joined as member',
+};
+
+const SOURCE_NAMES: Record<string, string> = {
+  direct: 'Direct / typed in',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  google: 'Google',
+  whatsapp: 'WhatsApp',
+  tiktok: 'TikTok',
+  'link-in-bio': 'Link in bio',
+  youtube: 'YouTube',
+  x: 'X / Twitter',
+  search: 'Other search',
+  mobile: 'Phone or tablet',
+  desktop: 'Computer',
+};
+const niceSource = (k: string) => SOURCE_NAMES[k] || k;
 
 const RANGES = [
   { days: 7, label: '7 days' },
@@ -19,6 +49,9 @@ const PAGE_NAMES: Record<string, string> = {
   '/plan': 'Plan · options',
   '/plan/inputs': 'Plan · check-in',
   '/plan/day': 'Plan · your day',
+  '/join': 'Join',
+  '/bestie': 'Bestie',
+  '/community': 'Community',
   '/membership': 'Membership',
   '/pilot': 'Waitlist',
   '/about': 'About',
@@ -28,13 +61,13 @@ const PAGE_NAMES: Record<string, string> = {
   '/profile': 'Profile',
 };
 
-function sumMaps(days: DayStats[], key: 'pages' | 'sources' | 'places') {
+type MapKey = 'pages' | 'sources' | 'places' | 'devices' | 'forms' | 'leadSources';
+function sumMaps(days: DayStats[], key: MapKey) {
   const out: Record<string, number> = {};
   for (const d of days) for (const [k, v] of Object.entries(d[key] || {})) out[k] = (out[k] || 0) + v;
-  return Object.entries(out).sort((a, b) => b[1] - a[1]);
+  return Object.entries(out).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
 }
 
-import { CITIES, PICKS } from '../../wellness/shop/catalog';
 
 /** Shop buy-button taps are stored as places named shop:<city>:<id>. */
 const isShop = (k: string) => k.startsWith('shop:');
@@ -44,15 +77,29 @@ function shopLabel(k: string) {
   return `${name} · ${CITIES[city as keyof typeof CITIES]?.label || city}`;
 }
 
-function TopList({ title, rows, label = (k: string) => k, empty }: { title: string; rows: [string, number][]; label?: (k: string) => string; empty: string }) {
-  const max = rows[0]?.[1] || 1;
+function TopList({
+  title,
+  rows,
+  label = (k: string) => k,
+  empty,
+  sorted = true,
+}: {
+  title: string;
+  rows: [string, number][];
+  label?: (k: string) => string;
+  empty: string;
+  /** false keeps the given order (e.g. a funnel) and scales bars to the largest row. */
+  sorted?: boolean;
+}) {
+  const max = (sorted ? rows[0]?.[1] : Math.max(...rows.map((r) => r[1]), 0)) || 1;
+  const hasData = rows.some((r) => r[1] > 0);
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        {rows.length ? (
+        {rows.length && hasData ? (
           <ul className="space-y-2">
             {rows.slice(0, 10).map(([k, v]) => (
               <li key={k} className="text-sm">
@@ -78,6 +125,7 @@ export default function TrafficDashboard() {
   const { session } = useAuth();
   const token = session?.access_token;
   const [days, setDays] = useState(30);
+  const [site, setSite] = useState<StatsSite>('prod');
   const [data, setData] = useState<DayStats[] | null>(null);
   const [error, setError] = useState('');
 
@@ -85,17 +133,21 @@ export default function TrafficDashboard() {
     if (!token) return;
     setData(null);
     setError('');
-    const res = await wellnessApi.getStats(token, days);
+    const res = await wellnessApi.getStats(token, days, site);
     if (res.ok && res.data) setData(res.data);
     else setError(res.error || 'Could not load traffic');
-  }, [token, days]);
+  }, [token, days, site]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const totals = useMemo(
-    () => (data || []).reduce((t, d) => ({ visits: t.visits + d.sessions, views: t.views + d.views, clicks: t.clicks + d.clicks }), { visits: 0, views: 0, clicks: 0 }),
+    () =>
+      (data || []).reduce(
+        (t, d) => ({ visits: t.visits + d.sessions, views: t.views + d.views, clicks: t.clicks + d.clicks, leads: t.leads + (d.leads || 0) }),
+        { visits: 0, views: 0, clicks: 0, leads: 0 },
+      ),
     [data],
   );
   const places = useMemo(() => (data ? sumMaps(data, 'places') : []), [data]);
@@ -105,18 +157,41 @@ export default function TrafficDashboard() {
     (c) => [CITIES[c].label, shopRows.filter(([k]) => k.startsWith(`shop:${c}:`)).reduce((t, [, v]) => t + v, 0)] as [string, number],
   );
   const chart = useMemo(
-    () => (data || []).map((d) => ({ day: new Date(`${d.date}T00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), Visits: d.sessions, 'Page views': d.views })),
+    () => (data || []).map((d) => ({ day: new Date(`${d.date}T00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), Visits: d.sessions, Leads: d.leads || 0 })),
     [data],
   );
+
+  // Planner funnel from page views: how far people get through the free day.
+  const funnel = useMemo(() => {
+    const pages = Object.fromEntries(sumMaps(data || [], 'pages'));
+    const steps: [string, number][] = [
+      ['Visits', totals.visits],
+      ['Opened the planner', pages['/plan'] || 0],
+      ['Filled in the check-in', pages['/plan/inputs'] || 0],
+      ['Saw their day', pages['/plan/day'] || 0],
+      ['Opened Join', pages['/join'] || 0],
+      ['Signed up (all forms)', totals.leads],
+    ];
+    return steps;
+  }, [data, totals]);
+  const rate = totals.visits ? `${((totals.leads / totals.visits) * 100).toFixed(1)}%` : '–';
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">Website traffic</h2>
-          <p className="text-sm text-muted-foreground">Counted on our own server, no cookies, so it includes visitors who decline the cookie banner. Dubai time.</p>
+          <p className="text-sm text-muted-foreground">
+            Counted on our own server, no cookies, so it includes visitors who decline the cookie banner. Dubai time. Your own visits on this device are not counted.
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {SITES.map((s) => (
+            <Button key={s.id} size="sm" variant={site === s.id ? 'default' : 'outline'} onClick={() => setSite(s.id)}>
+              {s.label}
+            </Button>
+          ))}
+          <span className="mx-1 w-px self-stretch bg-border" aria-hidden />
           {RANGES.map((r) => (
             <Button key={r.days} size="sm" variant={days === r.days ? 'default' : 'outline'} onClick={() => setDays(r.days)}>
               {r.label}
@@ -136,10 +211,12 @@ export default function TrafficDashboard() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {[
               ['Visits', totals.visits, 'Separate browsing sessions'],
               ['Page views', totals.views, 'Every page opened'],
+              ['Leads', totals.leads, 'Sign-up forms completed'],
+              ['Visit → lead', rate, 'Share of visits that left an email'],
               ['Directory clicks', totals.clicks - shopClicks, 'Taps on a place in the guide'],
               ['Shop clicks', shopClicks, 'Taps on a Shop pick (opens Amazon.ae or Shopee)'],
             ].map(([title, value, desc]) => (
@@ -155,7 +232,7 @@ export default function TrafficDashboard() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Visits per day</CardTitle>
+              <CardTitle className="text-base">Visits and leads per day</CardTitle>
             </CardHeader>
             <CardContent className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -165,13 +242,24 @@ export default function TrafficDashboard() {
                   <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
                   <Tooltip cursor={{ fill: 'rgba(125,109,97,0.08)' }} />
                   <Bar dataKey="Visits" fill="#7D6D61" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Leads" fill="#C9A27E" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
+          <div className="grid gap-4 lg:grid-cols-2">
+            <TopList title="Free day funnel" rows={funnel} sorted={false} empty="No visits yet." />
+            <TopList title="Where visitors come from" rows={sumMaps(data, 'sources')} label={niceSource} empty="No visits yet." />
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-3">
-            <TopList title="Where visitors come from" rows={sumMaps(data, 'sources')} empty="No visits yet." />
+            <TopList title="Where leads come from" rows={sumMaps(data, 'leadSources')} label={niceSource} empty="No leads yet." />
+            <TopList title="Leads by form" rows={sumMaps(data, 'forms')} label={(k) => FORM_NAMES[k] || k} empty="No leads yet." />
+            <TopList title="Phone or computer" rows={sumMaps(data, 'devices')} label={niceSource} empty="No device data yet." />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
             <TopList title="Top pages" rows={sumMaps(data, 'pages')} label={(k) => PAGE_NAMES[k] || k} empty="No page views yet." />
             <TopList title="Most-clicked places" rows={places.filter(([k]) => !isShop(k))} empty="No directory clicks yet." />
           </div>

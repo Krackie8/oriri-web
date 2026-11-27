@@ -7,6 +7,7 @@ import { X, Eye, EyeOff, Mic, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner@2.0.3';
 import { formSubmit } from '../wellness/analytics/track';
+import { countLead } from '../wellness/analytics/firstParty';
 import { getUtm } from '../wellness/analytics/utm';
 import { checkEmail } from '../utils/emailCheck';
 
@@ -104,6 +105,7 @@ export default function LoginScreen({ onClose, onLogin, onGuestMode, initialSign
             return;
           }
           console.log('Signup successful:', data);
+          countLead('signup');
           formSubmit('signup', getUtm());
           toast.success('Account created! Please check your email to verify your address.');
           setIsSignUp(false);

@@ -39,6 +39,7 @@ import { useSocialConfig } from '../hooks/useSocialConfig';
 import * as socialApi from '../utils/socialApi';
 import { PLATFORM_META } from '../data/socialConfig';
 import { formSubmit, podcastPlayClick } from '../wellness/analytics/track';
+import { countLead } from '../wellness/analytics/firstParty';
 import { getUtm } from '../wellness/analytics/utm';
 
 // Import episode fetching services
@@ -377,6 +378,7 @@ export default function HomeScreen(_props: HomeScreenProps) {
     setBestieJoining(false);
     if (res.ok) {
       setBestieJoined(true);
+      countLead('bestie_waitlist');
       formSubmit('bestie_waitlist', getUtm());
       localStorage.setItem('oriri-bestie-waitlist', '1');
     }
