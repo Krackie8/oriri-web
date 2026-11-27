@@ -11,6 +11,7 @@ import { loadOverview, dubaiDate, type OverviewDeps } from './overview.ts'
 import { cleanQuery, isUuid, toDetail, toListItem, type MembersDeps } from './members.ts'
 import { requestSignInLink, redirectToFor, ipKey, SIGN_IN_FLOOR_MS, SIGN_IN_WORK_TIMEOUT_MS, type SignInLinkDeps } from './signInLink.ts'
 import { getTeam, addToTeam, removeFromTeam, type TeamDeps } from './team.ts'
+import { decidePlaceHandler, decideActivityHandler, decideEventHandler, decideContentHandler, undoRunHandler, type CatalogueDeps } from './catalogue.ts'
 import { getEvents, createEvent, updateEvent, deleteEvent, getBookings, removeBooking, uploadPhoto, type EventsDeps } from './events.ts'
 
 export type { SignInLinkDeps }
@@ -24,6 +25,8 @@ export type { MembersDeps }
 export type { TeamDeps }
 
 export type { EventsDeps }
+
+export type { CatalogueDeps }
 
 export interface AdminUser {
   id: string
@@ -40,6 +43,7 @@ export interface AdminDeps {
   members: MembersDeps
   team: TeamDeps
   events: EventsDeps
+  catalogue: CatalogueDeps
 }
 
 const ALLOWED_ORIGINS = [
@@ -180,5 +184,11 @@ export function createAdminApp(deps: AdminDeps): Hono {
   app.delete('/admin/events/:kind/:id', admin((c, user) => deleteEvent(c, deps.events, user)))
   app.get('/admin/events/:kind/:id/bookings', admin((c) => getBookings(c, deps.events)))
   app.delete('/admin/events/:kind/:id/bookings/:email', admin((c, user) => removeBooking(c, deps.events, user)))
+  // Catalogue review: requireAdmin first on every route; the rules and the words are in catalogue.ts.
+  app.post('/admin/catalogue/places/:placeId/decision', admin((c, user) => decidePlaceHandler(c, deps.catalogue, user)))
+  app.post('/admin/catalogue/places/:placeId/activities/:itemId/decision', admin((c, user) => decideActivityHandler(c, deps.catalogue, user)))
+  app.post('/admin/catalogue/events/:itemId/decision', admin((c, user) => decideEventHandler(c, deps.catalogue, user)))
+  app.post('/admin/catalogue/content/:contentId/decision', admin((c, user) => decideContentHandler(c, deps.catalogue, user)))
+  app.post('/admin/catalogue/runs/:runId/undo', admin((c, user) => undoRunHandler(c, deps.catalogue, user)))
   return app
 }

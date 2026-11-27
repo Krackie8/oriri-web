@@ -9,6 +9,7 @@ import { OVERVIEW_SQL } from './overviewQuery.ts'
 import { testEmailsFrom } from './overview.ts'
 import { MEMBERS_LIST_SQL, MEMBER_DETAIL_SQL } from './membersQuery.ts'
 import { TEAM_LIST_SQL, TEAM_GRANT_SQL, TEAM_REMOVE_SQL, TEAM_CHANGES_SQL } from './teamQuery.ts'
+import { PLACE_SQL, ACTIVITY_SQL, EVENT_SQL, CONTENT_SQL, UNDO_SQL, placeParams, activityParams, eventParams, contentParams, undoParams, decideResultFrom, undoFromJson } from './catalogueQuery.ts'
 import type { EventKind, StoredEvent } from './events.ts'
 
 const WELLNESS_BUCKET = 'make-a278ea32-wellness'
@@ -170,6 +171,18 @@ const app = createAdminApp({
     markSeen: (userId, at) => kv.set(`admin:seen:events:${userId}`, { at }),
     photoBase: `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/${WELLNESS_BUCKET}/`,
     now: () => new Date(),
+  },
+  // Catalogue review: each decision is one SQL function call as service_role (catalogueQuery.ts).
+  catalogue: {
+    decidePlace: async (actor, placeId, body) =>
+      decideResultFrom((await asServiceRole(PLACE_SQL, placeParams(actor, placeId, body)))[0]?.result),
+    decideActivity: async (actor, placeId, itemId, body) =>
+      decideResultFrom((await asServiceRole(ACTIVITY_SQL, activityParams(actor, placeId, itemId, body)))[0]?.result),
+    decideEvent: async (actor, itemId, body) =>
+      decideResultFrom((await asServiceRole(EVENT_SQL, eventParams(actor, itemId, body)))[0]?.result),
+    decideContent: async (actor, contentId, body) =>
+      decideResultFrom((await asServiceRole(CONTENT_SQL, contentParams(actor, contentId, body)))[0]?.result),
+    undoRun: async (actor, runId) => undoFromJson((await asServiceRole(UNDO_SQL, undoParams(actor, runId)))[0]?.result),
   },
   me: {
     displayName: async (id) => {

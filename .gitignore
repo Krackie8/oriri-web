@@ -22,3 +22,6 @@ logs/
 supabase/functions/make-server-a278ea32/
 public/data/
 .context/
+
+# Local agent scratch (plans, reports); never committed.
+.superpowers/

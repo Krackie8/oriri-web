@@ -17,6 +17,7 @@ function fakeDeps(): AdminDeps {
       queryRow: async () => ({ members_total: '2', members_week: '1', members_month: '2', active_week: '1', non_lead_emails: null }),
     },
     me: {},
+    catalogue: {} as AdminDeps['catalogue'],
   }
 }
 
@@ -91,5 +92,62 @@ describe('requireAdmin', () => {
     const res = await get('admin-token')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ id: ADMIN.id })
+  })
+})
+
+describe('catalogue routes', () => {
+  const PL = '00000000-0000-4000-8000-000000000002'
+  const IT = '00000000-0000-4000-8000-000000000003'
+  const routes = [
+    `/admin/catalogue/places/${PL}/decision`,
+    `/admin/catalogue/places/${PL}/activities/${IT}/decision`,
+    `/admin/catalogue/events/${IT}/decision`,
+    `/admin/catalogue/content/${IT}/decision`,
+    `/admin/catalogue/runs/${IT}/undo`,
+  ]
+  const withCatalogue = () => {
+    const catalogue = {
+      decidePlace: vi.fn(async () => 'decided'),
+      decideActivity: vi.fn(async () => 'decided'),
+      decideEvent: vi.fn(async () => 'decided'),
+      decideContent: vi.fn(async () => 'decided'),
+      undoRun: vi.fn(async () => ({ result: 'stillRunning', rejected: 0, restored: 0, skipped: [] })),
+    }
+    return { catalogue, deps: { ...fakeDeps(), catalogue } as unknown as AdminDeps }
+  }
+  const post = (deps: AdminDeps, path: string, token?: string, body: unknown = { decision: 'approved' }) =>
+    createAdminApp(deps).request(path, {
+      method: 'POST', body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+
+  for (const path of routes) {
+    it(`${path.replace(/[0-9a-f-]{36}/g, ':id')}: 401 with no token, 403 for a non-admin`, async () => {
+      const { deps, catalogue } = withCatalogue()
+      expect((await post(deps, path)).status).toBe(401)
+      expect((await post(deps, path, 'member-token')).status).toBe(403)
+      for (const fn of Object.values(catalogue)) expect(fn).not.toHaveBeenCalled()
+    })
+  }
+  it('an admin place decision reaches decidePlace with the cleaned body', async () => {
+    const { deps, catalogue } = withCatalogue()
+    const res = await post(deps, routes[0], 'admin-token', { decision: 'approved', note: '  hi  ', junk: 1 })
+    expect(res.status).toBe(200)
+    expect(catalogue.decidePlace).toHaveBeenCalledWith(ADMIN.id, PL, { decision: 'approved', note: 'hi', activities: [] })
+  })
+  it('the other decision routes reach their deps', async () => {
+    const { deps, catalogue } = withCatalogue()
+    expect((await post(deps, routes[1], 'admin-token')).status).toBe(200)
+    expect((await post(deps, routes[2], 'admin-token')).status).toBe(200)
+    expect((await post(deps, routes[3], 'admin-token', { decision: 'released' })).status).toBe(200)
+    expect(catalogue.decideActivity).toHaveBeenCalledWith(ADMIN.id, PL, IT, { decision: 'approved' })
+    expect(catalogue.decideEvent).toHaveBeenCalledWith(ADMIN.id, IT, { decision: 'approved' })
+    expect(catalogue.decideContent).toHaveBeenCalledWith(ADMIN.id, IT, { decision: 'released' })
+  })
+  it('an undo that is still running answers 409 with the exact words', async () => {
+    const { deps } = withCatalogue()
+    const res = await post(deps, routes[4], 'admin-token', {})
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ problem: "That run is still going. Try again when it's finished." })
   })
 })
