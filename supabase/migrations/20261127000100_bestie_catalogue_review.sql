@@ -128,3 +128,310 @@ alter table bestie.catalogue_reviews enable row level security;
 alter table bestie.catalogue_reviews force row level security;
 alter table bestie.place_signals enable row level security;
 alter table bestie.place_signals force row level security;
+
+-- ===== 3. Decisions and undo =====
+-- Each function does its whole job in one call, so a change and its log rows commit together or not at all.
+-- They run as service_role (security invoker) and answer an expected outcome with a result, never an error.
+
+-- The edits a decision makes, as {field: {"old": …, "new": …}}, for the listed fields that change.
+create function bestie.catalogue_edits(p_old jsonb, p_edits jsonb, p_fields text[]) returns jsonb
+  language sql immutable set search_path = '' as $$
+  select coalesce(jsonb_object_agg(f, jsonb_build_object('old', p_old -> f, 'new', p_edits -> f)), '{}')
+  from unnest(p_fields) f
+  where p_edits ? f and coalesce(p_old -> f, 'null') <> coalesce(p_edits -> f, 'null')
+$$;
+
+-- A new place and its activities. p_activities must list exactly the place's pending activities;
+-- an unticked one is rejected as not_a_fit. Rejecting the place rejects every pending activity with the same reason.
+create function bestie.decide_place(p_actor uuid, p_place uuid, p_decision text, p_reason text, p_note text,
+                                    p_activities jsonb, p_edits jsonb) returns text
+  language plpgsql security invoker set search_path = '' as $$
+declare
+  v_place bestie.places;
+  v_pending int;
+  v_listed int;
+  v_matched int;
+  v_edits jsonb := '{}';
+  v_signals_old jsonb;
+  v_signals_new jsonb;
+  v_act record;
+  v_act_edits jsonb;
+begin
+  if p_decision not in ('approved', 'edited_approved', 'rejected') then
+    raise exception 'decide_place: unknown decision %', p_decision;
+  end if;
+  select * into v_place from bestie.places where id = p_place for update;
+  if not found then return 'notFound'; end if;
+  if v_place.status <> 'pending' then return 'notPending'; end if;
+
+  if p_decision = 'rejected' then
+    update bestie.places set status = 'rejected', reviewed_at = now(), reviewed_by = p_actor, updated_at = now()
+      where id = p_place;
+    insert into bestie.catalogue_reviews (target, place_id, decision, reason, note, run_id, decided_by)
+      values ('place', p_place, 'rejected', p_reason, p_note, v_place.run_id, p_actor);
+    with r as (
+      update bestie.place_activities set status = 'rejected', updated_at = now()
+        where place_id = p_place and status = 'pending'
+        returning catalogue_item_id, run_id)
+    insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, reason, run_id, decided_by)
+      select 'place_activity', p_place, catalogue_item_id, 'rejected', p_reason, run_id, p_actor from r;
+    return 'decided';
+  end if;
+
+  select count(*) into v_pending
+    from (select 1 from bestie.place_activities where place_id = p_place and status = 'pending' for update) s;
+  select count(*), count(distinct pa.catalogue_item_id) into v_listed, v_matched
+    from jsonb_array_elements(coalesce(p_activities, '[]')) e
+    left join bestie.place_activities pa on pa.place_id = p_place and pa.status = 'pending'
+      and pa.catalogue_item_id = (e ->> 'catalogue_item_id')::uuid;
+  if v_listed <> v_pending or v_matched <> v_pending then return 'activitiesMismatch'; end if;
+  if not exists (select 1 from jsonb_array_elements(coalesce(p_activities, '[]')) e where (e ->> 'approve')::boolean) then
+    return 'needsActivity';
+  end if;
+  if v_place.lat is null or v_place.lng is null then return 'noPosition'; end if;
+
+  if p_decision = 'edited_approved' then
+    v_edits := bestie.catalogue_edits(to_jsonb(v_place), p_edits, '{name,area}');
+    select jsonb_agg(jsonb_build_object('id', s.id, 'text', s.text) order by s.id),
+           jsonb_agg(jsonb_build_object('id', s.id, 'text', e ->> 'text') order by s.id)
+      into v_signals_old, v_signals_new
+      from jsonb_array_elements(coalesce(p_edits -> 'signals', '[]')) e
+      join bestie.place_signals s on s.id = (e ->> 'id')::uuid and s.place_id = p_place
+      where s.text is distinct from e ->> 'text';
+    if v_signals_old is not null then
+      update bestie.place_signals s set text = e ->> 'text'
+        from jsonb_array_elements(p_edits -> 'signals') e
+        where s.id = (e ->> 'id')::uuid and s.place_id = p_place;
+      v_edits := v_edits || jsonb_build_object('signals', jsonb_build_object('old', v_signals_old, 'new', v_signals_new));
+    end if;
+  end if;
+
+  update bestie.places set
+      name = case when v_edits ? 'name' then v_edits -> 'name' ->> 'new' else name end,
+      area = case when v_edits ? 'area' then v_edits -> 'area' ->> 'new' else area end,
+      status = 'approved', approved_at = now(), approved_by = p_actor,
+      reviewed_at = now(), reviewed_by = p_actor, updated_at = now()
+    where id = p_place;
+  insert into bestie.catalogue_reviews (target, place_id, decision, note, edits, run_id, decided_by)
+    values ('place', p_place, case when v_edits = '{}' then 'approved' else 'edited_approved' end,
+            p_note, nullif(v_edits, '{}'), v_place.run_id, p_actor);
+
+  for v_act in
+    select pa.*, e as item
+      from jsonb_array_elements(p_activities) e
+      join bestie.place_activities pa on pa.place_id = p_place and pa.catalogue_item_id = (e ->> 'catalogue_item_id')::uuid
+  loop
+    if not (v_act.item ->> 'approve')::boolean then
+      update bestie.place_activities set status = 'rejected', updated_at = now()
+        where place_id = p_place and catalogue_item_id = v_act.catalogue_item_id;
+      insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, reason, run_id, decided_by)
+        values ('place_activity', p_place, v_act.catalogue_item_id, 'rejected', 'not_a_fit', v_act.run_id, p_actor);
+    else
+      v_act_edits := case when p_decision = 'edited_approved'
+        then bestie.catalogue_edits(to_jsonb(v_act), v_act.item, '{price_min_aed,price_max_aed,duration_min}') else '{}' end;
+      update bestie.place_activities set
+          price_min_aed = case when v_act_edits ? 'price_min_aed' then (v_act_edits -> 'price_min_aed' ->> 'new')::numeric else price_min_aed end,
+          price_max_aed = case when v_act_edits ? 'price_max_aed' then (v_act_edits -> 'price_max_aed' ->> 'new')::numeric else price_max_aed end,
+          duration_min = case when v_act_edits ? 'duration_min' then (v_act_edits -> 'duration_min' ->> 'new')::integer else duration_min end,
+          status = 'approved', updated_at = now()
+        where place_id = p_place and catalogue_item_id = v_act.catalogue_item_id;
+      insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, edits, run_id, decided_by)
+        values ('place_activity', p_place, v_act.catalogue_item_id,
+                case when v_act_edits = '{}' then 'approved' else 'edited_approved' end,
+                nullif(v_act_edits, '{}'), v_act.run_id, p_actor);
+    end if;
+  end loop;
+  return 'decided';
+end $$;
+
+-- A new activity at an already approved place.
+create function bestie.decide_place_activity(p_actor uuid, p_place uuid, p_item uuid, p_decision text, p_reason text,
+                                             p_note text, p_edits jsonb) returns text
+  language plpgsql security invoker set search_path = '' as $$
+declare
+  v_place_status text;
+  v_act bestie.place_activities;
+  v_edits jsonb := '{}';
+begin
+  if p_decision not in ('approved', 'edited_approved', 'rejected') then
+    raise exception 'decide_place_activity: unknown decision %', p_decision;
+  end if;
+  -- The place is locked before its activity, the same order as decide_place, so the two never deadlock.
+  select status into v_place_status from bestie.places where id = p_place for update;
+  select * into v_act from bestie.place_activities where place_id = p_place and catalogue_item_id = p_item for update;
+  if not found then return 'notFound'; end if;
+  if v_act.status <> 'pending' then return 'notPending'; end if;
+  if v_place_status <> 'approved' then return 'placeNotApproved'; end if;
+
+  if p_decision = 'edited_approved' then
+    v_edits := bestie.catalogue_edits(to_jsonb(v_act), p_edits, '{price_min_aed,price_max_aed,duration_min}');
+  end if;
+  update bestie.place_activities set
+      price_min_aed = case when v_edits ? 'price_min_aed' then (v_edits -> 'price_min_aed' ->> 'new')::numeric else price_min_aed end,
+      price_max_aed = case when v_edits ? 'price_max_aed' then (v_edits -> 'price_max_aed' ->> 'new')::numeric else price_max_aed end,
+      duration_min = case when v_edits ? 'duration_min' then (v_edits -> 'duration_min' ->> 'new')::integer else duration_min end,
+      status = case when p_decision = 'rejected' then 'rejected' else 'approved' end,
+      updated_at = now()
+    where place_id = p_place and catalogue_item_id = p_item;
+  update bestie.places set reviewed_at = now(), reviewed_by = p_actor where id = p_place;
+  insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, reason, note, edits, run_id, decided_by)
+    values ('place_activity', p_place, p_item,
+            case when p_decision = 'rejected' then 'rejected' when v_edits = '{}' then 'approved' else 'edited_approved' end,
+            case when p_decision = 'rejected' then p_reason end, p_note, nullif(v_edits, '{}'), v_act.run_id, p_actor);
+  return 'decided';
+end $$;
+
+-- An event or social activity found by a run (catalogue_items with run_id set). Seed items are never touched.
+create function bestie.decide_event(p_actor uuid, p_item uuid, p_decision text, p_reason text, p_note text,
+                                    p_edits jsonb) returns text
+  language plpgsql security invoker set search_path = '' as $$
+declare
+  v_item bestie.catalogue_items;
+  v_edits jsonb := '{}';
+begin
+  if p_decision not in ('approved', 'edited_approved', 'rejected') then
+    raise exception 'decide_event: unknown decision %', p_decision;
+  end if;
+  select * into v_item from bestie.catalogue_items where id = p_item and run_id is not null for update;
+  if not found then return 'notFound'; end if;
+  if v_item.status <> 'pending' then return 'notPending'; end if;
+
+  if p_decision = 'edited_approved' then
+    v_edits := bestie.catalogue_edits(to_jsonb(v_item), p_edits, '{title,time_note,ends_on}');
+  end if;
+  update bestie.catalogue_items set
+      title = case when v_edits ? 'title' then v_edits -> 'title' ->> 'new' else title end,
+      time_note = case when v_edits ? 'time_note' then v_edits -> 'time_note' ->> 'new' else time_note end,
+      ends_on = case when v_edits ? 'ends_on' then (v_edits -> 'ends_on' ->> 'new')::date else ends_on end,
+      status = case when p_decision = 'rejected' then 'rejected' else 'approved' end,
+      updated_at = now()
+    where id = p_item;
+  insert into bestie.catalogue_reviews (target, catalogue_item_id, decision, reason, note, edits, run_id, decided_by)
+    values ('event', p_item,
+            case when p_decision = 'rejected' then 'rejected' when v_edits = '{}' then 'approved' else 'edited_approved' end,
+            case when p_decision = 'rejected' then p_reason end, p_note, nullif(v_edits, '{}'), v_item.run_id, p_actor);
+  return 'decided';
+end $$;
+
+-- A held content item: released (back to passed) or removed. The row is never deleted.
+create function bestie.decide_content(p_actor uuid, p_content uuid, p_decision text, p_note text) returns text
+  language plpgsql security invoker set search_path = '' as $$
+declare
+  v_screen text;
+begin
+  if p_decision not in ('released', 'removed') then
+    raise exception 'decide_content: unknown decision %', p_decision;
+  end if;
+  select screen into v_screen from bestie.content_items where id = p_content for update;
+  if not found then return 'notFound'; end if;
+  if v_screen <> 'held' then return 'notHeld'; end if;
+  update bestie.content_items set screen = case when p_decision = 'released' then 'passed' else 'removed' end, updated_at = now()
+    where id = p_content;
+  insert into bestie.catalogue_reviews (target, content_item_id, decision, note, decided_by)
+    values ('content', p_content, p_decision, p_note, p_actor);
+  return 'decided';
+end $$;
+
+-- Undo a finished run: reject its pending finds as bad_run, then put back each change it applied,
+-- newest first, but only where the field still holds what the run wrote. Fields changed since are listed in skipped.
+create function bestie.undo_catalogue_run(p_actor uuid, p_run uuid) returns jsonb
+  language plpgsql security invoker set search_path = '' as $$
+declare
+  v_status text;
+  v_n int;
+  v_rejected int := 0;
+  v_restored int := 0;
+  v_skipped jsonb := '[]';
+  c bestie.catalogue_changes;
+begin
+  select status into v_status from bestie.catalogue_runs where id = p_run for update;
+  if not found or v_status in ('undone', 'running') then
+    return jsonb_build_object(
+      'result', case when v_status = 'undone' then 'alreadyUndone' when v_status = 'running' then 'stillRunning' else 'notFound' end,
+      'rejected', 0, 'restored', 0, 'skipped', '[]'::jsonb);
+  end if;
+
+  with r as (
+    update bestie.places set status = 'rejected', reviewed_at = now(), reviewed_by = p_actor, updated_at = now()
+      where run_id = p_run and status = 'pending' returning id)
+  insert into bestie.catalogue_reviews (target, place_id, decision, reason, run_id, decided_by)
+    select 'place', id, 'rejected', 'bad_run', p_run, p_actor from r;
+  get diagnostics v_n = row_count;
+  v_rejected := v_rejected + v_n;
+
+  with r as (
+    update bestie.place_activities set status = 'rejected', updated_at = now()
+      where run_id = p_run and status = 'pending' returning place_id, catalogue_item_id)
+  insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, reason, run_id, decided_by)
+    select 'place_activity', place_id, catalogue_item_id, 'rejected', 'bad_run', p_run, p_actor from r;
+  get diagnostics v_n = row_count;
+  v_rejected := v_rejected + v_n;
+
+  with r as (
+    update bestie.catalogue_items set status = 'rejected', updated_at = now()
+      where run_id = p_run and status = 'pending' returning id)
+  insert into bestie.catalogue_reviews (target, catalogue_item_id, decision, reason, run_id, decided_by)
+    select 'event', id, 'rejected', 'bad_run', p_run, p_actor from r;
+  get diagnostics v_n = row_count;
+  v_rejected := v_rejected + v_n;
+
+  -- One case on field, no dynamic SQL. Each restore matches only while the field still equals
+  -- the run's new_value (compared as jsonb); otherwise nothing is found and the change is skipped.
+  for c in select * from bestie.catalogue_changes where run_id = p_run order by id desc loop
+    case c.field
+      when 'name' then
+        update bestie.places set name = c.old_value #>> '{}', updated_at = now()
+          where id = c.place_id and coalesce(to_jsonb(name), 'null') = coalesce(c.new_value, 'null');
+      when 'area' then
+        update bestie.places set area = c.old_value #>> '{}', updated_at = now()
+          where id = c.place_id and coalesce(to_jsonb(area), 'null') = coalesce(c.new_value, 'null');
+      when 'website' then
+        update bestie.places set website = c.old_value #>> '{}', updated_at = now()
+          where id = c.place_id and coalesce(to_jsonb(website), 'null') = coalesce(c.new_value, 'null');
+      when 'opening_hours' then
+        update bestie.places set opening_hours = nullif(c.old_value, 'null'), updated_at = now()
+          where id = c.place_id and coalesce(opening_hours, 'null') = coalesce(c.new_value, 'null');
+      when 'status' then
+        update bestie.places set status = c.old_value #>> '{}', updated_at = now()
+          where id = c.place_id and coalesce(to_jsonb(status), 'null') = coalesce(c.new_value, 'null');
+      when 'price_min_aed' then
+        update bestie.place_activities set price_min_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
+          where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+            and coalesce(to_jsonb(price_min_aed), 'null') = coalesce(c.new_value, 'null');
+      when 'price_max_aed' then
+        update bestie.place_activities set price_max_aed = (c.old_value #>> '{}')::numeric, updated_at = now()
+          where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+            and coalesce(to_jsonb(price_max_aed), 'null') = coalesce(c.new_value, 'null');
+      when 'duration_min' then
+        update bestie.place_activities set duration_min = (c.old_value #>> '{}')::integer, updated_at = now()
+          where place_id = c.place_id and catalogue_item_id = c.catalogue_item_id
+            and coalesce(to_jsonb(duration_min), 'null') = coalesce(c.new_value, 'null');
+    end case;
+    if found then
+      v_restored := v_restored + 1;
+    else
+      v_skipped := v_skipped || jsonb_build_array(jsonb_build_object('change_id', c.id, 'field', c.field));
+    end if;
+  end loop;
+
+  update bestie.catalogue_runs set status = 'undone', undone_at = now(), undone_by = p_actor where id = p_run;
+  return jsonb_build_object('result', 'undone', 'rejected', v_rejected, 'restored', v_restored, 'skipped', v_skipped);
+end $$;
+
+-- Locked: service_role only.
+revoke execute on function
+  bestie.catalogue_edits(jsonb, jsonb, text[]),
+  bestie.decide_place(uuid, uuid, text, text, text, jsonb, jsonb),
+  bestie.decide_place_activity(uuid, uuid, uuid, text, text, text, jsonb),
+  bestie.decide_event(uuid, uuid, text, text, text, jsonb),
+  bestie.decide_content(uuid, uuid, text, text),
+  bestie.undo_catalogue_run(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function
+  bestie.catalogue_edits(jsonb, jsonb, text[]),
+  bestie.decide_place(uuid, uuid, text, text, text, jsonb, jsonb),
+  bestie.decide_place_activity(uuid, uuid, uuid, text, text, text, jsonb),
+  bestie.decide_event(uuid, uuid, text, text, text, jsonb),
+  bestie.decide_content(uuid, uuid, text, text),
+  bestie.undo_catalogue_run(uuid, uuid)
+  to service_role;
