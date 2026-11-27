@@ -352,12 +352,17 @@ git commit -m "feat(admin): catalogue decision and undo routes"
 
 ## Release (each step needs Khairul's yes; not part of executing this plan)
 
+*(Reordered after the final review, so CI runs the twin before anything touches live.)*
+
 1. Read-only preflight on live:
    - `place_activities` row count (expected 0);
    - the current name of the `content_items.screen` check;
-   - no `bestie.catalogue_*` tables yet.
-2. Apply the migration to `lemtlurqzmjdahbhunhz`.
-3. Deploy `admin` (nothing calls the new routes until the screen ships).
-4. Open the PR and merge.
+   - no `bestie.catalogue_*` tables yet;
+   - which schemas the API exposes;
+   - no `catalogue_items` row with a status other than `approved`.
+2. Open the PR, and get CI green.
+3. Apply the migration to `lemtlurqzmjdahbhunhz` under its file version `20261127000100`.
+4. Deploy `admin`, then make one smoke call per route (nothing calls the new routes until the screen ships).
+5. Merge.
 
 `server` isn't deployed: nothing in it changes.
