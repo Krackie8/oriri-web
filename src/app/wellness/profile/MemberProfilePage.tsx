@@ -8,7 +8,9 @@ import { functionClient, type Profile } from '../functionClient';
 import type { Result } from '../functionClient/types';
 import type { ProfileOutcome } from '../functionClient';
 import GuestProfilePage from '../pages/GuestProfilePage';
-import { Card, Eyebrow, GoldRule, PillLink, PillarIcon, Screen } from '../bestie/kit';
+import { Card, Eyebrow, GoldRule, PillButton, PillLink, PillarIcon, Screen } from '../bestie/kit';
+import { supabase } from '../../utils/supabase/client';
+import { signOutThisDevice } from './signOut';
 import { SpiderChart } from './SpiderChart';
 import { ShareStatus } from './ShareStatus';
 import { CHART_AXES, PILLAR_LABEL, profileScreen, toNextLine } from './progressView';
@@ -29,12 +31,17 @@ export default function ProfilePage() {
   if (screen === 'guest') return <GuestProfilePage />;
   if (screen === 'error' || !r.ok || r.data.outcome !== 'profile')
     return <Screen className="pb-20 pt-24 text-center text-[16px] text-wb-soft">Bestie could not load your Profile. Please try again in a moment.</Screen>;
-  return <MemberProfile profile={r.data.profile} />;
+  const signedOut = () => {
+    setR({ ok: true, data: { outcome: 'signedOut' } });
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0; // the page scrolls on <body>
+  };
+  return <MemberProfile profile={r.data.profile} onSignedOut={signedOut} />;
 }
 
 const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', year: 'numeric' });
 
-function MemberProfile({ profile: p }: { profile: Profile }) {
+function MemberProfile({ profile: p, onSignedOut }: { profile: Profile; onSignedOut: () => void }) {
   return (
     <Screen className="pb-16">
       <div className="pt-16">
@@ -103,6 +110,31 @@ function MemberProfile({ profile: p }: { profile: Profile }) {
           Today’s plan
         </PillLink>
       </div>
+      <SignOut onSignedOut={onSignedOut} />
     </Screen>
+  );
+}
+
+function SignOut({ onSignedOut }: { onSignedOut: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const signOut = async () => {
+    setBusy(true);
+    setFailed(false);
+    if (await signOutThisDevice(supabase.auth)) return onSignedOut();
+    setBusy(false);
+    setFailed(true);
+  };
+  return (
+    <div className="mt-10 border-t border-wb-sand pt-6">
+      <PillButton tone="outline" size="md" disabled={busy} onClick={() => void signOut()}>
+        {busy ? 'Signing out…' : 'Sign out'}
+      </PillButton>
+      {failed && (
+        <p role="alert" className="mt-3 text-[15px] text-wb-soft">
+          Bestie could not sign you out. Please try again in a moment.
+        </p>
+      )}
+    </div>
   );
 }
