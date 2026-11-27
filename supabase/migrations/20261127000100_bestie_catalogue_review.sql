@@ -151,6 +151,7 @@ declare
   v_pending int;
   v_listed int;
   v_matched int;
+  v_unclear int;
   v_edits jsonb := '{}';
   v_signals_old jsonb;
   v_signals_new jsonb;
@@ -159,6 +160,9 @@ declare
 begin
   if p_decision not in ('approved', 'edited_approved', 'rejected') then
     raise exception 'decide_place: unknown decision %', p_decision;
+  end if;
+  if p_reason = 'bad_run' then
+    raise exception 'decide_place: bad_run is written only by undo_catalogue_run';
   end if;
   select * into v_place from bestie.places where id = p_place for update;
   if not found then return 'notFound'; end if;
@@ -180,12 +184,14 @@ begin
 
   select count(*) into v_pending
     from (select 1 from bestie.place_activities where place_id = p_place and status = 'pending' for update) s;
-  select count(*), count(distinct pa.catalogue_item_id) into v_listed, v_matched
+  -- An entry without a boolean approve fails toward safety: the whole list is refused.
+  select count(*), count(distinct pa.catalogue_item_id), count(*) filter (where jsonb_typeof(e -> 'approve') is distinct from 'boolean')
+    into v_listed, v_matched, v_unclear
     from jsonb_array_elements(coalesce(p_activities, '[]')) e
     left join bestie.place_activities pa on pa.place_id = p_place and pa.status = 'pending'
       and pa.catalogue_item_id = (e ->> 'catalogue_item_id')::uuid;
-  if v_listed <> v_pending or v_matched <> v_pending then return 'activitiesMismatch'; end if;
-  if not exists (select 1 from jsonb_array_elements(coalesce(p_activities, '[]')) e where (e ->> 'approve')::boolean) then
+  if v_listed <> v_pending or v_matched <> v_pending or v_unclear > 0 then return 'activitiesMismatch'; end if;
+  if not exists (select 1 from jsonb_array_elements(coalesce(p_activities, '[]')) e where e -> 'approve' = 'true') then
     return 'needsActivity';
   end if;
   if v_place.lat is null or v_place.lng is null then return 'noPosition'; end if;
@@ -221,7 +227,7 @@ begin
       from jsonb_array_elements(p_activities) e
       join bestie.place_activities pa on pa.place_id = p_place and pa.catalogue_item_id = (e ->> 'catalogue_item_id')::uuid
   loop
-    if not (v_act.item ->> 'approve')::boolean then
+    if v_act.item -> 'approve' <> 'true' then
       update bestie.place_activities set status = 'rejected', updated_at = now()
         where place_id = p_place and catalogue_item_id = v_act.catalogue_item_id;
       insert into bestie.catalogue_reviews (target, place_id, catalogue_item_id, decision, reason, run_id, decided_by)
@@ -255,6 +261,9 @@ declare
 begin
   if p_decision not in ('approved', 'edited_approved', 'rejected') then
     raise exception 'decide_place_activity: unknown decision %', p_decision;
+  end if;
+  if p_reason = 'bad_run' then
+    raise exception 'decide_place_activity: bad_run is written only by undo_catalogue_run';
   end if;
   -- The place is locked before its activity, the same order as decide_place, so the two never deadlock.
   select status into v_place_status from bestie.places where id = p_place for update;
@@ -291,6 +300,9 @@ declare
 begin
   if p_decision not in ('approved', 'edited_approved', 'rejected') then
     raise exception 'decide_event: unknown decision %', p_decision;
+  end if;
+  if p_reason = 'bad_run' then
+    raise exception 'decide_event: bad_run is written only by undo_catalogue_run';
   end if;
   select * into v_item from bestie.catalogue_items where id = p_item and run_id is not null for update;
   if not found then return 'notFound'; end if;
@@ -350,6 +362,15 @@ begin
       'result', case when v_status = 'undone' then 'alreadyUndone' when v_status = 'running' then 'stillRunning' else 'notFound' end,
       'rejected', 0, 'restored', 0, 'skipped', '[]'::jsonb);
   end if;
+
+  -- Lock order, the same in every function here: place before its activities. So after the run, lock
+  -- every place this undo will touch, in id order: its pending places, the places of its pending
+  -- activities, and the places its changes name. Only then are activities and events updated.
+  perform 1 from bestie.places
+    where id in (select id from bestie.places where run_id = p_run and status = 'pending'
+                 union select place_id from bestie.place_activities where run_id = p_run and status = 'pending'
+                 union select place_id from bestie.catalogue_changes where run_id = p_run)
+    order by id for update;
 
   with r as (
     update bestie.places set status = 'rejected', reviewed_at = now(), reviewed_by = p_actor, updated_at = now()

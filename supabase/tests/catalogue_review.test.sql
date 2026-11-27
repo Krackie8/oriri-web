@@ -187,6 +187,16 @@ select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1',
   'listing an activity the place does not have returns activitiesMismatch');
 select pg_temp.check((select status = 'pending' from bestie.places where id = '00000000-0000-0000-0000-00000000e0e3')
   and (select count(*) from bestie.catalogue_reviews where id > :base) = 0, 'activitiesMismatch changes and logs nothing');
+select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e3', 'approved', null, null,
+  (select jsonb_agg(case when slug = 'reformer' then jsonb_build_object('catalogue_item_id', id, 'approve', true)
+                         else jsonb_build_object('catalogue_item_id', id) end) from bestie.catalogue_items where slug in ('reformer', 'yoga')), null) = 'activitiesMismatch',
+  'an entry with no approve key returns activitiesMismatch');
+select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e3', 'approved', null, null,
+  (select jsonb_agg(jsonb_build_object('catalogue_item_id', id, 'approve', 'yes')) from bestie.catalogue_items where slug in ('reformer', 'yoga')), null) = 'activitiesMismatch',
+  'an entry whose approve is not a boolean returns activitiesMismatch');
+select pg_temp.check((select status = 'pending' from bestie.places where id = '00000000-0000-0000-0000-00000000e0e3')
+  and (select count(*) from bestie.place_activities where place_id = '00000000-0000-0000-0000-00000000e0e3' and status = 'pending') = 2
+  and (select count(*) from bestie.catalogue_reviews where id > :base) = 0, 'an unclear approve changes and logs nothing');
 
 -- No position.
 select pg_temp.check(bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e4', 'approved', null, null,
@@ -253,6 +263,25 @@ select pg_temp.check((select decision = 'approved' and edits is null and target 
 select pg_temp.check(bestie.decide_event('00000000-0000-0000-0000-00000000e0a1', (select id from bestie.catalogue_items where slug = 'yoga'), 'approved', null, null, null) = 'notFound',
   'a seed item is not an event');
 
+-- bad_run is written only by undo: an admin decision naming it is a caller bug.
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, run_id)
+  select '00000000-0000-0000-0000-00000000e0e1', id, 120, 160, '00000000-0000-0000-0000-00000000e0c1' from bestie.catalogue_items where slug = 'strength';
+insert into bestie.catalogue_items (id, title, pillars, kind, status, run_id) values
+  ('00000000-0000-0000-0000-00000000e0d2', 'Desert stargazing meetup', '{meet_up}', 'event', 'pending', '00000000-0000-0000-0000-00000000e0c1');
+select max(id) as base from bestie.catalogue_reviews \gset
+select pg_temp.raises($q$select bestie.decide_place('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e4', 'rejected', 'bad_run', null, null, null)$q$,
+  'P0001', 'decide_place refuses bad_run');
+select pg_temp.raises($q$select bestie.decide_place_activity('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0e1',
+  (select id from bestie.catalogue_items where slug = 'strength'), 'rejected', 'bad_run', null, null)$q$,
+  'P0001', 'decide_place_activity refuses bad_run');
+select pg_temp.raises($q$select bestie.decide_event('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0d2', 'rejected', 'bad_run', null, null)$q$,
+  'P0001', 'decide_event refuses bad_run');
+select pg_temp.check((select status = 'pending' from bestie.places where id = '00000000-0000-0000-0000-00000000e0e4')
+  and (select pa.status = 'pending' from bestie.place_activities pa join bestie.catalogue_items i on i.id = pa.catalogue_item_id
+       where pa.place_id = '00000000-0000-0000-0000-00000000e0e1' and i.slug = 'strength')
+  and (select status = 'pending' from bestie.catalogue_items where id = '00000000-0000-0000-0000-00000000e0d2')
+  and (select count(*) from bestie.catalogue_reviews where id > :base) = 0, 'a refused bad_run changes and logs nothing');
+
 -- Content.
 select max(id) as base from bestie.catalogue_reviews \gset
 select pg_temp.check(bestie.decide_content('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0f1', 'removed', null) = 'decided',
@@ -300,6 +329,20 @@ select pg_temp.check(bestie.undo_catalogue_run('00000000-0000-0000-0000-00000000
   'a running run cannot be undone');
 select pg_temp.check(bestie.undo_catalogue_run('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-0000000000ff')->>'result' = 'notFound',
   'an unknown run returns notFound');
+-- Undo of a run with a pending activity at an approved place and a change on that same place
+-- (the case that takes the place lock before the activity's; see the lock-order comment in undo).
+insert into bestie.catalogue_runs (id, model, status, finished_at) values ('00000000-0000-0000-0000-00000000e0c3', 'test-model', 'done', now());
+insert into bestie.place_activities (place_id, catalogue_item_id, price_min_aed, price_max_aed, run_id)
+  select '00000000-0000-0000-0000-00000000e0e7', id, 90, 130, '00000000-0000-0000-0000-00000000e0c3' from bestie.catalogue_items where slug = 'yoga';
+insert into bestie.catalogue_changes (run_id, place_id, field, old_value, new_value) values
+  ('00000000-0000-0000-0000-00000000e0c3', '00000000-0000-0000-0000-00000000e0e7', 'name', '"Old Steady"', '"Steady Studio"');
+select max(id) as base from bestie.catalogue_reviews \gset
+select pg_temp.check(bestie.undo_catalogue_run('00000000-0000-0000-0000-00000000e0a1', '00000000-0000-0000-0000-00000000e0c3')
+  = '{"result": "undone", "rejected": 1, "restored": 1, "skipped": []}'::jsonb, 'undo with an activity and a change on one place returns undone, 1, 1');
+select pg_temp.check((select name = 'Old Steady' from bestie.places where id = '00000000-0000-0000-0000-00000000e0e7'), 'the place name is back');
+select pg_temp.check((select r.reason = 'bad_run' and r.target = 'place_activity' and pa.status = 'rejected'
+  from bestie.catalogue_reviews r join bestie.place_activities pa on pa.place_id = r.place_id and pa.catalogue_item_id = r.catalogue_item_id
+  where r.id > :base), 'the pending activity at the approved place is rejected as bad_run');
 reset role;
 
 -- Who can call: service_role only.
