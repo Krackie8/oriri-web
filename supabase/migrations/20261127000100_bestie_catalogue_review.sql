@@ -71,7 +71,7 @@ create table bestie.catalogue_reviews (
   note text check (char_length(note) <= 280),
   edits jsonb,
   run_id uuid references bestie.catalogue_runs(id),
-  decided_by uuid references auth.users(id) on delete set null,
+  decided_by uuid, -- no foreign key, like team_changes: the record must outlive deleted accounts
   decided_at timestamptz not null default now(),
   constraint catalogue_reviews_target_shape check (
     (target = 'place' and place_id is not null and catalogue_item_id is null and content_item_id is null)
@@ -98,6 +98,9 @@ revoke execute on function bestie.catalogue_reviews_append_only() from public, a
 create trigger catalogue_reviews_append_only before update or delete on bestie.catalogue_reviews
   for each row execute function bestie.catalogue_reviews_append_only();
 
+create trigger catalogue_reviews_no_truncate before truncate on bestie.catalogue_reviews
+  for each statement execute function bestie.catalogue_reviews_append_only();
+
 create table bestie.place_signals (
   id uuid primary key default gen_random_uuid(),
   place_id uuid not null references bestie.places(id) on delete cascade,
@@ -114,7 +117,8 @@ create index place_signals_run_idx on bestie.place_signals (run_id);
 -- Locked: service_role only, RLS on and forced, no policy for authenticated.
 revoke all on bestie.catalogue_runs, bestie.catalogue_changes, bestie.catalogue_reviews, bestie.place_signals
   from public, anon, authenticated;
-grant all on bestie.catalogue_runs, bestie.catalogue_changes, bestie.catalogue_reviews, bestie.place_signals to service_role;
+grant all on bestie.catalogue_runs, bestie.catalogue_changes, bestie.place_signals to service_role;
+grant select, insert on bestie.catalogue_reviews to service_role;
 grant usage on sequence bestie.catalogue_changes_id_seq, bestie.catalogue_reviews_id_seq to service_role;
 alter table bestie.catalogue_runs enable row level security;
 alter table bestie.catalogue_runs force row level security;

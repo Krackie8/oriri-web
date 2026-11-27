@@ -66,8 +66,18 @@ insert into bestie.catalogue_reviews (target, content_item_id, decision) values
   ('content', '00000000-0000-0000-0000-00000000e0f1', 'removed');
 select pg_temp.check((select count(*) from bestie.catalogue_reviews) = 3, 'valid place, rejected and content reviews insert');
 -- Append-only.
+-- As service_role the missing grants refuse first; as the owner the triggers do.
+select pg_temp.raises($q$truncate bestie.catalogue_reviews$q$, '42501', 'service_role cannot truncate catalogue_reviews');
+select pg_temp.raises($q$update bestie.catalogue_reviews set note = 'x'$q$, '42501', 'service_role cannot update catalogue_reviews');
+reset role;
 select pg_temp.raises($q$update bestie.catalogue_reviews set note = 'x'$q$, 'P0001', 'catalogue_reviews cannot be updated');
 select pg_temp.raises($q$delete from bestie.catalogue_reviews$q$, 'P0001', 'catalogue_reviews cannot be deleted');
+select pg_temp.raises($q$truncate bestie.catalogue_reviews$q$, 'P0001', 'catalogue_reviews cannot be truncated');
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000e0a3', 'gone@example.test');
+insert into bestie.catalogue_reviews (target, place_id, decision, decided_by) values ('place', '00000000-0000-0000-0000-00000000e0e1', 'approved', '00000000-0000-0000-0000-00000000e0a3');
+delete from auth.users where id = '00000000-0000-0000-0000-00000000e0a3';
+select pg_temp.check((select decided_by = '00000000-0000-0000-0000-00000000e0a3' from bestie.catalogue_reviews order by id desc limit 1), 'deleting the deciding admin succeeds and the review keeps decided_by');
+set role service_role;
 
 -- catalogue_changes.
 insert into bestie.catalogue_changes (run_id, place_id, field, old_value, new_value)
