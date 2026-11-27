@@ -147,7 +147,7 @@ Approved finds and applied updates stay as they are. Rolling back an applied upd
 | `note text` | Optional, at most 280 characters |
 | `edits jsonb` | For `edited_approved`: field → old and new |
 | `run_id uuid` | The run that produced the find |
-| `decided_by uuid` → `auth.users(id)`, set null; `decided_at` | |
+| `decided_by uuid` (a plain id with no foreign key, like `team_changes`, so deleting an admin never touches this append-only log); `decided_at` | |
 
 A decision writes its log row and changes the target's `status` **in one transaction**.
 
