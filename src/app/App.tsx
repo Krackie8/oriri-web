@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
-import WellnessSite, { isWellnessPath } from './wellness/WellnessSite';
+import WellnessSite from './wellness/WellnessSite';
+import { isWellnessPath } from './wellness/paths';
 import AppAnalytics from './wellness/analytics/AppAnalytics';
 
 // Standard ES6 imports
@@ -19,9 +20,6 @@ import DebugUtils from './utils/debugUtils';
 import './utils/vipTestConsole';
 
 import { useAuthHandlers } from './hooks/useAuthHandlers';
-import { useAuth } from './hooks/useAuth';
-import { useAdmin } from './hooks/useAdmin';
-import { profileView } from './wellness/profile/profileView';
 import OririLoader from './components/OririLoader';
 
 const AdminSite = lazy(() => import('./admin/AdminSite'));
@@ -35,12 +33,6 @@ function AppContent() {
   const [isReady, setIsReady] = useState(true); // Start as ready immediately
   const { handleLogin, handleGuestMode, handleLogout } = useAuthHandlers();
   const location = useLocation();
-  const { isLoggedIn, loading: authLoading } = useAuth();
-  const { isAdmin, isInitialized: adminChecked, loading: adminLoading } = useAdmin();
-  const isProfilePath = (location.pathname.replace(/\/+$/, '') || '/') === '/profile';
-  const profile = isProfilePath
-    ? profileView({ authLoading, isLoggedIn, adminChecked: adminChecked && !adminLoading, isAdmin })
-    : null;
 
   useEffect(() => {
     const initializeApp = () => {
@@ -96,16 +88,9 @@ function AppContent() {
     );
   }
 
-  // Wellness Bestie marketing site (/, /pilot, /about, /privacy): standalone,
+  // Wellness Bestie marketing site (/, /profile, /about, /privacy and so on): standalone,
   // no splash, onboarding or podcast chrome — visitors arrive from Instagram.
-  // /profile: visitors and Members get the Bestie screen (sign in via Join, then on to her plan);
-  // only admins get the old admin profile.
-  if (profile === 'loading') {
-    return (
-      <OririLoader variant="screen" />
-    );
-  }
-  if (isWellnessPath(location.pathname) || profile === 'wellness') {
+  if (isWellnessPath(location.pathname)) {
     return (
       <ErrorBoundary onError={handleGlobalError}>
         <WellnessSite />
