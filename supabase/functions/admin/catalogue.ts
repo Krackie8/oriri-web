@@ -39,7 +39,7 @@ export interface CatalogueDeps {
   undoRun(actor: string, runId: string): Promise<UndoResult>
 }
 
-const LIMITS = { note: 280, signal: 140, name: 200, area: 200, timeNote: 140 }
+const LIMITS = { note: 280, signal: 140, name: 200, area: 200, timeNote: 60 }
 const MAX_DURATION_MIN = 1440
 const TOO_LONG = "That's longer than it can be."
 const PICK_REASON = 'Pick a reason.'
@@ -81,6 +81,7 @@ function priceFields(o: Record<string, unknown>): { priceMinAed?: number; priceM
   if (min !== undefined) out.priceMinAed = min
   if (max !== undefined) out.priceMaxAed = max
   if (mins !== undefined) out.durationMin = mins
+  if ((min === undefined) !== (max === undefined)) refuse(UNCLEAR) // the route can't see the stored other bound
   if (min !== undefined && max !== undefined && min > max) refuse(PRICE_ORDER)
   return out
 }
@@ -135,8 +136,10 @@ export function cleanPlaceDecision(body: unknown): PlaceDecisionBody {
       if (!Array.isArray(e.signals)) refuse(UNCLEAR)
       edits.signals = (e.signals as unknown[]).map((raw) => {
         const s = record(raw)
-        if (typeof s.id !== 'string' || !s.id) refuse(UNCLEAR)
-        return { id: s.id as string, text: capped(s.text, LIMITS.signal) }
+        if (typeof s.id !== 'string' || !isUuid(s.id)) refuse(UNCLEAR)
+        const text = capped(s.text, LIMITS.signal)
+        if (!text) refuse(UNCLEAR)
+        return { id: s.id as string, text }
       })
     }
     if (Object.keys(edits).length) out.edits = edits

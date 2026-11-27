@@ -49,8 +49,26 @@ describe('cleanPlaceDecision', () => {
     expect(() => place({ edits: { name: 'n'.repeat(201) } })).toThrow(TOO_LONG)
   })
   it('signals: up to 140', () => {
-    expect(() => place({ edits: { signals: [{ id: 's1', text: 'x'.repeat(141) }] } })).toThrow(TOO_LONG)
-    expect(place({ edits: { signals: [{ id: 's1', text: ' ok ', z: 1 }] } }).edits).toEqual({ signals: [{ id: 's1', text: 'ok' }] })
+    expect(() => place({ edits: { signals: [{ id: U2, text: 'x'.repeat(141) }] } })).toThrow(TOO_LONG)
+    expect(place({ edits: { signals: [{ id: U2, text: ' ok ', z: 1 }] } }).edits).toEqual({ signals: [{ id: U2, text: 'ok' }] })
+  })
+})
+
+describe('fix round 1', () => {
+  const UNCLEAR = "That didn't come through right. Try again."
+  it('timeNote is capped at 60', () => {
+    const t = (n: number) => cleanEventDecision({ decision: 'approved', edits: { timeNote: 'x'.repeat(n) } })
+    expect(() => t(61)).toThrow(TOO_LONG)
+    expect(t(60).edits).toEqual({ timeNote: 'x'.repeat(60) })
+  })
+  it('signal ids must be UUIDs and text not empty', () => {
+    expect(() => place({ edits: { signals: [{ id: 's1', text: 'ok' }] } })).toThrow(UNCLEAR)
+    expect(() => place({ edits: { signals: [{ id: U2, text: '  ' }] } })).toThrow(UNCLEAR)
+  })
+  it('a price edit sends both bounds', () => {
+    expect(() => place({ activities: [{ catalogueItemId: U1, approve: true, priceMinAed: 200 }] })).toThrow(UNCLEAR)
+    expect(() => cleanActivityDecision({ decision: 'edited_approved', edits: { priceMaxAed: 200 } })).toThrow(UNCLEAR)
+    expect(cleanActivityDecision({ decision: 'edited_approved', edits: { priceMinAed: 1, priceMaxAed: 2 } }).edits).toEqual({ priceMinAed: 1, priceMaxAed: 2 })
   })
 })
 
