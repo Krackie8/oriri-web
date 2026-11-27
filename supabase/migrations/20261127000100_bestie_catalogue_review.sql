@@ -356,14 +356,18 @@ declare
   v_skipped jsonb := '[]';
   c bestie.catalogue_changes;
 begin
-  select status into v_status from bestie.catalogue_runs where id = p_run for update;
+  -- for no key update: it serializes undo against undo but not against the key-share lock every
+  -- insert or update referencing this run takes (review rows, places), so a decision holding a place
+  -- never waits on the run while undo waits on that place.
+  select status into v_status from bestie.catalogue_runs where id = p_run for no key update;
   if not found or v_status in ('undone', 'running') then
     return jsonb_build_object(
       'result', case when v_status = 'undone' then 'alreadyUndone' when v_status = 'running' then 'stillRunning' else 'notFound' end,
       'rejected', 0, 'restored', 0, 'skipped', '[]'::jsonb);
   end if;
 
-  -- Lock order, the same in every function here: place before its activities. So after the run, lock
+  -- Lock order, the same in every function here: place before its activities (the run row, held
+  -- no key update, blocks only another undo). So after the run, lock
   -- every place this undo will touch, in id order: its pending places, the places of its pending
   -- activities, and the places its changes name. Only then are activities and events updated.
   perform 1 from bestie.places
