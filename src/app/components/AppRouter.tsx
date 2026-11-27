@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../contexts/CartContext';
@@ -12,7 +12,6 @@ import TestRSSScreen from './TestRSSScreen';
 import EpisodeDetailScreen from './EpisodeDetailScreen';
 import LiveSessionsScreen from './LiveSessionsScreen';
 import CommunityScreen from './CommunityScreen';
-import ProfileScreen from './ProfileScreen';
 import StoreScreen from './StoreScreen';
 import ProductDetailScreen from './ProductDetailScreen';
 import CheckoutScreen from './CheckoutScreen';
@@ -28,42 +27,6 @@ import OririLoader from './OririLoader';
 const LoadingFallback = () => <OririLoader variant="page" />;
 
 // Old wrapper removed - using new EpisodeDetailWrapper from separate file
-
-// Protected Route Component
-function ProtectedRoute({ 
-  children, 
-  onShowLogin 
-}: { 
-  children: React.ReactNode;
-  onShowLogin: () => void;
-}) {
-  const { isLoggedIn, loading } = useAuth();
-  const navigate = useNavigate();
-  
-  // Handle redirect in useEffect to avoid setState during render
-  useEffect(() => {
-    if (!loading && !isLoggedIn) {
-      onShowLogin();
-      navigate('/', { replace: true });
-    }
-  }, [loading, isLoggedIn, onShowLogin, navigate]);
-  
-  // Don't render anything if we're still loading auth state
-  if (loading) {
-    return (
-      <OririLoader variant="page" />
-    );
-  }
-  
-  // Don't render children if not logged in - the useEffect will handle redirect
-  if (!isLoggedIn) {
-    return (
-      <OririLoader variant="page" />
-    );
-  }
-  
-  return <>{children}</>;
-}
 
 // Main Routes Component
 function AppRoutes({ 
@@ -114,16 +77,6 @@ function AppRoutes({
           
           <Route path="/community" element={
             <CommunityScreen isLoggedIn={isLoggedIn} />
-          } />
-          
-          <Route path="/profile" element={
-            <ProtectedRoute onShowLogin={onShowLogin}>
-              <ProfileScreen 
-                onLogout={onLogout}
-                onEpisodeSelect={handleEpisodeSelectWithNavigation}
-                onNavigateToStore={() => navigate('/store')}
-              />
-            </ProtectedRoute>
           } />
           
           <Route path="/store" element={

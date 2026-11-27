@@ -21,10 +21,6 @@ import { getConsent, loadTrackers, onConsentChange } from './analytics/consent';
 import seo from './seo.json';
 import { installOutboundTracking, trackPageView, useScrollDepth } from './analytics/track';
 
-/** Paths served by the Wellness Bestie marketing site (everything else is the podcast app). */
-export const WELLNESS_PATHS = ['/', '/plan', '/plan/inputs', '/plan/day', '/join', '/membership', '/bestie', '/pilot', '/about', '/privacy', '/shop', '/podcast', '/community'];
-export const isWellnessPath = (p: string) => WELLNESS_PATHS.includes(p.replace(/\/+$/, '') || '/');
-
 type SeoPage = { title: string; description: string; index: boolean };
 const SEO_PAGES = seo.pages as Record<string, SeoPage>;
 
@@ -144,7 +140,6 @@ export default function WellnessSite() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/podcast" element={<PodcastPage />} />
-          {/* Only reached by guests: App.tsx sends signed-in users to the full profile */}
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/privacy" element={<PrivacyPage onCookieSettings={() => setCookieSettingsOpen(true)} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
