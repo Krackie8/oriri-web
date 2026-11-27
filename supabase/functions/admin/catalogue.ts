@@ -141,6 +141,8 @@ export function cleanPlaceDecision(body: unknown): PlaceDecisionBody {
         if (!text) refuse(UNCLEAR)
         return { id: s.id as string, text }
       })
+      // One id twice would leave which text wins to the database: refuse it instead.
+      if (new Set(edits.signals.map((s) => s.id.toLowerCase())).size !== edits.signals.length) refuse(UNCLEAR)
     }
     if (Object.keys(edits).length) out.edits = edits
   }

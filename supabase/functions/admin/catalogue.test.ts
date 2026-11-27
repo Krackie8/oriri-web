@@ -65,6 +65,10 @@ describe('fix round 1', () => {
     expect(() => place({ edits: { signals: [{ id: 's1', text: 'ok' }] } })).toThrow(UNCLEAR)
     expect(() => place({ edits: { signals: [{ id: U2, text: '  ' }] } })).toThrow(UNCLEAR)
   })
+  it('a signal id appears at most once in one edit', () => {
+    expect(() => place({ edits: { signals: [{ id: U2, text: 'one' }, { id: U2, text: 'two' }] } })).toThrow(UNCLEAR)
+    expect(place({ edits: { signals: [{ id: U1, text: 'one' }, { id: U2, text: 'two' }] } }).edits?.signals).toHaveLength(2)
+  })
   it('a price edit sends both bounds', () => {
     expect(() => place({ activities: [{ catalogueItemId: U1, approve: true, priceMinAed: 200 }] })).toThrow(UNCLEAR)
     expect(() => cleanActivityDecision({ decision: 'edited_approved', edits: { priceMaxAed: 200 } })).toThrow(UNCLEAR)
